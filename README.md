@@ -16,7 +16,7 @@ Step 7: Add images for the assets & name them.
 
 Step 8: Open app.js & modify the details :)
 
-Step 9: Open cmd Prompt & run "npm update" to ensure node modules are up-to-date
+Step 9: Open cmd Prompt & run "npm install" to ensure node modules are up-to-date
 
 Step 10: Open start.bat file & it should launch
 
