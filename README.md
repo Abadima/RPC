@@ -1,4 +1,4 @@
-~ Abadima#6356
+~ Abadima#6356 / Please Report any issues that you encounter, so I can help fix them :)
 
 Step 1: Open .env
 
