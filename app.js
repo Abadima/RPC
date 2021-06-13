@@ -13,7 +13,8 @@ require('dotenv').config(); // This is for .env
             largeImageKey: "lmk", // (OPTIONAL) Asset ID
             largeImageText: "Testy Test.", // (OPTIONAL) When you hover your mouse over the image
             smallImageKey: "starairlines", // (OPTIONAL) The small Image to the bottom right of your large
-            smallImageText: "Smol Testy Test." // (OPTIONAL) Small Image Text
+            smallImageText: "Smol Testy Test.", // (OPTIONAL) Small Image Text
+            startTimestamp: 79 // (OPTIONAL) Elapsed Time
         }).catch(err => console.log(err));
 
         console.log("Abadima's Rich Presence Active.");
