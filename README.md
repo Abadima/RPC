@@ -1,6 +1,6 @@
 # Abadima's Rich Presence
 
-~ Abadima#6356 / Please Report any issues that you encounter, so I can help fix them :)
+~ Abadima#6536 / Please Report any issues that you encounter, so I can help fix them :)
 
 **Instructions**
 
