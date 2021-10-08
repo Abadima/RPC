@@ -1,5 +1,7 @@
 # Abadima's Rich Presence
 
+## I am aware of the "Visual Studio" error, I will attempt to fix this when I have the time.
+
 ~ Abadima#6536 / Please Report any issues that you encounter, so I can help fix them :)
 
 **Instructions**
