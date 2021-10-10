@@ -2,6 +2,10 @@
 
 ~ Abadima#6536 / Please Report any issues that you encounter, so I can help fix them :)
 
+## TESTED OPERATING SYSTEMS:
+- Windows 10
+- Windows 11
+
 **Instructions**
 
 - *Step 1: Pre-Setup*
