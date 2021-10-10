@@ -1,7 +1,5 @@
 # Abadima's Rich Presence
 
-## I am aware of the "Visual Studio" error, I will attempt to fix this when I have the time.
-
 ~ Abadima#6536 / Please Report any issues that you encounter, so I can help fix them :)
 
 **Instructions**
@@ -12,6 +10,7 @@
      - Head to Rich Presence Section
      - Setup Image Asset IDs (You'll Need Them :)
 - *Step 2: Setup*
+     - [Install Node.js](https://nodejs.org/en/download/) + All Installation Packages
      - Open .env
      - Input App ID (Example: applicationID=696969)
      - Open app.js
