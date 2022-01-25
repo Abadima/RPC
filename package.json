@@ -6,7 +6,7 @@
   "scripts": {
     "test": "jest"
   },
-  "author": "https://discords.com/bio/p/nekoo",
+  "author": "https://discords.com/bio/p/abadima",
   "license": "MIT",
   "dependencies": {
     "discord-rpc": "^3.2.0",
