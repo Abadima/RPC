@@ -8,7 +8,7 @@
     <img src="https://img.shields.io/discord/905979173070340097.svg?label=Support&logo=Discord&colorB=7289da&style=for-the-badge" alt="Support Server">
   </a>
   <a href="https://github.com/abadima/rpc">
-    <img src="https://img.shields.io/github/checks-status/abadima/rpc/main?label=BUILD&style=for-the-badge" alt="Code Status">
+    <img src="https://img.shields.io/github/workflow/status/Abadima/rpc/Build/main?style=for-the-badge" alt="Code Status">
   </a>
 </div>
 
