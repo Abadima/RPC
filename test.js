@@ -18,5 +18,5 @@ require('dotenv').config();
         }).catch(err => console.log(err));
     });
 
-    await process.exit(0).catch(process.exit(1)
+    await process.exit(0).catch(process.exit(1))
 })();
