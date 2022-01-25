@@ -12,11 +12,7 @@
   </a>
 </div>
 
-## TESTED OPERATING SYSTEMS:
-- Windows 10
-- Windows 11
-
-**Instructions**
+## **Instructions**
 
 - *Step 1: Pre-Setup*
      - Go To: https://discord.com/developers/applications
