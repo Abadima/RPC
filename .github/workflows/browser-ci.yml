@@ -1,0 +1,53 @@
+name: Browser CI
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "browser/**"
+      - ".github/workflows/browser-ci.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "browser/**"
+      - ".github/workflows/browser-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Typecheck, lint, build, test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: browser
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.2"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Format check
+        run: bun run format:check
+
+      - name: Build (chromium, firefox, safari, userscript)
+        run: bun run build
+
+      - name: Test
+        run: bun test
+
+      - name: Audit dependencies
+        run: bun audit

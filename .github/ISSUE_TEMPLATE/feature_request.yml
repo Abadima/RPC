@@ -1,0 +1,26 @@
+name: Feature Request
+description: Suggest an idea or enhancement for PAROUSIA
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check `project/roadmap.md` first. Your idea may already be planned for a later phase.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false

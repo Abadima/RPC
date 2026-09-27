@@ -1,0 +1,16 @@
+version: 2
+updates:
+  - package-ecosystem: "bun"
+    directory: "/browser"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "cargo"
+    directory: "/desktop"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

@@ -1,0 +1,59 @@
+name: Desktop CI
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "desktop/**"
+      - ".github/workflows/desktop-ci.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "desktop/**"
+      - ".github/workflows/desktop-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Build, test, clippy, fmt
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Build
+        run: cargo build --locked
+
+      - name: Test
+        run: cargo test --locked
+
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Format check
+        run: cargo fmt --check
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Audit dependencies
+        uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
