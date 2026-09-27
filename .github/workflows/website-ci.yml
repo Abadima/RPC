@@ -1,27 +1,27 @@
-name: Browser CI
+name: Website CI
 
 on:
   push:
     branches: ["main", "pre-2.0"]
     paths:
-      - "browser/**"
-      - ".github/workflows/browser-ci.yml"
+      - "website/**"
+      - ".github/workflows/website-ci.yml"
   pull_request:
     branches: ["main", "pre-2.0"]
     paths:
-      - "browser/**"
-      - ".github/workflows/browser-ci.yml"
+      - "website/**"
+      - ".github/workflows/website-ci.yml"
 
 permissions:
   contents: read
 
 jobs:
   validate:
-    name: Typecheck, lint, build, test
+    name: Typecheck, lint, build
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: browser
+        working-directory: website
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,11 +43,8 @@ jobs:
       - name: Format check
         run: bun run format:check
 
-      - name: Build (chromium, firefox, safari, userscript)
+      - name: Build
         run: bun run build
-
-      - name: Test
-        run: bun test
 
       - name: Audit dependencies
         run: bun audit

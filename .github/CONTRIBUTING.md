@@ -8,7 +8,7 @@ PAROUSIA is in early development. See `project/roadmap.md` for where things stan
 - `desktop/`: the native desktop application (Rust)
 - `core/`, `packages/`: shared foundations, currently minimal placeholders
 - `adapters/`: platform adapters (Discord first; Fluxer/Stroat are roadmap items)
-- `website/`: future `parousia.js.org` site and docs (not yet built)
+- `website/`: the `parousia.js.org` landing page and docs (Astro + Svelte 5)
 
 ## Getting Started
 
@@ -32,6 +32,16 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 ```
 
+**Website** (`website/`):
+
+```bash
+bun install
+bun run typecheck
+bun run lint
+bun run format:check
+bun run build
+```
+
 CI runs all of the above on every pull request. Make sure they pass locally first.
 
 ## Guidelines
@@ -40,7 +50,7 @@ CI runs all of the above on every pull request. Make sure they pass locally firs
 - **Types:** Strict TypeScript. No `any`, no unchecked casts. Rust code should be `clippy`-clean.
 - **Scope:** Keep PRs focused. Avoid unrelated refactors or premature abstractions. See `CLAUDE.md` for the project's working philosophy.
 - **Security:** Never commit secrets. See `SECURITY.md` to report vulnerabilities privately rather than via a public issue.
-- **Commits:** Write clear, descriptive commit messages explaining *why*, not just *what*.
+- **Commits:** Write clear, descriptive commit messages explaining _why_, not just _what_.
 
 ## Pull Requests
 
