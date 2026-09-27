@@ -1,0 +1,24 @@
+{
+  "name": "@abadima/rpc-browser",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun run build.ts",
+    "dev": "bun run build.ts --watch",
+    "lint": "oxlint",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "@types/chrome": "^0.3.0",
+    "logena": "^1.1.0",
+    "oxfmt": "^0.70.0",
+    "oxlint": "^1.85.0"
+  },
+  "peerDependencies": {
+    "typescript": "^7.0.2"
+  }
+}

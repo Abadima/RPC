@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "PAROUSIA",
+  "version": "0.1.0",
+  "description": "Your Rich Presence, present on Discord and beyond.",
+  "background": {
+    "scripts": ["firefox.js"],
+    "type": "module"
+  },
+  "permissions": [],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "parousia@abadima.dev",
+      "strict_min_version": "115.0"
+    }
+  }
+}

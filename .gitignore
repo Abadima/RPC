@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.yarn/
+
+# Build
+dist/
+build/
+out/
+
+# Bun
+.bun/
+
+# Rust
+target/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary
+.tmp/
+.temp/
+.cache/
