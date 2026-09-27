@@ -2,12 +2,12 @@ name: Desktop CI
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "pre-2.0"]
     paths:
       - "desktop/**"
       - ".github/workflows/desktop-ci.yml"
   pull_request:
-    branches: ["main"]
+    branches: ["main", "pre-2.0"]
     paths:
       - "desktop/**"
       - ".github/workflows/desktop-ci.yml"

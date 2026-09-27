@@ -1,0 +1,26 @@
+{
+  "name": "@abadima/rpc-website",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "typecheck": "astro sync && tsc --noEmit",
+    "lint": "oxlint",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/svelte": "^9.0.1",
+    "astro": "^7.2.10",
+    "svelte": "^5.57.1"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.70.0",
+    "oxlint": "^1.85.0",
+    "typescript": "^7.0.2"
+  }
+}

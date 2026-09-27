@@ -2,12 +2,12 @@ name: Browser CI
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "pre-2.0"]
     paths:
       - "browser/**"
       - ".github/workflows/browser-ci.yml"
   pull_request:
-    branches: ["main"]
+    branches: ["main", "pre-2.0"]
     paths:
       - "browser/**"
       - ".github/workflows/browser-ci.yml"

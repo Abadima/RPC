@@ -4,15 +4,15 @@ This roadmap tracks major project milestones. Individual implementation tasks ma
 
 ## Phase 1: Foundation
 
-- [ ] Establish core PAROUSIA architecture
-- [ ] Establish project-wide security model
-- [ ] Establish activity system architecture
-- [ ] Establish browser ↔ native communication protocol
-- [ ] Establish platform adapter architecture
-- [ ] Establish compatibility layer architecture
-- [ ] Set up project-wide testing infrastructure
-- [ ] Set up build, lint, formatting, and security checks
-- [ ] Establish documentation website
+- [x] Establish core PAROUSIA architecture
+- [x] Establish project-wide security model
+- [x] Establish activity system architecture
+- [x] Establish browser ↔ native communication protocol
+- [x] Establish platform adapter architecture
+- [x] Establish compatibility layer architecture
+- [x] Set up project-wide testing infrastructure
+- [x] Set up build, lint, formatting, and security checks
+- [x] Establish documentation website
 
 ---
 
