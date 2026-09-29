@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="dark" />
+    <title>Parousia</title>
+    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <span class="brand" id="home-title">
+          <img class="mark" src="icons/icon-32.png" width="18" height="18" alt="Parousia" />
+          <span class="wordmark" aria-hidden="true">PAROUSIA</span>
+        </span>
+        <div class="header-nav" id="settings-title" hidden>
+          <button class="icon-button" id="back-button" type="button" aria-label="Back">
+            <span data-icon="back"></span>
+          </button>
+          <nav class="breadcrumb" aria-label="Settings location">
+            <button class="crumb" id="crumb-settings" type="button">Settings</button>
+            <span class="crumb-separator" id="crumb-separator" aria-hidden="true">›</span>
+            <span class="crumb-current" id="crumb-page" aria-current="page"></span>
+          </nav>
+        </div>
+        <div class="header-actions">
+          <button
+            class="icon-button"
+            id="settings-button"
+            type="button"
+            aria-label="Parousia settings"
+            title="Settings"
+          >
+            <span data-icon="settings"></span>
+          </button>
+          <button
+            class="icon-button"
+            id="expand-button"
+            type="button"
+            aria-label="Open the Parousia dashboard"
+            title="Open dashboard"
+          >
+            <span data-icon="expand"></span>
+          </button>
+          <span class="badge" id="status-badge" data-tone="idle">Idle</span>
+        </div>
+      </header>
+
+      <main class="body" id="home-view">
+        <section class="section" id="activity-view" aria-labelledby="activity-label">
+          <h2 class="section-label" id="activity-label">Current activity</h2>
+          <div class="content" id="content" aria-live="polite"></div>
+        </section>
+
+        <section class="offline" id="offline-view" hidden>
+          <div class="banner" id="connection-help" role="status">
+            <div class="banner-main">
+              <span class="banner-icon"><span data-icon="alert"></span></span>
+              <div class="banner-text" data-help></div>
+            </div>
+          </div>
+          <a class="button button-block" data-download target="_blank" rel="noopener noreferrer">
+            <span data-icon="download"></span>
+            <span data-download-label>Get Parousia Desktop</span>
+          </a>
+          <button class="link-button" type="button" id="retry-button" data-retry>
+            Retry Connection
+          </button>
+          <p class="offline-aside" id="discord-aside" hidden></p>
+        </section>
+      </main>
+
+      <main class="body" id="settings-view" hidden>
+        <h2 class="section-label" id="settings-heading">Preferences</h2>
+        <div id="settings-slot"></div>
+      </main>
+
+      <footer class="footer">
+        <span class="status-dot" id="status-dot" data-tone="idle"></span>
+        <span class="footer-label" id="status-label">Not connected</span>
+      </footer>
+    </div>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,60 @@
+name: Link CI
+
+on:
+  push:
+    branches: ["main", "pre-2.0"]
+    paths:
+      - "browser/**"
+      - "desktop/**"
+      - ".github/workflows/link-ci.yml"
+  pull_request:
+    branches: ["main", "pre-2.0"]
+    paths:
+      - "browser/**"
+      - "desktop/**"
+      - ".github/workflows/link-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  link:
+    name: Browser <-> Desktop end to end
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.2"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Desktop
+        run: cargo build --locked
+        working-directory: desktop
+
+      - name: Install browser dependencies
+        run: bun install --frozen-lockfile
+        working-directory: browser
+
+      - name: Build the extension
+        run: bun run build
+        working-directory: browser
+
+      - name: Cache Chromium automation build
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('browser/bun.lock') }}
+
+      - name: Fetch isolated Chromium
+        run: bunx playwright-core install --with-deps chromium
+        working-directory: browser
+
+      - name: Verify the link with real processes
+        run: bun run desktop:verify
+        working-directory: browser

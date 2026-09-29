@@ -1,4 +1,4 @@
-<img src="assets/brand/parousia-banner.webp" width="1024px" height="auto" alt="PAROUSIA">
+<img src="assets/brand/parousia-banner.webp" width="1024px" height="auto" alt="Parousia">
 
 <br>
 
@@ -23,7 +23,7 @@
 
 > **Early development**
 
-PAROUSIA is actively being built. APIs, architecture, package names, integrations, and other implementation details may change while the foundation is being established.
+Parousia is actively being built. APIs, architecture, package names, integrations, and other implementation details may change while the foundation is being established.
 
 ---
 
@@ -37,7 +37,7 @@ Documentation, guides, installation instructions, compatibility information, and
 
 ## Roadmap
 
-PAROUSIA is currently in **Phase 1: Foundation**. See [`project/roadmap.md`](project/roadmap.md) for the full plan, covering the browser extension, the desktop app, Discord support, the Activity ecosystem, and beyond.
+Phase 3 (the Browser ↔ Desktop link) is complete. Parousia is now in **Phase 4: Discord Adapter**, with **Phase 5: First Activity, End to End** next. See [`project/roadmap.md`](project/roadmap.md) for the full plan, covering the browser extension, the desktop app, Discord support, the Activity ecosystem, and beyond.
 
 ---
 
