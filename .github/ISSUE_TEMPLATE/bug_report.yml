@@ -1,5 +1,5 @@
 name: Bug Report
-description: Report a problem with PAROUSIA
+description: Report a problem with Parousia
 labels: ["bug"]
 body:
   - type: markdown
@@ -10,7 +10,7 @@ body:
     id: component
     attributes:
       label: Component
-      description: Which part of PAROUSIA is affected?
+      description: Which part of Parousia is affected?
       options:
         - Browser extension
         - Desktop application
@@ -41,7 +41,7 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: OS, browser (and version), or PAROUSIA version/commit
+      description: OS, browser (and version), or Parousia version/commit
       placeholder: e.g. Windows 11, Chrome 128, commit abc1234
     validations:
       required: false

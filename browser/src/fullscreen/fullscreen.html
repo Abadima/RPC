@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Parousia Dashboard</title>
+    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="fullscreen.css" />
+  </head>
+  <body>
+    <div class="workspace">
+      <aside class="sidebar">
+        <a class="brand" href="#overview">
+          <img class="mark" src="icons/icon-32.png" width="22" height="22" alt="Parousia" />
+          <span class="wordmark" aria-hidden="true">PAROUSIA</span>
+        </a>
+        <nav class="nav" aria-label="Dashboard">
+          <a class="nav-link" href="#overview" data-route="overview"
+            ><span data-icon="overview"></span>Overview</a
+          >
+          <a class="nav-link" href="#activities" data-route="activities"
+            ><span data-icon="activities"></span>Activities</a
+          >
+          <a class="nav-link" href="#settings" data-route="settings"
+            ><span data-icon="settings"></span>Settings</a
+          >
+        </nav>
+        <div class="sidebar-status">
+          <span class="status-dot" id="status-dot" data-tone="idle"></span>
+          <span id="status-label">Not connected</span>
+        </div>
+      </aside>
+
+      <main class="main" id="view" tabindex="-1"></main>
+    </div>
+
+    <!-- One template per page; the router renders only the page on show. -->
+
+    <template id="view-overview">
+      <section class="panel" aria-labelledby="overview-title">
+        <header class="panel-header">
+          <div>
+            <h1 class="panel-title" id="overview-title">Overview</h1>
+            <p class="panel-subtitle">What this browser is sharing, and where it goes.</p>
+          </div>
+          <span class="badge" data-slot="badge" data-tone="idle">Idle</span>
+        </header>
+
+        <section class="offline" data-slot="offline" hidden>
+          <div class="banner" role="status">
+            <div class="banner-main">
+              <span class="banner-icon"><span data-icon="alert"></span></span>
+              <div class="banner-text" data-help></div>
+            </div>
+          </div>
+          <a class="button button-block" data-download target="_blank" rel="noopener noreferrer">
+            <span data-icon="download"></span>
+            <span data-download-label>Get Parousia Desktop</span>
+          </a>
+          <button class="link-button" type="button" data-retry>Retry Connection</button>
+          <p class="offline-aside" data-slot="discord-aside" hidden></p>
+        </section>
+
+        <div class="overview-grid" data-slot="online">
+          <div class="stack">
+            <h2 class="section-label">Current activity</h2>
+            <div class="card presence-slot" data-slot="presence" aria-live="polite"></div>
+          </div>
+          <div class="stack">
+            <h2 class="section-label">Platform</h2>
+            <div class="card platform-card">
+              <div class="platform-head">
+                <span class="tile"><span data-icon="desktop"></span></span>
+                <div class="row-text">
+                  <span class="row-title">Parousia Desktop</span>
+                  <span class="row-subtitle">Receives presence from your browsers</span>
+                </div>
+              </div>
+              <dl class="facts">
+                <div>
+                  <dt>Status</dt>
+                  <dd data-slot="status">Not connected</dd>
+                </div>
+                <div>
+                  <dt>Version</dt>
+                  <dd data-slot="version">Unknown</dd>
+                </div>
+                <div>
+                  <dt>Discord-RPC-Extension</dt>
+                  <dd data-slot="discord">Off</dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </section>
+    </template>
+
+    <template id="view-activities">
+      <section class="panel" aria-labelledby="activities-title">
+        <header class="panel-header">
+          <div>
+            <h1 class="panel-title" id="activities-title">Activities</h1>
+            <p class="panel-subtitle">
+              Activities teach Parousia to recognize a site and describe what you're doing there.
+            </p>
+          </div>
+        </header>
+
+        <div class="catalog" data-slot="catalog">
+          <label class="search">
+            <span data-icon="search"></span>
+            <span class="visually-hidden">Search Activities</span>
+            <input type="search" data-slot="query" placeholder="Search Activities or sites" />
+          </label>
+          <p class="results-summary" data-slot="summary" role="status"></p>
+          <ul class="activity-grid" data-slot="list"></ul>
+          <p class="empty-text no-results" data-slot="no-results" hidden>
+            Nothing matches that search.
+          </p>
+          <nav class="pager" data-slot="pager" aria-label="Activity pages"></nav>
+        </div>
+
+        <div class="empty-card" data-slot="empty" hidden>
+          <span class="empty-visual"><span data-icon="activities"></span></span>
+          <p class="empty-title">No Activities in this build yet</p>
+          <p class="empty-text">
+            Until one is added, Parousia recognizes no sites, so nothing about your browsing is
+            shared.
+          </p>
+        </div>
+      </section>
+    </template>
+
+    <template id="view-settings">
+      <section class="panel" aria-labelledby="settings-title">
+        <header class="panel-header">
+          <div>
+            <h1 class="panel-title" id="settings-title">Settings</h1>
+            <p class="panel-subtitle">
+              How Parousia behaves in this browser, and Parousia Desktop's own settings.
+            </p>
+          </div>
+        </header>
+        <div class="settings-layout">
+          <nav class="settings-nav" data-slot="nav" aria-label="Settings categories"></nav>
+          <div class="settings-pane">
+            <h2 class="settings-pane-title" data-slot="title"></h2>
+            <div data-slot="page"></div>
+          </div>
+        </div>
+      </section>
+    </template>
+
+    <script type="module" src="fullscreen.js"></script>
+  </body>
+</html>

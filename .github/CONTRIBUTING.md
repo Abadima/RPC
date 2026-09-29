@@ -1,13 +1,13 @@
-# Contributing to PAROUSIA
+# Contributing to Parousia
 
-PAROUSIA is in early development. See `project/roadmap.md` for where things stand, and `project/vision.md`/`project/architecture.md` for the intended design before proposing larger changes.
+Parousia is in early development. See `project/roadmap.md` for where things stand, and `project/vision.md`/`project/architecture.md` for the intended design before proposing larger changes.
 
 ## Project Layout
 
-- `browser/`: the browser extension (Bun + TypeScript), targeting Chromium (Chrome/Edge), Firefox, Safari, and a userscript fallback
-- `desktop/`: the native desktop application (Rust)
-- `core/`, `packages/`: shared foundations, currently minimal placeholders
-- `adapters/`: platform adapters (Discord first; Fluxer/Stroat are roadmap items)
+- `browser/`: the browser extension (Bun + TypeScript), targeting Chromium (Chrome/Edge), Firefox, Safari, and a userscript
+- `desktop/`: Parousia Desktop (Rust), including its platform adapters (Discord first; Fluxer/Stoat are roadmap items)
+- `packages/`: TypeScript shared by `browser/` and `website/` (the presence view)
+- `core/`, `adapters/`: placeholders from the project skeleton
 - `website/`: the `parousia.js.org` landing page and docs (Astro + Svelte 5)
 
 ## Getting Started
@@ -32,6 +32,12 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 ```
 
+**End to end** (`browser/`, Linux, after building both; needs port 57179 free):
+
+```bash
+bun run desktop:verify
+```
+
 **Website** (`website/`):
 
 ```bash
@@ -48,7 +54,7 @@ CI runs all of the above on every pull request. Make sure they pass locally firs
 
 - **Dependencies:** Minimize. Adding a new dependency requires justification in the PR description. Prefer native functionality over pulling in a library.
 - **Types:** Strict TypeScript. No `any`, no unchecked casts. Rust code should be `clippy`-clean.
-- **Scope:** Keep PRs focused. Avoid unrelated refactors or premature abstractions. See `CLAUDE.md` for the project's working philosophy.
+- **Scope:** Keep PRs focused. Avoid unrelated refactors or premature abstractions.
 - **Security:** Never commit secrets. See `SECURITY.md` to report vulnerabilities privately rather than via a public issue.
 - **Commits:** Write clear, descriptive commit messages explaining _why_, not just _what_.
 

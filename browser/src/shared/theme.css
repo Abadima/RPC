@@ -1,0 +1,905 @@
+/* Parousia's shared visual system: tokens and components for the popup and dashboard. */
+
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/poppins-400.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("fonts/poppins-600.woff2") format("woff2");
+}
+
+:root {
+  color-scheme: dark;
+
+  /* The Parousia palette. Everything below derives from these five. */
+  --cocoa: #906861;
+  --espresso: #2b2322;
+  --linen: #fbf9f8;
+  --almond: #e5ddd9;
+  --sage: #6b7b6e;
+
+  --accent: var(--cocoa);
+  --accent-hover: #9d766f;
+  /* Cocoa and Sage are too dark for small text on Espresso; these lighter tints of them pass AA. */
+  --accent-text: #b59994;
+  --good-text: #9da8a1;
+  --accent-soft: rgb(144 104 97 / 16%);
+  --accent-line: rgb(144 104 97 / 38%);
+
+  --bg: var(--espresso);
+  --surface: #322928;
+  --surface-raised: #3b3130;
+  --field: #1f1a19;
+  --border: rgb(229 221 217 / 10%);
+  --border-strong: rgb(229 221 217 / 18%);
+  /* Cards, rows, and fields are outlined in Cocoa, as in the design. */
+  --line: rgb(144 104 97 / 30%);
+
+  --text: var(--linen);
+  --text-muted: rgb(229 221 217 / 78%);
+  --text-faint: rgb(229 221 217 / 58%);
+
+  --good: var(--sage);
+  /* Warnings and errors need colors the palette doesn't have; these are warmed to sit with it. */
+  --warn: #d4a24c;
+  --bad: #d9695f;
+  --idle: rgb(229 221 217 / 35%);
+
+  --radius-card: 0.9231rem;
+  --radius-row: 0.6154rem;
+  --radius-field: 0.4615rem;
+
+  --font: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Sizes are in rem from here on: 13px in the popup, fluid in the dashboard (fullscreen.css). */
+html {
+  font-size: 13px;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 1rem;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+p {
+  margin: 0;
+}
+
+:focus-visible {
+  outline: 0.1538rem solid var(--accent-text);
+  outline-offset: 0.1538rem;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.icon {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 1.25em;
+  height: 1em;
+  overflow: visible;
+  vertical-align: -0.125em;
+}
+
+/* Brand: the formal logo treatment is the only place "PAROUSIA" appears. */
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6154rem;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.mark {
+  display: block;
+}
+
+.wordmark {
+  font-weight: 600;
+  font-size: 1rem;
+  letter-spacing: 0.14em;
+}
+
+.section-label {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 0.8077rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Status: one tone vocabulary for dots and badges. */
+
+.status-dot {
+  width: 0.4615rem;
+  height: 0.4615rem;
+  border-radius: 76.8462rem;
+  background: var(--idle);
+  flex-shrink: 0;
+}
+
+.status-dot[data-tone="good"] {
+  background: var(--good);
+  box-shadow: 0 0 0 0.2308rem rgb(107 123 110 / 16%);
+}
+.status-dot[data-tone="busy"] {
+  background: var(--accent-text);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.status-dot[data-tone="warn"] {
+  background: var(--warn);
+}
+.status-dot[data-tone="bad"] {
+  background: var(--bad);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2308rem 0.6154rem;
+  border-radius: 76.8462rem;
+  background: rgb(229 221 217 / 10%);
+  color: var(--text-muted);
+  font-size: 0.7692rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1.0769rem;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.badge[data-tone="good"] {
+  background: rgb(107 123 110 / 18%);
+  color: var(--good-text);
+}
+.badge[data-tone="busy"] {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.badge[data-tone="warn"] {
+  background: rgb(212 162 76 / 12%);
+  color: var(--warn);
+}
+.badge[data-tone="bad"] {
+  background: rgb(217 105 95 / 12%);
+  color: var(--bad);
+}
+
+/* Controls */
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1538rem;
+  height: 2.1538rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-field);
+  background: none;
+  color: var(--text-muted);
+  font-size: 1.0769rem;
+  cursor: pointer;
+  transition:
+    background-color 120ms,
+    color 120ms;
+}
+.icon-button:hover {
+  background: rgb(229 221 217 / 6%);
+  color: var(--text);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6154rem;
+  padding: 0.6923rem 1.0769rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-row);
+  background: var(--accent);
+  color: var(--linen);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 120ms;
+}
+.button:hover {
+  background: var(--accent-hover);
+}
+.button-quiet {
+  background: none;
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.button-quiet:hover {
+  background: rgb(229 221 217 / 5%);
+}
+
+.link-button {
+  padding: 0.3077rem;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.2308rem;
+  cursor: pointer;
+}
+.link-button:hover {
+  color: var(--text);
+}
+
+/* A checkbox drawn as a switch: still an <input>, so labels, keyboard, and `.checked` work. */
+.switch {
+  appearance: none;
+  position: relative;
+  flex-shrink: 0;
+  width: 2.7692rem;
+  height: 1.5385rem;
+  margin: 0;
+  border-radius: 76.8462rem;
+  background: rgb(229 221 217 / 12%);
+  cursor: pointer;
+  transition: background-color 150ms;
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 0.2308rem;
+  left: 0.2308rem;
+  width: 1.0769rem;
+  height: 1.0769rem;
+  border-radius: 76.8462rem;
+  background: var(--text);
+  transition: transform 150ms;
+}
+.switch:checked {
+  background: var(--accent);
+}
+.switch:checked::after {
+  transform: translateX(1.2308rem);
+}
+.switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+/* Surfaces */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.7692rem;
+  padding: 0.7692rem 0.9231rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-row);
+  color: var(--text);
+  text-decoration: none;
+}
+a.row:hover,
+button.row:hover {
+  border-color: var(--accent-line);
+  background: var(--surface-raised);
+}
+button.row {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1538rem;
+  height: 2.1538rem;
+  flex-shrink: 0;
+  border-radius: var(--radius-field);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 1rem;
+}
+
+.row-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.row-title {
+  font-weight: 600;
+}
+.row-subtitle {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.8462rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row-chevron {
+  color: var(--text-faint);
+  font-size: 0.8462rem;
+}
+
+.banner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9231rem;
+  padding: 1.0769rem;
+  border: 1px solid rgb(217 105 95 / 45%);
+  border-radius: var(--radius-card);
+  background: rgb(217 105 95 / 7%);
+}
+.banner[data-tone="warn"] {
+  border-color: rgb(212 162 76 / 45%);
+  background: rgb(212 162 76 / 7%);
+}
+.banner-main {
+  display: flex;
+  gap: 0.9231rem;
+}
+.banner-icon {
+  color: var(--bad);
+  font-size: 1.3846rem;
+  line-height: 1.2;
+}
+.banner[data-tone="warn"] .banner-icon {
+  color: var(--warn);
+}
+.banner-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.1538rem;
+  min-width: 0;
+}
+.banner-title {
+  font-weight: 600;
+}
+.banner-detail {
+  color: var(--text-muted);
+  font-size: 0.9231rem;
+}
+.banner-command {
+  margin-top: 0.4615rem;
+  padding: 0.4615rem 0.6154rem;
+  border-radius: var(--radius-field);
+  background: var(--field);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.8462rem;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6154rem;
+}
+
+/* "Parousia Desktop couldn't be found" (Figma: screen-3-disconnected) */
+
+.offline {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1.5rem;
+}
+
+.button-block {
+  width: 100%;
+  padding: 1.05rem;
+  font-size: 1.077rem;
+  text-decoration: none;
+}
+
+.offline .link-button {
+  align-self: center;
+}
+.offline .link-button:disabled {
+  color: var(--text-faint);
+  text-decoration: none;
+  cursor: default;
+}
+
+.offline-aside {
+  color: var(--text-muted);
+  font-size: 0.923rem;
+  text-align: center;
+}
+
+/* Settings (shared by the popup and the dashboard) */
+
+.header-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.3077rem;
+  min-width: 0;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.4615rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.crumb {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.2308rem;
+  cursor: pointer;
+}
+.crumb:hover {
+  color: var(--text);
+}
+.crumb:disabled {
+  color: var(--text);
+  text-decoration: none;
+  cursor: default;
+}
+
+.crumb-separator {
+  color: var(--text-faint);
+}
+
+.category-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6154rem;
+}
+
+.category {
+  gap: 0.9231rem;
+  padding: 0.9231rem 1.0769rem;
+}
+
+.category-icon {
+  width: 1.3846rem;
+  color: var(--accent-text);
+  font-size: 1.0769rem;
+  text-align: center;
+}
+
+.category[aria-current] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.pill {
+  padding: 0.1538rem 0.5385rem;
+  border-radius: 76.8462rem;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 0.7692rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.settings-page-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9231rem;
+}
+
+.settings-page-body > .section-label:not(:first-child) {
+  margin-top: 0.6154rem;
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.2308rem;
+  padding: 1.0769rem;
+}
+label.setting {
+  cursor: pointer;
+}
+.setting + .setting {
+  border-top: 1px solid var(--border);
+}
+
+.setting-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.7692rem;
+}
+
+.setting-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.1538rem;
+  min-width: 0;
+}
+
+.setting-title {
+  font-weight: 600;
+}
+
+.setting-detail {
+  color: var(--text-muted);
+  font-size: 0.8846rem;
+}
+
+.setting-status {
+  margin-top: 0.3rem;
+  color: var(--text-faint);
+  font-size: 0.8462rem;
+  font-weight: 600;
+}
+.setting-status[data-tone="good"] {
+  color: var(--good-text);
+}
+
+.tile-letter {
+  font-weight: 600;
+}
+
+.stepper {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.3077rem;
+  padding: 0.2308rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-field);
+  background: var(--field);
+}
+
+.stepper-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.8462rem;
+  height: 1.8462rem;
+  padding: 0;
+  border: none;
+  border-radius: 0.3077rem;
+  background: none;
+  color: var(--text);
+  font-size: 0.8462rem;
+  cursor: pointer;
+}
+.stepper-button:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+.stepper-button:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+.stepper-value {
+  min-width: 3.3846rem;
+  font-size: 0.9231rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.select {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  min-width: 10.1538rem;
+}
+.setting-stacked .select {
+  width: 100%;
+}
+.select select {
+  appearance: none;
+  width: 100%;
+  padding: 0.5385rem 2.4615rem 0.5385rem 0.9231rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-field);
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.select select:hover {
+  border-color: var(--accent-line);
+}
+.select .icon {
+  position: absolute;
+  right: 0.7692rem;
+  color: var(--text-muted);
+  font-size: 0.8462rem;
+  pointer-events: none;
+}
+
+.info-note,
+.offline-note {
+  padding: 0.9231rem 1.0769rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-card);
+  color: var(--text-muted);
+  font-size: 0.9231rem;
+}
+
+.settings-note {
+  margin: 0 1.0769rem 1.0769rem;
+  padding: 0.7692rem 0.9231rem;
+  border-radius: var(--radius-row);
+  background: rgb(212 162 76 / 8%);
+  color: var(--warn);
+  font-size: 0.9231rem;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.9231rem;
+  margin: 0;
+}
+.facts.settings-group {
+  gap: 1.0769rem 0.9231rem;
+  padding: 1.0769rem;
+}
+.facts dt {
+  color: var(--text-faint);
+  font-size: 0.8462rem;
+}
+.facts dd {
+  margin: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.link-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6154rem;
+}
+
+.empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4615rem;
+  padding: 2.4615rem 1.5385rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  text-align: center;
+}
+
+.empty-visual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 4.3077rem;
+  height: 4.3077rem;
+  margin-bottom: 0.6154rem;
+  border-radius: 76.8462rem;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 1.5385rem;
+}
+
+.empty-title {
+  font-weight: 600;
+  font-size: 1.1538rem;
+}
+
+.empty-text {
+  max-width: 32.3077rem;
+  color: var(--text-muted);
+  font-size: 0.9231rem;
+}
+
+code {
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+
+/* Shared presence view (packages/presence-view) */
+
+.presence-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9231rem;
+  width: 100%;
+  padding: 1.2308rem;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-card);
+  background: linear-gradient(160deg, rgb(144 104 97 / 10%), transparent 55%), var(--surface);
+}
+
+.presence-top {
+  display: flex;
+  align-items: center;
+  gap: 0.7692rem;
+}
+
+.presence-monogram {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4615rem;
+  height: 2.4615rem;
+  flex-shrink: 0;
+  border-radius: 0.6154rem;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 600;
+  font-size: 1.1538rem;
+  text-transform: uppercase;
+}
+
+.presence-source {
+  flex: 1;
+  min-width: 0;
+}
+
+.presence-name {
+  overflow: hidden;
+  font-weight: 600;
+  font-size: 1.0769rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.presence-kind {
+  color: var(--text-muted);
+  font-size: 0.8462rem;
+}
+
+.presence-live {
+  width: 0.6154rem;
+  height: 0.6154rem;
+  border-radius: 76.8462rem;
+  background: var(--good);
+  box-shadow: 0 0 0 0.3077rem rgb(107 123 110 / 15%);
+}
+
+.presence-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1538rem;
+}
+
+.presence-detail {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.presence-state {
+  color: var(--text-muted);
+  font-size: 0.9231rem;
+  overflow-wrap: anywhere;
+}
+
+.presence-elapsed {
+  display: flex;
+  align-items: center;
+  gap: 0.4615rem;
+  color: var(--accent-text);
+  font-size: 0.8462rem;
+}
+
+.presence-elapsed-time {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.presence-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4615rem;
+  width: 100%;
+  padding: 1.5385rem 0.6154rem;
+  text-align: center;
+}
+
+.presence-empty-visual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 4.3077rem;
+  height: 4.3077rem;
+  margin-bottom: 0.7692rem;
+  border-radius: 76.8462rem;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 1.6923rem;
+}
+
+.presence-empty-title {
+  font-weight: 600;
+  font-size: 1.1538rem;
+}
+
+.presence-empty-subtitle {
+  max-width: 20rem;
+  color: var(--text-muted);
+  font-size: 0.9231rem;
+}
+
+.presence-card,
+.presence-empty {
+  animation: rise-in 160ms ease-out;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.1538rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

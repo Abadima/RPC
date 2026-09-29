@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-PAROUSIA is in early development (pre-2.0). There are no stable releases yet, and no compatibility or security-patch guarantees are made for any specific version.
+Parousia is in early development (pre-2.0). There are no stable releases yet, and no compatibility or security-patch guarantees are made for any specific version.
 
 ## Reporting a Vulnerability
 
@@ -16,7 +16,7 @@ Please include:
 - Steps to reproduce, or a proof of concept
 - The affected component (browser extension, desktop application, an adapter, etc.) and platform/version
 
-We aim to acknowledge new reports within a timely manner. Timelines for a fix depend on severity and complexity; we'll keep you updated as we work on it.
+We aim to acknowledge new reports promptly. Timelines for a fix depend on severity and complexity; we'll keep you updated as we work on it.
 
 ## Disclosure
 
@@ -24,7 +24,7 @@ We follow coordinated disclosure: please give us a reasonable opportunity to inv
 
 ## Security Expectations
 
-Security is a top priority for PAROUSIA:
+Security is a top priority for Parousia:
 
 - The browser extension requests only the permissions it strictly needs.
 - Secrets (API keys, tokens) are never committed to this repository.

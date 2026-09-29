@@ -4,5 +4,13 @@ version = "1.0.0"
 edition = "2024"
 
 [dependencies]
+dirs = "7.0.0"
+httparse = "1.10.1"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
+tungstenite = "0.30.0"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

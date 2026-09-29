@@ -3,5 +3,5 @@
 </script>
 
 <button onclick={() => (checked = !checked)}>
-  {checked ? "PAROUSIA is present." : "Check presence"}
+  {checked ? "Parousia is present." : "Check presence"}
 </button>

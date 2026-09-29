@@ -1,9 +1,5 @@
-import Logena from "logena";
-import { ActivityRegistry } from "../core/registry";
-import { PresenceRuntime } from "../core/runtime";
+import { startDiscordRpcExtensionCompat } from "../compat/discord-rpc-extension";
+import { startBackground } from "./background";
 
-Logena.set({ appName: "PAROUSIA/firefox" });
-
-export const runtime = new PresenceRuntime(new ActivityRegistry());
-
-Logena.info("firefox platform initialized");
+const background = startBackground("Parousia/firefox");
+startDiscordRpcExtensionCompat(background.getActivity);
