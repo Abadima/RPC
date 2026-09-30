@@ -1,3 +1,6 @@
+import type { Activity } from "./activity";
+import type { Presence } from "./presence";
+
 /**
  * The Parousia Desktop protocol (project/architecture.md, Communication
  * Protocol), over a `127.0.0.1` WebSocket. The client says `hello`, Desktop
@@ -7,7 +10,7 @@
  */
 
 /** Must match desktop/src/protocol.rs. */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 6;
 /** Desktop's messages are small; anything near this is not from Desktop. */
 export const MAX_SERVER_MESSAGE_CHARS = 16 * 1024;
 
@@ -48,7 +51,34 @@ export interface DesktopReport {
   settings: { allowedOrigins: string[]; allowUserscripts: boolean };
   refused: Array<{ origin: string; count: number; secsAgo: number }>;
   events: Array<{ secsAgo: number; text: string }>;
+  /** Each platform adapter's state (desktop/src/platform.rs). */
+  platforms: DesktopPlatformStatus[];
 }
+
+export type AdapterState =
+  | "idle"
+  | "connecting"
+  | "connected"
+  | "showing"
+  | "not_running"
+  | "refused";
+
+export interface DesktopPlatformStatus {
+  platform: string;
+  state: AdapterState;
+  /** The Activity being shown, while `state` is `showing`. */
+  activity: string | null;
+  error: string | null;
+}
+
+const ADAPTER_STATES: ReadonlySet<string> = new Set<AdapterState>([
+  "idle",
+  "connecting",
+  "connected",
+  "showing",
+  "not_running",
+  "refused",
+]);
 
 export type ServerMessage =
   | { type: "welcome"; protocolVersion: number }
@@ -93,7 +123,16 @@ export function isDesktopReport(value: unknown): value is DesktopReport {
       value.refused,
       (r) => isString(r.origin) && isNumber(r.count) && isNumber(r.secsAgo),
     ) &&
-    everyItem(value.events, (e) => isNumber(e.secsAgo) && isString(e.text))
+    everyItem(value.events, (e) => isNumber(e.secsAgo) && isString(e.text)) &&
+    everyItem(
+      value.platforms,
+      (p) =>
+        isString(p.platform) &&
+        isString(p.state) &&
+        ADAPTER_STATES.has(p.state) &&
+        (p.activity === null || isString(p.activity)) &&
+        (p.error === null || isString(p.error)),
+    )
   );
 }
 
@@ -116,4 +155,24 @@ export function parseServerMessage(value: unknown): ServerMessage | null {
     default:
       return null;
   }
+}
+
+/**
+ * A Presence as it goes to Desktop: only the fields Desktop takes (its
+ * schema refuses anything else), built field by field so nothing the
+ * browser keeps for itself, like the page's address, leaves by accident.
+ */
+export function presenceWire(presence: Presence): Presence {
+  const { activity } = presence;
+  if (!activity) return { activity: null, updatedAt: presence.updatedAt };
+  const wire: Activity = { id: activity.id, name: activity.name };
+  if (activity.details !== undefined) wire.details = activity.details;
+  if (activity.state !== undefined) wire.state = activity.state;
+  if (activity.assets) wire.assets = { ...activity.assets };
+  if (activity.timestamps) wire.timestamps = { ...activity.timestamps };
+  if (activity.detailsUrl !== undefined) wire.detailsUrl = activity.detailsUrl;
+  if (activity.stateUrl !== undefined) wire.stateUrl = activity.stateUrl;
+  if (activity.buttons) wire.buttons = activity.buttons.map(({ label, url }) => ({ label, url }));
+  if (activity.discordClientId !== undefined) wire.discordClientId = activity.discordClientId;
+  return { activity: wire, updatedAt: presence.updatedAt };
 }

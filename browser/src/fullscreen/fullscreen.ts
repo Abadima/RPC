@@ -1,12 +1,15 @@
+import { faArrowLeft } from "@fortawesome/free-solid-svg-icons/faArrowLeft";
 import { faCircleExclamation } from "@fortawesome/free-solid-svg-icons/faCircleExclamation";
 import { faDesktop } from "@fortawesome/free-solid-svg-icons/faDesktop";
 import { faDownload } from "@fortawesome/free-solid-svg-icons/faDownload";
+import { faFilter } from "@fortawesome/free-solid-svg-icons/faFilter";
 import { faGaugeHigh } from "@fortawesome/free-solid-svg-icons/faGaugeHigh";
 import { faMagnifyingGlass } from "@fortawesome/free-solid-svg-icons/faMagnifyingGlass";
+import { faPenToSquare } from "@fortawesome/free-solid-svg-icons/faPenToSquare";
 import { faPuzzlePiece } from "@fortawesome/free-solid-svg-icons/faPuzzlePiece";
 import { faSliders } from "@fortawesome/free-solid-svg-icons/faSliders";
-import { builtInActivities } from "../core/activities";
-import type { Preferences } from "../core/preferences";
+import type { ActivityInfo } from "../core/activity";
+import { loadCatalog } from "../shared/activity-catalog";
 import {
   connectToBackground,
   displayedState,
@@ -14,8 +17,10 @@ import {
 } from "../shared/connection-status";
 import { fillIcons } from "../shared/icons";
 import { createSettingsModel } from "../shared/settings-view";
-import { activeTabSnapshot } from "../shared/views";
+import { presenceSnapshot } from "../shared/views";
 import { activitiesView } from "./activities";
+import { activityView } from "./activity";
+import { defaultView } from "./default";
 import { overviewView } from "./overview";
 import { settingsView } from "./settings";
 import type { ShellState, View, ViewContext } from "./view";
@@ -23,8 +28,11 @@ import type { ShellState, View, ViewContext } from "./view";
 const ICONS = {
   activities: faPuzzlePiece,
   alert: faCircleExclamation,
+  back: faArrowLeft,
+  default: faPenToSquare,
   desktop: faDesktop,
   download: faDownload,
+  filter: faFilter,
   overview: faGaugeHigh,
   search: faMagnifyingGlass,
   settings: faSliders,
@@ -67,48 +75,52 @@ const background = connectToBackground(
   },
   settings.onReport,
   settings.onDiscord,
+  // What's being shared, as Privacy settings allow; the background pushes every change.
+  (activity) => update({ snapshot: presenceSnapshot(activity) }),
 );
 
-// The current tab's Activity, as Privacy settings let it be shared.
-async function refreshPresence(): Promise<void> {
-  update({
-    snapshot: await activeTabSnapshot({ lastFocusedWindow: true }, shell.settings.preferences),
-  });
-}
-let shownPreferences: Preferences | null = null;
-settings.subscribe((context) => {
-  update({ settings: context });
-  if (context.preferences !== shownPreferences) {
-    shownPreferences = context.preferences;
-    void refreshPresence();
-  }
-});
+settings.subscribe((context) => update({ settings: context }));
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) return;
-  background.requestStatus();
-  void refreshPresence();
+  if (!document.hidden) background.requestStatus();
 });
 
-// Pages: one at a time, from the URL: #overview, #activities?q=…&page=…, #settings/privacy.
+let catalog: Promise<ActivityInfo[]> | null = null;
+
+// Pages: one at a time, from the URL: #overview, #activities?q=…&page=…,
+// #activities/<id>, #default, #settings/privacy.
 const context: ViewContext = {
-  activities: builtInActivities().list(),
+  catalog: () => (catalog ??= loadCatalog()),
   settings: settings.actions,
   reconnect: () => background.reconnect(),
   origin: new URL(chrome.runtime.getURL("")).origin,
 };
 const root = byId("view");
 
+/** An Activity id from the hash; a malformed one just finds no Activity. */
+function decodeSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 function show(): void {
   const [path = "", query = ""] = location.hash.slice(1).split("?");
   const [name, segment] = path.split("/");
-  const route = name === "activities" || name === "settings" ? name : "overview";
+  const route =
+    name === "activities" || name === "default" || name === "settings" ? name : "overview";
   view?.destroy?.();
   view =
-    route === "activities"
-      ? activitiesView(context, new URLSearchParams(query))
-      : route === "settings"
-        ? settingsView(context, segment)
-        : overviewView(context);
+    route === "activities" && segment
+      ? activityView(context, decodeSegment(segment))
+      : route === "activities"
+        ? activitiesView(context, new URLSearchParams(query))
+        : route === "default"
+          ? defaultView()
+          : route === "settings"
+            ? settingsView(context, segment)
+            : overviewView(context);
   fillIcons(view.element, ICONS);
   view.update(shell);
   root.replaceChildren(view.element);

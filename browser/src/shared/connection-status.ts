@@ -1,6 +1,6 @@
 import type { ConnectionState, DesktopStatus } from "../core/desktop-connection";
 import type { DesktopReport, DesktopSetting } from "../core/desktop-protocol";
-import { UI_PORT_NAME, parseUiEvent, type BridgeState } from "../core/ui-port";
+import { UI_PORT_NAME, parseUiEvent, type BridgeState, type UiActivity } from "../core/ui-port";
 
 export interface BackgroundLink {
   reconnect(): void;
@@ -10,13 +10,14 @@ export interface BackgroundLink {
 
 /**
  * Opens this view's port to the background script (see core/ui-port.ts) and
- * reports every connection state and Desktop report it pushes, for as long
- * as the view stays open.
+ * reports every connection state, Desktop report, and shared Activity it
+ * pushes, for as long as the view stays open.
  */
 export function connectToBackground(
   onState: (state: ConnectionState) => void,
   onReport: (report: DesktopReport | null) => void = () => {},
   onDiscord: (state: BridgeState) => void = () => {},
+  onActivity: (activity: UiActivity | null) => void = () => {},
 ): BackgroundLink {
   const port = chrome.runtime.connect({ name: UI_PORT_NAME });
   port.onMessage.addListener((message: unknown) => {
@@ -24,6 +25,7 @@ export function connectToBackground(
     if (event?.type === "state") onState(event.state);
     else if (event?.type === "report") onReport(event.report);
     else if (event?.type === "discord") onDiscord(event.state);
+    else if (event?.type === "activity") onActivity(event.activity);
   });
   return {
     reconnect: () => port.postMessage({ type: "reconnect" }),
@@ -129,6 +131,41 @@ export function connectionHelp(state: ConnectionState, origin: string): Connecti
 }
 
 /** Discord-RPC-Extension's app, as the Platforms page and Overview describe it. */
+/**
+ * How Parousia Desktop's adapter for `platform` is doing, from its last
+ * report: `null` without a report (Desktop not connected) or an adapter.
+ */
+export function desktopPlatformLabel(
+  report: DesktopReport | null,
+  platform: string,
+): string | null {
+  const adapter = report?.platforms.find((p) => p.platform === platform);
+  if (!adapter) return null;
+  switch (adapter.state) {
+    case "showing":
+      return adapter.activity ? `Showing ${adapter.activity}` : "Showing your activity";
+    case "connected":
+    case "idle":
+      return "Ready";
+    case "connecting":
+      return "Connecting…";
+    case "not_running":
+      return "Not running";
+    case "refused":
+      return adapter.error ? `Refused: ${adapter.error}` : "Refused";
+  }
+}
+
+/**
+ * Whether Overview mentions Discord-RPC-Extension's app. Once Parousia Desktop
+ * is connected it shows Discord itself and the app stands down, so "Looking for
+ * it…" would only be noise there. Settings > Platforms is where the app's
+ * status lives; Overview mentions it only while Desktop isn't established.
+ */
+export function showsDiscordBridge(state: ConnectionState): boolean {
+  return state.status !== "connected";
+}
+
 export function discordBridgeLabel(state: BridgeState): string {
   switch (state.status) {
     case "off":

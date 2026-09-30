@@ -4,11 +4,15 @@
 
 use std::fmt;
 
-use crate::protocol::{ActivityAssetsWire, ActivityTimestampsWire, ActivityWire, PresenceWire};
+use crate::protocol::{
+    ActivityAssetsWire, ActivityButtonWire, ActivityTimestampsWire, ActivityWire, PresenceWire,
+};
 
-/// Generous enough for any real activity/details/state/url string, small
+/// Generous enough for any real activity/details/state string, small
 /// enough that a malicious or buggy sender can't hand adapters unbounded text.
 const MAX_FIELD_LEN: usize = 512;
+/// Discord shows at most two; nothing else takes buttons.
+const MAX_BUTTONS: usize = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Presence {
@@ -22,9 +26,22 @@ pub struct Activity {
     pub name: String,
     pub details: Option<String>,
     pub state: Option<String>,
-    pub url: String,
     pub assets: Option<ActivityAssets>,
     pub timestamps: Option<ActivityTimestamps>,
+    /// A Discord snowflake (see `is_discord_id`), when the Activity has its
+    /// own Discord Application.
+    pub discord_client_id: Option<String>,
+    /// Links for the details and state lines; `http(s)` only.
+    pub details_url: Option<String>,
+    pub state_url: Option<String>,
+    pub buttons: Vec<ActivityButton>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActivityButton {
+    pub label: String,
+    /// `http(s)` only.
+    pub url: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -65,6 +82,38 @@ fn validate_opt_len(field: &'static str, value: &Option<String>) -> Result<(), P
     match value {
         Some(v) => validate_len(field, v),
         None => Ok(()),
+    }
+}
+
+/// Activities are detected on web pages, and anything they link to is one:
+/// no `javascript:`, `file:`, or custom schemes.
+fn validate_web_url(field: &'static str, value: &str) -> Result<(), PresenceError> {
+    validate_len(field, value)?;
+    if value.starts_with("https://") || value.starts_with("http://") {
+        Ok(())
+    } else {
+        Err(PresenceError { field })
+    }
+}
+
+/// Discord ids are snowflakes: a `u64` written in decimal, 17 digits or more
+/// for anything created since 2015.
+pub fn is_discord_id(value: &str) -> bool {
+    (17..=20).contains(&value.len())
+        && value.bytes().all(|b| b.is_ascii_digit())
+        && value.parse::<u64>().is_ok()
+}
+
+impl TryFrom<ActivityButtonWire> for ActivityButton {
+    type Error = PresenceError;
+
+    fn try_from(wire: ActivityButtonWire) -> Result<Self, Self::Error> {
+        validate_len("buttons.label", &wire.label)?;
+        validate_web_url("buttons.url", &wire.url)?;
+        Ok(Self {
+            label: wire.label,
+            url: wire.url,
+        })
     }
 }
 
@@ -110,19 +159,41 @@ impl TryFrom<ActivityWire> for Activity {
         validate_len("name", &wire.name)?;
         validate_opt_len("details", &wire.details)?;
         validate_opt_len("state", &wire.state)?;
-        validate_len("url", &wire.url)?;
-        // Activities are detected on web pages; anything else isn't one.
-        if !(wire.url.starts_with("https://") || wire.url.starts_with("http://")) {
-            return Err(PresenceError { field: "url" });
+        for (field, url) in [
+            ("detailsUrl", &wire.details_url),
+            ("stateUrl", &wire.state_url),
+        ] {
+            if let Some(url) = url {
+                validate_web_url(field, url)?;
+            }
+        }
+        if wire
+            .discord_client_id
+            .as_deref()
+            .is_some_and(|id| !is_discord_id(id))
+        {
+            return Err(PresenceError {
+                field: "discordClientId",
+            });
+        }
+        let buttons = wire.buttons.unwrap_or_default();
+        if buttons.len() > MAX_BUTTONS {
+            return Err(PresenceError { field: "buttons" });
         }
         Ok(Self {
             id: wire.id,
             name: wire.name,
             details: wire.details,
             state: wire.state,
-            url: wire.url,
             assets: wire.assets.map(TryInto::try_into).transpose()?,
             timestamps: wire.timestamps.map(TryInto::try_into).transpose()?,
+            discord_client_id: wire.discord_client_id,
+            details_url: wire.details_url,
+            state_url: wire.state_url,
+            buttons: buttons
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<_, _>>()?,
         })
     }
 }
@@ -152,10 +223,74 @@ mod tests {
             name: "Example".to_string(),
             details: None,
             state: None,
-            url: "https://example.com".to_string(),
             assets: None,
             timestamps: None,
+            discord_client_id: None,
+            details_url: None,
+            state_url: None,
+            buttons: None,
         }
+    }
+
+    fn convert(activity: ActivityWire) -> Result<Activity, PresenceError> {
+        Presence::try_from(PresenceWire {
+            activity: Some(activity),
+            updated_at: 1,
+        })
+        .map(|presence| presence.activity.unwrap())
+    }
+
+    #[test]
+    fn discord_ids_are_snowflakes() {
+        assert!(is_discord_id("1553980756731363428"));
+        assert!(is_discord_id("81384788765712384"));
+        for bad in [
+            "",
+            "123",
+            "1553980756731363428x",
+            "-553980756731363428",
+            "99999999999999999999",
+            " 1553980756731363428",
+        ] {
+            assert!(!is_discord_id(bad), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn links_buttons_and_the_client_id_are_checked() {
+        let mut activity = wire_activity("example");
+        activity.discord_client_id = Some("1553980756731363428".into());
+        activity.details_url = Some("https://example.com/details".into());
+        activity.buttons = Some(vec![ActivityButtonWire {
+            label: "Open".into(),
+            url: "https://example.com".into(),
+        }]);
+        let converted = convert(activity).unwrap();
+        assert_eq!(converted.buttons[0].label, "Open");
+        assert_eq!(
+            converted.discord_client_id.as_deref(),
+            Some("1553980756731363428")
+        );
+
+        let mut activity = wire_activity("example");
+        activity.discord_client_id = Some("not-an-id".into());
+        assert_eq!(convert(activity).unwrap_err().field, "discordClientId");
+
+        let mut activity = wire_activity("example");
+        activity.state_url = Some("javascript:alert(1)".into());
+        assert_eq!(convert(activity).unwrap_err().field, "stateUrl");
+
+        let button = |url: &str| ActivityButtonWire {
+            label: "Go".into(),
+            url: url.into(),
+        };
+        let mut activity = wire_activity("example");
+        activity.buttons = Some(vec![button("file:///etc/passwd")]);
+        assert_eq!(convert(activity).unwrap_err().field, "buttons.url");
+
+        let mut activity = wire_activity("example");
+        activity.buttons = Some(vec![button("https://a.example"); 3]);
+        assert_eq!(convert(activity).unwrap_err().field, "buttons");
     }
 
     #[test]
@@ -218,12 +353,12 @@ mod tests {
     #[test]
     fn rejects_non_web_urls_and_negative_times() {
         let mut activity = wire_activity("example");
-        activity.url = "javascript:alert(1)".to_string();
+        activity.details_url = Some("javascript:alert(1)".to_string());
         let wire = PresenceWire {
             activity: Some(activity),
             updated_at: 1,
         };
-        assert_eq!(Presence::try_from(wire).unwrap_err().field, "url");
+        assert_eq!(Presence::try_from(wire).unwrap_err().field, "detailsUrl");
 
         let mut activity = wire_activity("example");
         activity.timestamps = Some(ActivityTimestampsWire {

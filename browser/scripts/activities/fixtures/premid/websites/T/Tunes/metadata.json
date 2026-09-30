@@ -1,0 +1,20 @@
+{
+  "$schema": "https://schemas.premid.app/metadata/1.16",
+  "apiVersion": 1,
+  "author": {
+    "name": "Test",
+    "id": "1"
+  },
+  "service": "Tunes",
+  "description": {
+    "en": "Tunes, the same website as the native fixture, for tests."
+  },
+  "url": "tunes.example",
+  "regExp": "^https?[:][/][/]tunes[.]example[/]",
+  "version": "1.0.0",
+  "logo": "https://cdn.example/tunes.png",
+  "thumbnail": "https://cdn.example/tunes-thumb.png",
+  "color": "#000000",
+  "category": "music",
+  "tags": ["music"]
+}

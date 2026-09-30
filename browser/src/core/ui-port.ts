@@ -27,11 +27,25 @@ export interface BridgeState {
   version: string | null;
 }
 
+/** What's being shared right now, as the popup and dashboard show it. */
+export interface UiActivity {
+  id: string;
+  name: string;
+  /** It has settings of its own, which the popup can show. */
+  configurable?: boolean;
+  details?: string;
+  state?: string;
+  /** Unix milliseconds. */
+  startedAt?: number;
+}
+
 export type UiEvent =
   | { type: "state"; state: ConnectionState }
   /** `null`: not connected, or Desktop refused (a `set` from an unverified connection). */
   | { type: "report"; report: DesktopReport | null }
-  | { type: "discord"; state: BridgeState };
+  | { type: "discord"; state: BridgeState }
+  /** The Activity being shared, as Privacy settings allow; `null` for nothing. */
+  | { type: "activity"; activity: UiActivity | null };
 
 const BRIDGE_STATUSES: ReadonlySet<string> = new Set<BridgeStatus>([
   "off",
@@ -65,9 +79,43 @@ export function parseUiRequest(value: unknown): UiRequest | null {
   return null;
 }
 
+const optionalText = (value: unknown): value is string | undefined =>
+  value === undefined || (typeof value === "string" && value.length <= 512);
+
+function parseUiActivity(value: unknown): UiActivity | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== "object") return undefined;
+  const { id, name, configurable, details, state, startedAt } = value as Record<string, unknown>;
+  if (
+    typeof id !== "string" ||
+    id.length > 256 ||
+    typeof name !== "string" ||
+    !optionalText(details) ||
+    !optionalText(state) ||
+    (configurable !== undefined && typeof configurable !== "boolean")
+  ) {
+    return undefined;
+  }
+  if (startedAt !== undefined && (typeof startedAt !== "number" || !Number.isFinite(startedAt))) {
+    return undefined;
+  }
+  return {
+    id,
+    name,
+    ...(configurable === true && { configurable }),
+    ...(details !== undefined && { details }),
+    ...(state !== undefined && { state }),
+    ...(startedAt !== undefined && { startedAt }),
+  };
+}
+
 export function parseUiEvent(value: unknown): UiEvent | null {
   if (typeof value !== "object" || value === null) return null;
   const message = value as Record<string, unknown>;
+  if (message.type === "activity") {
+    const activity = parseUiActivity(message.activity);
+    return activity === undefined ? null : { type: "activity", activity };
+  }
   if (message.type === "state") {
     const state = message.state as Record<string, unknown> | null;
     if (typeof state?.status === "string" && STATUSES.has(state.status)) {

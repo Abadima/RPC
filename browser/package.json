@@ -1,6 +1,8 @@
 {
   "name": "@abadima/rpc-browser",
+  "version": "1.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "build": "bun run build.ts",
@@ -10,12 +12,22 @@
     "format:check": "oxfmt --check",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "activities:fetch": "bun run scripts/activities.ts fetch",
+    "activities:check": "bun run scripts/activities.ts check",
     "firefox:setup": "playwright-core install firefox",
     "firefox:lint": "web-ext lint --source-dir=dist/firefox",
     "firefox:verify": "node scripts/verify-firefox.mjs",
     "chromium:setup": "playwright-core install chromium",
     "desktop:verify": "node scripts/verify-desktop-link.mjs",
-    "real:verify": "node scripts/verify-real-browsers.mjs"
+    "real:verify": "node scripts/verify-real-browsers.mjs",
+    "discord:verify": "node scripts/verify-discord.mjs",
+    "activities:verify": "node scripts/verify-activities.mjs",
+    "activities:firefox": "node scripts/verify-activities-firefox.mjs",
+    "youtube:verify": "node scripts/verify-youtube.mjs",
+    "fallback:verify": "node scripts/verify-fallback.mjs",
+    "bench": "node scripts/bench.mjs",
+    "contrast": "bun run scripts/contrast.ts",
+    "themes:verify": "node scripts/verify-themes.mjs"
   },
   "devDependencies": {
     "@fortawesome/free-solid-svg-icons": "^7.3.1",

@@ -1,4 +1,4 @@
-import type { PresenceSnapshot } from "../../../packages/presence-view/mount";
+import type { PresenceSnapshot } from "../shared/presence-view";
 import type { ActivityInfo } from "../core/activity";
 import type { ConnectionState } from "../core/desktop-connection";
 import type { SettingsActions, SettingsContext } from "../shared/settings-view";
@@ -16,7 +16,8 @@ export interface ShellState {
 
 /** What a page can do or look up, beyond what it's shown. */
 export interface ViewContext {
-  activities: readonly ActivityInfo[];
+  /** Every Activity in this build, loaded once, on first use. */
+  catalog(): Promise<readonly ActivityInfo[]>;
   settings: SettingsActions;
   reconnect(): void;
   /** This extension's origin, for the "allow this build" command. */

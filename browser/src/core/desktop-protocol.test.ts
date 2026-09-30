@@ -4,9 +4,9 @@ import { REPORT } from "./test-desktop";
 
 describe("parseServerMessage", () => {
   test("accepts exactly the messages Desktop sends", () => {
-    expect(parseServerMessage({ type: "welcome", protocolVersion: 4 })).toEqual({
+    expect(parseServerMessage({ type: "welcome", protocolVersion: 5 })).toEqual({
       type: "welcome",
-      protocolVersion: 4,
+      protocolVersion: 5,
     });
     expect(parseServerMessage({ type: "reject", reason: "origin_not_allowed" })).toEqual({
       type: "reject",
@@ -42,6 +42,15 @@ describe("parseServerMessage", () => {
       { ...REPORT, settings: { ...REPORT.settings, allowedOrigins: [1] } },
       { ...REPORT, events: [{ secsAgo: 1 }] },
       { ...REPORT, refused: "none" },
+      { ...REPORT, platforms: undefined },
+      {
+        ...REPORT,
+        platforms: [{ platform: "discord", state: "dancing", activity: null, error: null }],
+      },
+      {
+        ...REPORT,
+        platforms: [{ platform: "discord", state: "showing", activity: 1, error: null }],
+      },
     ]) {
       expect(isDesktopReport(broken)).toBe(false);
     }

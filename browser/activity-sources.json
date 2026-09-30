@@ -1,0 +1,10 @@
+{
+  "parousia": {
+    "repository": "https://github.com/parousia-project/activities",
+    "branch": "main"
+  },
+  "premid": {
+    "repository": "https://github.com/PreMiD/Activities",
+    "branch": "main"
+  }
+}

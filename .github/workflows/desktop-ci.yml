@@ -5,11 +5,13 @@ on:
     branches: ["main", "pre-2.0"]
     paths:
       - "desktop/**"
+      - "adapters/discord/**"
       - ".github/workflows/desktop-ci.yml"
   pull_request:
     branches: ["main", "pre-2.0"]
     paths:
       - "desktop/**"
+      - "adapters/discord/**"
       - ".github/workflows/desktop-ci.yml"
 
 permissions:
@@ -42,6 +44,29 @@ jobs:
 
       - name: Format check
         run: cargo fmt --check
+
+  # Desktop has Windows- and macOS-only code (the Discord named pipe, for
+  # one) that the Linux job never compiles. Tests stay on Linux for now.
+  cross:
+    name: Clippy (${{ matrix.os }})
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
 
   audit:
     name: Dependency audit

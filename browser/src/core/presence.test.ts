@@ -40,4 +40,19 @@ describe("presenceEquals", () => {
     const b = createPresence(activity({ assets: { largeImage: "other.png" } }));
     expect(presenceEquals(a, b)).toBe(false);
   });
+
+  test("links, buttons, and the Discord Application count as changes", () => {
+    const base = activity({ buttons: [{ label: "Open", url: "https://example.com" }] });
+    const same = activity({ buttons: [{ label: "Open", url: "https://example.com" }] });
+    expect(presenceEquals(createPresence(base), createPresence(same))).toBe(true);
+    for (const changed of [
+      activity({ buttons: [{ label: "Play", url: "https://example.com" }] }),
+      activity({ buttons: [] }),
+      activity({ ...base, detailsUrl: "https://example.com/d" }),
+      activity({ ...base, stateUrl: "https://example.com/s" }),
+      activity({ ...base, discordClientId: "1553980756731363428" }),
+    ]) {
+      expect(presenceEquals(createPresence(base), createPresence(changed))).toBe(false);
+    }
+  });
 });

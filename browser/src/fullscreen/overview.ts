@@ -1,5 +1,10 @@
-import { renderPresence, type PresenceSnapshot } from "../../../packages/presence-view/mount";
-import { connectionBadge, discordBridgeLabel, isOffline } from "../shared/connection-status";
+import { renderPresence, type PresenceSnapshot } from "../shared/presence-view";
+import {
+  connectionBadge,
+  discordBridgeLabel,
+  isOffline,
+  showsDiscordBridge,
+} from "../shared/connection-status";
 import { presenceIcons, renderBadge, renderDiscordAside, renderOffline } from "../shared/views";
 import { fromTemplate, slot, type View, type ViewContext } from "./view";
 
@@ -22,6 +27,7 @@ export function overviewView(context: ViewContext): View {
       renderOffline(offline, connection, checking, context.origin);
       slot(element, "status").textContent = connectionBadge(connection, sharing).text;
       slot(element, "version").textContent = settings.report?.version ?? "Unknown";
+      slot(element, "discord-row").hidden = !showsDiscordBridge(connection);
       slot(element, "discord").textContent = discordBridgeLabel(settings.discord);
       renderDiscordAside(slot(element, "discord-aside"), settings.discord);
       if (snapshot && snapshot !== shownSnapshot) {

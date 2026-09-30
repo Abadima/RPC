@@ -106,6 +106,7 @@ pub fn describe(response: &ControlResponse) -> String {
             }
         ),
     ];
+    lines.extend(status.platforms.iter().map(|platform| platform.describe()));
     if status.settings.allowed_origins.is_empty() {
         lines.push("Allowed extensions: built-in store listings only".to_string());
     } else {
@@ -162,6 +163,7 @@ pub fn describe(response: &ControlResponse) -> String {
 mod tests {
     use super::*;
     use crate::hub::tests::{CHROMIUM, OTHER, test_hub};
+    use crate::platform::{AdapterState, AdapterStatus, Platform};
 
     #[test]
     fn requests_change_settings_and_the_allowlist() {
@@ -218,6 +220,19 @@ mod tests {
     fn describe_covers_transport_clients_refusals_and_events() {
         let hub = test_hub();
         hub.ws_gate(OTHER, true);
+        let mut status = hub.status();
+        status.platforms.push(AdapterStatus {
+            platform: Platform::Discord,
+            state: AdapterState::Showing,
+            activity: Some("Jena Hub".into()),
+            error: None,
+        });
+        assert!(
+            describe(&ControlResponse::Status {
+                status: Box::new(status)
+            })
+            .contains("\nDiscord: showing Jena Hub\n")
+        );
         let text = describe(&handle(ControlRequest::Status, &hub));
         assert!(text.contains("WebSocket: listening on 127.0.0.1:57179"));
         assert!(text.contains("Userscripts: not allowed"));

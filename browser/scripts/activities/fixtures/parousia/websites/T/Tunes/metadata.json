@@ -1,0 +1,12 @@
+{
+  "$schema": "../../../schemas/metadata.json",
+  "apiVersion": 1,
+  "id": "tunes",
+  "name": "Tunes",
+  "description": "What's playing on tunes.example, for tests.",
+  "version": "1.0.0",
+  "authors": [{ "name": "Test" }],
+  "icon": "https://tunes.example/icon.png",
+  "matches": ["https://tunes.example/listen*"],
+  "data": ["media", "thumbnails"]
+}

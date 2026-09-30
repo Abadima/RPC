@@ -20,7 +20,8 @@ const connection = new DesktopConnection({
   clientName: describeClient(navigator, "Userscript in "),
 });
 
-const controller = new PresenceController(new PresenceRuntime(builtInActivities()), connection);
+const runtime = new PresenceRuntime(builtInActivities());
+const controller = new PresenceController(runtime, connection);
 
 /**
  * A userscript has no popup, so this is how to see whether it can reach
@@ -60,7 +61,31 @@ function refresh(): void {
     controller.clear();
     return;
   }
-  controller.update(new URL(window.location.href));
+  const url = new URL(window.location.href);
+  controller.update({ url, title: document.title });
+  watchTitle(runtime.matches(url));
+}
+
+/**
+ * A title matters only on a page an Activity looks at, where single-page
+ * sites often set it a moment after the URL. Everywhere else, nothing is
+ * watched.
+ */
+let titleObserver: MutationObserver | null = null;
+function watchTitle(on: boolean): void {
+  if (!on) {
+    titleObserver?.disconnect();
+    titleObserver = null;
+    return;
+  }
+  if (titleObserver) return;
+  let title = document.title;
+  titleObserver = new MutationObserver(() => {
+    if (document.title === title) return;
+    title = document.title;
+    refresh();
+  });
+  titleObserver.observe(document.head, { subtree: true, childList: true, characterData: true });
 }
 
 /**

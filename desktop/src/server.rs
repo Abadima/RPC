@@ -153,7 +153,7 @@ mod tests {
         let mut socket = connect(port);
         socket
             .send(Message::Text(
-                r#"{"type":"hello","protocolVersion":4,"name":"t"}"#.into(),
+                r#"{"type":"hello","protocolVersion":6,"name":"t"}"#.into(),
             ))
             .unwrap();
         assert!(matches!(socket.read().unwrap(), Message::Text(text) if text.contains("welcome")));

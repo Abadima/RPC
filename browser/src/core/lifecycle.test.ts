@@ -13,9 +13,9 @@ function recordingTransport(): { transport: PresenceTransport; sent: Presence[] 
 function exampleRegistry(): ActivityRegistry {
   const registry = new ActivityRegistry();
   registry.register({
-    info: { id: "example", name: "Example", hosts: ["example.com"] },
+    info: { id: "example", name: "Example", hosts: ["example.com"], source: "parousia" },
     matcher: (url) => url.hostname === "example.com",
-    detect: (url) => ({ id: "example", name: "Example", url: url.href }),
+    detect: ({ url }) => ({ id: "example", name: "Example", url: url.href }),
   });
   return registry;
 }
@@ -25,7 +25,7 @@ describe("PresenceController", () => {
     const { transport, sent } = recordingTransport();
     const controller = new PresenceController(new PresenceRuntime(exampleRegistry()), transport);
 
-    controller.update(new URL("https://example.com/a"));
+    controller.update({ url: new URL("https://example.com/a"), title: "" });
 
     expect(sent).toHaveLength(1);
     expect(sent[0]?.activity?.id).toBe("example");
@@ -35,8 +35,8 @@ describe("PresenceController", () => {
     const { transport, sent } = recordingTransport();
     const controller = new PresenceController(new PresenceRuntime(exampleRegistry()), transport);
 
-    controller.update(new URL("https://example.com/a"));
-    controller.update(new URL("https://example.com/a"));
+    controller.update({ url: new URL("https://example.com/a"), title: "" });
+    controller.update({ url: new URL("https://example.com/a"), title: "" });
 
     expect(sent).toHaveLength(1);
   });
@@ -45,8 +45,8 @@ describe("PresenceController", () => {
     const { transport, sent } = recordingTransport();
     const controller = new PresenceController(new PresenceRuntime(exampleRegistry()), transport);
 
-    controller.update(new URL("https://example.com/a"));
-    controller.update(new URL("https://unmatched.example"));
+    controller.update({ url: new URL("https://example.com/a"), title: "" });
+    controller.update({ url: new URL("https://unmatched.example"), title: "" });
 
     expect(sent).toHaveLength(2);
     expect(sent[1]?.activity).toBeNull();
@@ -55,11 +55,11 @@ describe("PresenceController", () => {
   test("publishes only what the share filter lets through, and again when it changes", () => {
     const { transport, sent } = recordingTransport();
     const controller = new PresenceController(new PresenceRuntime(exampleRegistry()), transport);
-    const url = new URL("https://example.com/a");
+    const page = { url: new URL("https://example.com/a"), title: "" };
 
-    controller.update(url, (activity) => activity && { ...activity, name: "Hidden" });
-    controller.update(url, (activity) => activity && { ...activity, name: "Hidden" });
-    controller.update(url, () => null);
+    controller.update(page, (activity) => activity && { ...activity, name: "Hidden" });
+    controller.update(page, (activity) => activity && { ...activity, name: "Hidden" });
+    controller.update(page, () => null);
 
     expect(sent.map((presence) => presence.activity?.name ?? null)).toEqual(["Hidden", null]);
   });
@@ -68,7 +68,7 @@ describe("PresenceController", () => {
     const { transport, sent } = recordingTransport();
     const controller = new PresenceController(new PresenceRuntime(exampleRegistry()), transport);
 
-    controller.update(new URL("https://example.com/a"));
+    controller.update({ url: new URL("https://example.com/a"), title: "" });
     controller.clear();
 
     expect(sent).toHaveLength(2);
@@ -79,7 +79,7 @@ describe("PresenceController", () => {
     const { transport, sent } = recordingTransport();
     const controller = new PresenceController(new PresenceRuntime(exampleRegistry()), transport);
 
-    controller.update(new URL("https://unmatched.example"));
+    controller.update({ url: new URL("https://unmatched.example"), title: "" });
     controller.clear();
 
     expect(sent).toHaveLength(1);

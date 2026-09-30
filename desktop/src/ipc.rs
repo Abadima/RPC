@@ -195,7 +195,7 @@ mod tests {
             "{}",
             "not json",
             r#"{"control":"format-disk"}"#,
-            r#"{"type":"hello","protocolVersion":4,"name":"Chromium"}"#,
+            r#"{"type":"hello","protocolVersion":6,"name":"Chromium"}"#,
         ] {
             let mut stream = UnixStream::connect(&path).unwrap();
             write_frame(&mut stream, first).unwrap();

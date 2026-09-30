@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { activitiesPlugin } from "../../scripts/activities/plugin";
 
 const bundle = (async () => {
   const result = await Bun.build({
@@ -6,6 +7,8 @@ const bundle = (async () => {
     target: "browser",
     format: "esm",
     minify: true,
+    // No Activities: this is about the bundle itself.
+    plugins: [activitiesPlugin([])],
   });
   if (!result.success) throw new Error("userscript failed to bundle");
   return result.outputs[0]!.text();
@@ -35,7 +38,11 @@ async function runBundle(): Promise<{
       opened.push(url);
     }
   };
-  scope.document = { hidden: false, addEventListener: (type: string) => listeners.push(type) };
+  scope.document = {
+    hidden: false,
+    title: "Example",
+    addEventListener: (type: string) => listeners.push(type),
+  };
   scope.window = {
     location: { href: "https://example.com/" },
     addEventListener: (type: string) => listeners.push(type),

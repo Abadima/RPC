@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
     <title>Parousia Dashboard</title>
+    <script src="theme.js"></script>
     <link rel="stylesheet" href="theme.css" />
     <link rel="stylesheet" href="fullscreen.css" />
   </head>
@@ -21,6 +22,9 @@
           >
           <a class="nav-link" href="#activities" data-route="activities"
             ><span data-icon="activities"></span>Activities</a
+          >
+          <a class="nav-link" href="#default" data-route="default"
+            ><span data-icon="default"></span>Default Activity</a
           >
           <a class="nav-link" href="#settings" data-route="settings"
             ><span data-icon="settings"></span>Settings</a
@@ -86,7 +90,7 @@
                   <dt>Version</dt>
                   <dd data-slot="version">Unknown</dd>
                 </div>
-                <div>
+                <div data-slot="discord-row">
                   <dt>Discord-RPC-Extension</dt>
                   <dd data-slot="discord">Off</dd>
                 </div>
@@ -109,15 +113,76 @@
         </header>
 
         <div class="catalog" data-slot="catalog">
-          <label class="search">
-            <span data-icon="search"></span>
-            <span class="visually-hidden">Search Activities</span>
-            <input type="search" data-slot="query" placeholder="Search Activities or sites" />
-          </label>
-          <p class="results-summary" data-slot="summary" role="status"></p>
+          <div class="catalog-tools">
+            <label class="search">
+              <span data-icon="search"></span>
+              <span class="visually-hidden">Search Activities</span>
+              <input type="search" data-slot="query" placeholder="Search Activities or sites" />
+            </label>
+            <div class="filter">
+              <button
+                class="button button-quiet filter-button"
+                type="button"
+                data-slot="filter-toggle"
+                aria-haspopup="true"
+                aria-expanded="false"
+              >
+                <span data-icon="filter"></span>
+                <span>Filter</span>
+                <span class="filter-count" data-slot="filter-count" hidden></span>
+              </button>
+              <div
+                class="filter-menu card"
+                data-slot="filter-menu"
+                role="group"
+                aria-label="Filter Activities"
+                hidden
+              >
+                <fieldset class="filter-group">
+                  <legend class="section-label">Status</legend>
+                  <label class="filter-option">
+                    <input type="checkbox" data-filter="status" value="enabled" />
+                    <span>Enabled</span>
+                  </label>
+                  <label class="filter-option">
+                    <input type="checkbox" data-filter="status" value="disabled" />
+                    <span>Disabled</span>
+                  </label>
+                </fieldset>
+                <fieldset class="filter-group">
+                  <legend class="section-label">Source</legend>
+                  <label class="filter-option">
+                    <input type="checkbox" data-filter="source" value="parousia" />
+                    <span>Parousia Activities</span>
+                  </label>
+                  <label class="filter-option">
+                    <input type="checkbox" data-filter="source" value="premid" />
+                    <span>PreMiD Activities</span>
+                  </label>
+                </fieldset>
+                <button class="link-button" type="button" data-slot="filter-clear">
+                  Clear filters
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="catalog-meta">
+            <p class="results-summary" data-slot="summary" role="status"></p>
+            <button
+              class="link-button bulk-toggle"
+              type="button"
+              data-slot="bulk-toggle"
+              aria-expanded="false"
+            >
+              Enable or disable all…
+            </button>
+          </div>
+          <section class="bulk card" data-slot="bulk" aria-label="Enable or disable all" hidden>
+            <div class="bulk-body" data-slot="bulk-body"></div>
+          </section>
           <ul class="activity-grid" data-slot="list"></ul>
           <p class="empty-text no-results" data-slot="no-results" hidden>
-            Nothing matches that search.
+            Nothing matches that search and those filters.
           </p>
           <nav class="pager" data-slot="pager" aria-label="Activity pages"></nav>
         </div>
@@ -130,6 +195,83 @@
             shared.
           </p>
         </div>
+      </section>
+    </template>
+
+    <template id="view-activity">
+      <section class="panel activity-page" aria-labelledby="activity-title">
+        <a class="back-link" href="#activities"><span data-icon="back"></span>All Activities</a>
+        <div class="settings-page-body" data-slot="body" hidden>
+          <header class="panel-header">
+            <div class="activity-head">
+              <span data-slot="icon"></span>
+              <div>
+                <h1 class="panel-title" id="activity-title" data-slot="name"></h1>
+                <p class="panel-subtitle" data-slot="description"></p>
+              </div>
+            </div>
+            <span class="pill pill-quiet" data-slot="source"></span>
+          </header>
+          <div data-slot="toggle"></div>
+          <div
+            class="banner activity-notice"
+            data-slot="notice"
+            data-tone="warn"
+            role="alert"
+            hidden
+          >
+            <div class="banner-main">
+              <span class="banner-icon"><span data-icon="alert"></span></span>
+              <p class="banner-detail" data-slot="notice-text"></p>
+            </div>
+            <button class="button" type="button" data-slot="allow">Allow access</button>
+          </div>
+          <section class="settings-page-body" data-slot="variants-section" hidden>
+            <h2 class="section-label" id="variants-label">Implementation</h2>
+            <p class="settings-hint">
+              Both Parousia and PreMiD have an Activity for this website. Only the one chosen runs.
+            </p>
+            <div
+              class="segmented"
+              role="radiogroup"
+              aria-labelledby="variants-label"
+              data-slot="variants"
+            ></div>
+          </section>
+          <dl class="facts settings-group" data-slot="facts"></dl>
+          <h2 class="section-label" data-slot="settings-label" hidden>Settings</h2>
+          <div data-slot="settings"></div>
+        </div>
+        <div class="empty-card" data-slot="missing" hidden>
+          <span class="empty-visual"><span data-icon="activities"></span></span>
+          <p class="empty-title">This Activity isn't in this build</p>
+          <p class="empty-text">
+            It may have been removed, or come from another version of Parousia.
+          </p>
+        </div>
+      </section>
+    </template>
+
+    <template id="view-default">
+      <section class="panel" aria-labelledby="default-title">
+        <header class="panel-header">
+          <div>
+            <h1 class="panel-title" id="default-title">Default Activity</h1>
+            <p class="panel-subtitle">
+              What to share when the tab you're on has no Activity. Privacy settings and Settings
+              &gt; Platforms apply to it, as to any Activity.
+            </p>
+          </div>
+        </header>
+        <div data-slot="toggle"></div>
+        <div class="default-layout">
+          <form class="settings-page-body" data-slot="form" novalidate></form>
+          <div class="stack default-preview">
+            <h2 class="section-label">Preview</h2>
+            <div class="card presence-slot" data-slot="preview" aria-live="polite"></div>
+          </div>
+        </div>
+        <p class="settings-hint" data-slot="status" role="status"></p>
       </section>
     </template>
 

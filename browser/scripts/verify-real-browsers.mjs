@@ -12,8 +12,14 @@
 // with the popup naming the exact command; the Flatpak sandbox's Chromium
 // refused as an unrecognized build and allowed from the tray menu; the
 // userscript in Violentmonkey, refused until userscripts are turned on from
-// the extension's dashboard; three clients at once and resource use; and the
-// tray's userscripts toggle.
+// the extension's dashboard; three clients at once and resource use; the
+// tray's userscripts toggle; and the real jena.systems in both browsers
+// reaching Discord through Desktop, held for HOLD_MINUTES (3 by default)
+// with no extension page open and no tab events, so only the background
+// keepalive keeps each browser sharing (MV3 lifetime).
+//
+// "Discord" is a stand-in socket (e2e/fake-discord.mjs), never a real one;
+// `discord:verify` is the check against a real Discord.
 //
 // Prerequisites: `bun run build` here, `cargo build` in ../desktop.
 
@@ -23,6 +29,7 @@ import { cp, readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { startFakeDiscord } from "./e2e/fake-discord.mjs";
 import { FIREFOX_BINARY, firefoxPopup, launchFirefox, prepareProfile } from "./e2e/firefox.mjs";
 import {
   QUIET_DISCORD,
@@ -49,6 +56,7 @@ const VM_ID = "{aecec67f-0d10-4fa7-b7c7-609a2db280cf}";
 const VM_UUID = "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
 const VM_XPI = join(browserDir, ".cache", "e2e", "violentmonkey.xpi");
 const CDP_PORT = 9333;
+const HOLD_MS = Number(process.env.HOLD_MINUTES ?? 3) * 60_000;
 
 // --- Flatpak Ungoogled Chromium over CDP ---
 
@@ -230,6 +238,7 @@ async function processStats(pid) {
 // --- The run ---
 
 const ws = await workspace("prb");
+const discord = await startFakeDiscord(ws.discordDir);
 const firefoxProfile = join(ws.dir, "firefox-profile");
 const firefoxHome = join(ws.dir, "firefox-home");
 const flatpakProfile = join(ws.dir, "flatpak-profile");
@@ -401,8 +410,60 @@ try {
     return !current.settings.allowUserscripts && current.clients.length === 2;
   }, "userscripts off and the userscript dropped");
   log("tray toggle: userscripts off drops the userscript, the other two browsers stay connected");
-
   site.server.close();
+
+  // --- The real jena.systems, in both browsers ---
+  // No extension page stays open from here, so nothing but the background
+  // keepalive holds either browser's connection.
+  await page.close();
+  page = undefined;
+  for (const context of [ff.context, dashboard, pageContext]) {
+    await ff.firefox.closeTab(context).catch(() => {});
+  }
+  const firefoxJena = await ff.firefox.openTab("https://jena.systems/apps/3851919");
+  await ff.firefox.activate(firefoxJena);
+  await discord.waitFor((a) => a?.details === "Playing Chess", "Firefox's Chess", 45_000);
+  const chromiumJena = await flatpak.context.newPage();
+  await chromiumJena.goto("https://jena.systems/apps/2012122120");
+  await chromiumJena.bringToFront();
+  await discord.waitFor((a) => a?.details === "Playing Tablut", "Chromium's Tablut", 45_000);
+  report = await status(ws);
+  assert(
+    report.clients.length === 2 && report.clients.every((c) => c.activity === "Jena Hub"),
+    `both browsers share Jena Hub (${JSON.stringify(report.clients)})`,
+  );
+  log(
+    "jena.systems in both browsers: Firefox's Chess, then Chromium's Tablut, the latest, shown in Discord",
+  );
+
+  // --- MV3 lifetime: several minutes with nothing but the keepalive ---
+  const sentBefore = discord.activities.length;
+  const started = Date.now();
+  while (Date.now() - started < HOLD_MS) {
+    await sleep(30_000);
+    const held = await status(ws);
+    const sharing = held.clients.filter((c) => c.activity === "Jena Hub").length;
+    assert(
+      sharing === 2,
+      `both still sharing after ${Math.round((Date.now() - started) / 1000)} s (${JSON.stringify(held.clients)})`,
+    );
+  }
+  assert(
+    discord.activities.length === sentBefore,
+    `Discord untouched meanwhile (${JSON.stringify(discord.activities.slice(sentBefore))})`,
+  );
+  const holdStats = await processStats(desktop.pid);
+  log(
+    `held ${HOLD_MS / 60_000} min with no extension page open and no tab events: both backgrounds stayed up, Discord unchanged; Desktop ${holdStats.rssKb} kB RSS, ${holdStats.threads} threads with the Discord adapter connected`,
+  );
+
+  // The latest leaving hands Discord back to the one still sharing.
+  await chromiumJena.close();
+  await discord.waitFor((a) => a?.details === "Playing Chess", "Firefox's Chess again");
+  await ff.firefox.closeTab(firefoxJena);
+  await discord.waitFor((a) => a === null, "nothing once both are gone");
+  log("Chromium's tab closed: Discord falls back to Firefox's; Firefox's closed: Discord cleared");
+
   log("done");
 } catch (error) {
   console.error(`--- Desktop log ---\n${desktop?.lines.slice(-40).join("\n") ?? "(not started)"}`);
@@ -412,5 +473,6 @@ try {
   await flatpak?.close().catch(() => {});
   await ff?.firefox.close().catch(() => {});
   await desktop?.stop();
+  await discord.stop();
   await ws.cleanup();
 }

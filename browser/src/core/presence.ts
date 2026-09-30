@@ -1,4 +1,4 @@
-import type { Activity, ActivityAssets, ActivityTimestamps } from "./activity";
+import type { Activity, ActivityAssets, ActivityButton, ActivityTimestamps } from "./activity";
 
 export interface Presence {
   activity: Activity | null;
@@ -29,6 +29,13 @@ function timestampsEqual(
   return a.start === b.start && a.end === b.end;
 }
 
+function buttonsEqual(a: ActivityButton[] = [], b: ActivityButton[] = []): boolean {
+  return (
+    a.length === b.length &&
+    a.every((button, i) => button.label === b[i]?.label && button.url === b[i]?.url)
+  );
+}
+
 function activityEquals(a: Activity | null, b: Activity | null): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
@@ -38,8 +45,12 @@ function activityEquals(a: Activity | null, b: Activity | null): boolean {
     a.details === b.details &&
     a.state === b.state &&
     a.url === b.url &&
+    a.detailsUrl === b.detailsUrl &&
+    a.stateUrl === b.stateUrl &&
+    a.discordClientId === b.discordClientId &&
     assetsEqual(a.assets, b.assets) &&
-    timestampsEqual(a.timestamps, b.timestamps)
+    timestampsEqual(a.timestamps, b.timestamps) &&
+    buttonsEqual(a.buttons, b.buttons)
   );
 }
 

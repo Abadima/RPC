@@ -8,16 +8,23 @@
 // `cargo build` in ../desktop.
 //
 // Covers: Desktop absent, then starting after the browser; an unrecognized
-// build refused until it's allowed; two browsers at once; disallowing
-// connected browsers; userscripts off by default, then opted in; hostile
-// input straight to the socket; a second launch; the disconnected state when
-// Desktop stops; and letting go when idle.
+// build refused until it's allowed; two browsers at once; a detected
+// Activity (Jena Hub, its page served by the test) reaching Discord through
+// Desktop, following Settings > Platforms, and clearing when the browser
+// disconnects; disallowing connected browsers; userscripts off by default,
+// then opted in; hostile input straight to the socket; a second launch; the
+// disconnected state when Desktop stops; and letting go when idle.
+//
+// "Discord" is a stand-in socket (e2e/fake-discord.mjs): Desktop is pointed
+// at it and never at a real Discord.
 
 import { chromium } from "playwright-core";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { startFakeDiscord } from "./e2e/fake-discord.mjs";
 import { connectRaw } from "./e2e/raw-ws.mjs";
 import {
+  PAROUSIA_CLIENT_ID,
   QUIET_DISCORD,
   assert,
   browserDir,
@@ -25,6 +32,7 @@ import {
   control,
   logger,
   popup,
+  setDiscordPlatform,
   startDesktop,
   status,
   STEP_TIMEOUT_MS,
@@ -64,9 +72,24 @@ async function reopen(browser, page) {
   return openPopup(browser);
 }
 
-const HELLO = JSON.stringify({ type: "hello", protocolVersion: 4, name: "Raw client" });
+const HELLO = JSON.stringify({ type: "hello", protocolVersion: 6, name: "Raw client" });
+const JENA_GAME = "https://jena.systems/apps/3851919";
+
+/** Opens a Jena Hub game page, served here with the real site's title (no network). */
+async function openJenaGame(browser) {
+  const page = await browser.context.newPage();
+  await page.route("https://jena.systems/**", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: "<!doctype html><title>Chess - Jena V3</title><p>Chess</p>",
+    }),
+  );
+  await page.goto(JENA_GAME);
+  return page;
+}
 
 const ws = await workspace("pdl");
+const discord = await startFakeDiscord(ws.discordDir);
 const profileA = join(ws.dir, "profile-a");
 const profileB = join(ws.dir, "profile-b");
 let desktop;
@@ -122,9 +145,39 @@ try {
   assert(report.clients.length === 2, `two clients (${report.clients.length})`);
   log("two browsers connected at once, sharing the one allowed build's origin");
 
+  // --- Discord: a detected Activity, through Desktop ---
+  const jenaPage = await openJenaGame(b);
+  const shown = await discord.waitFor((a) => a?.details === "Playing Chess", "Playing Chess");
+  assert(
+    discord.handshakes.at(-1) === PAROUSIA_CLIENT_ID,
+    `as Parousia's Discord Application (${discord.handshakes})`,
+  );
+  assert(
+    shown.name === "Jena Hub" &&
+      shown.state === "In the Arcade" &&
+      shown.details_url === JENA_GAME &&
+      shown.buttons?.[0]?.label === "Play Chess" &&
+      shown.assets?.large_image === "https://jena.systems/icons/icon-512.png",
+    `the whole activity arrives (${JSON.stringify(shown)})`,
+  );
+  report = await status(ws);
+  const adapter = report.platforms.find((p) => p.platform === "discord");
+  assert(
+    adapter?.state === "showing" && adapter.activity === "Jena Hub",
+    `Desktop reports it (${JSON.stringify(report.platforms)})`,
+  );
+  log('a Jena Hub game page is detected and Discord shows "Playing Chess" through Desktop');
+
+  await b.worker.evaluate(setDiscordPlatform(false));
+  await discord.waitFor((a) => a === null, "nothing once Discord is turned off");
+  await b.worker.evaluate(setDiscordPlatform(true));
+  await discord.waitFor((a) => a?.details === "Playing Chess", "it again once turned on");
+  log("Settings > Platforms: turning Discord off clears it there, on shows it again");
+
   // --- Disallowing drops connected browsers ---
   await control(ws, "disallow", a.origin);
   await waitUntil(async () => (await status(ws)).clients.length === 0, "both to be dropped");
+  await discord.waitFor((a) => a === null, "nothing once the browser is gone");
   popupA = await reopen(a, popupA);
   popupB = await reopen(b, popupB);
   await popup.waitForStatus(popupA, /^Not allowed by Parousia Desktop$/);
@@ -134,9 +187,15 @@ try {
   popupB = await reopen(b, popupB);
   await popup.waitForStatus(popupA, /^Connected to Parousia Desktop$/);
   await popup.waitForStatus(popupB, /^Connected to Parousia Desktop$/);
+  // The popups opened as tabs; the game's tab is the one being looked at again.
+  await jenaPage.bringToFront();
+  await discord.waitFor((a) => a?.details === "Playing Chess", "it again after reconnecting");
   log(
-    "disallowed while connected: both dropped at once and refused; allowed again, both reconnect",
+    "disallowed while connected: both dropped at once and refused, and Discord cleared; allowed again, both reconnect and Discord shows it again",
   );
+  await jenaPage.close();
+  await discord.waitFor((a) => a === null, "nothing once the page is closed");
+  log("closing the page clears Discord");
 
   // --- Userscripts: off by default, then opted in ---
   for (const origin of [undefined, "null", "https://evil.example", "safari-web-extension://x"]) {
@@ -174,10 +233,17 @@ try {
   const old = await connectRaw({ origin: a.origin });
   old.sendText('{"type":"hello","protocolVersion":2,"clientId":"x","clientNonce":"y","proof":"z"}');
   assert((await old.next())?.reason === "unsupported_version", "a v2 hello: unsupported_version");
+  const v4 = await connectRaw({ origin: a.origin });
+  v4.sendText('{"type":"hello","protocolVersion":4,"name":"Phase 3 build"}');
+  assert((await v4.next())?.reason === "unsupported_version", "a v4 hello: unsupported_version");
+  // Protocol 5 sent each page's address along; since 6 it stays in the browser.
+  const v5 = await connectRaw({ origin: a.origin });
+  v5.sendText('{"type":"hello","protocolVersion":5,"name":"Sends page addresses"}');
+  assert((await v5.next())?.reason === "unsupported_version", "a v5 hello: unsupported_version");
   for (const hostile of [
     "{not json",
     "[]",
-    JSON.stringify({ type: "hello", protocolVersion: 4, name: "x", extra: true }),
+    JSON.stringify({ type: "hello", protocolVersion: 6, name: "x", extra: true }),
     JSON.stringify({ type: "ping" }),
   ]) {
     const conn = await connectRaw({ origin: a.origin });
@@ -204,7 +270,7 @@ try {
     "and real clients unaffected",
   );
   log(
-    "hostile input: unknown extension told origin_not_allowed; v2, malformed, oversized, silent, and flooding connections are rejected and closed; Desktop stays up",
+    "hostile input: unknown extension told origin_not_allowed; v2, v4, v5, malformed, oversized, silent, and flooding connections are rejected and closed; Desktop stays up",
   );
 
   // --- A second launch ---
@@ -240,5 +306,6 @@ try {
   await a?.context.close().catch(() => {});
   await b?.context.close().catch(() => {});
   await desktop?.stop();
+  await discord.stop();
   await ws.cleanup();
 }

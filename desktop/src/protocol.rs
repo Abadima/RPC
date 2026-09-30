@@ -5,9 +5,10 @@
 use serde::{Deserialize, Serialize};
 
 use crate::hub::{Setting, Status};
+use crate::platform::Platform;
 
 /// Must match `browser/src/core/desktop-protocol.ts`.
-pub const PROTOCOL_VERSION: u32 = 4;
+pub const PROTOCOL_VERSION: u32 = 6;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase", deny_unknown_fields)]
@@ -22,6 +23,10 @@ pub enum ClientMessage {
     },
     Presence {
         presence: Box<PresenceWire>,
+        /// Where this Presence may be shown; missing means everywhere (the
+        /// userscript has no settings to choose from).
+        #[serde(default)]
+        platforms: Option<Vec<Platform>>,
     },
     /// Answered with `pong`. Empty struct variants, not unit ones: serde only
     /// rejects unknown fields on struct variants.
@@ -90,9 +95,24 @@ pub struct ActivityWire {
     pub name: String,
     pub details: Option<String>,
     pub state: Option<String>,
-    pub url: String,
     pub assets: Option<ActivityAssetsWire>,
     pub timestamps: Option<ActivityTimestampsWire>,
+    /// The Discord Application to show this Activity as, instead of
+    /// Desktop's own.
+    #[serde(rename = "discordClientId")]
+    pub discord_client_id: Option<String>,
+    #[serde(rename = "detailsUrl")]
+    pub details_url: Option<String>,
+    #[serde(rename = "stateUrl")]
+    pub state_url: Option<String>,
+    pub buttons: Option<Vec<ActivityButtonWire>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ActivityButtonWire {
+    pub label: String,
+    pub url: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -130,12 +150,16 @@ mod tests {
     #[test]
     fn parses_every_client_message() {
         assert!(matches!(
-            parse(r#"{"type":"hello","protocolVersion":4,"name":"Firefox on Linux"}"#).unwrap(),
-            ClientMessage::Hello { protocol_version: 4, name } if name == "Firefox on Linux"
+            parse(r#"{"type":"hello","protocolVersion":6,"name":"Firefox on Linux"}"#).unwrap(),
+            ClientMessage::Hello { protocol_version: 6, name } if name == "Firefox on Linux"
         ));
         assert!(matches!(
             parse(r#"{"type":"presence","presence":{"activity":null,"updatedAt":1}}"#).unwrap(),
-            ClientMessage::Presence { presence } if presence.activity.is_none()
+            ClientMessage::Presence { presence, platforms: None } if presence.activity.is_none()
+        ));
+        assert!(matches!(
+            parse(r#"{"type":"presence","presence":{"activity":null,"updatedAt":1},"platforms":["discord","stoat"]}"#).unwrap(),
+            ClientMessage::Presence { platforms: Some(list), .. } if list == [Platform::Discord, Platform::Stoat]
         ));
         assert!(matches!(
             parse(r#"{"type":"ping"}"#).unwrap(),
@@ -157,10 +181,12 @@ mod tests {
     #[test]
     fn parses_a_full_activity() {
         let json = r#"{"type":"presence","presence":{"activity":{"id":"example","name":"Example",
-            "details":"Details","state":"State","url":"https://example.com",
+            "details":"Details","state":"State",
             "assets":{"largeImage":"l.png","largeText":"L","smallImage":"s.png","smallText":"S"},
-            "timestamps":{"start":100,"end":200}},"updatedAt":5000}}"#;
-        let ClientMessage::Presence { presence } = parse(json).unwrap() else {
+            "timestamps":{"start":100,"end":200},"discordClientId":"1553980756731363428",
+            "detailsUrl":"https://example.com/d","stateUrl":"https://example.com/s",
+            "buttons":[{"label":"Open","url":"https://example.com"}]},"updatedAt":5000}}"#;
+        let ClientMessage::Presence { presence, .. } = parse(json).unwrap() else {
             panic!("expected presence");
         };
         let activity = presence.activity.unwrap();
@@ -169,18 +195,28 @@ mod tests {
             Some("l.png")
         );
         assert_eq!(activity.timestamps.unwrap().start, Some(100));
+        assert_eq!(
+            activity.discord_client_id.as_deref(),
+            Some("1553980756731363428")
+        );
+        assert_eq!(activity.buttons.unwrap()[0].label, "Open");
     }
 
     #[test]
     fn schemas_are_strict() {
         for json in [
             r#"{"type":"unknown"}"#,
-            r#"{"type":"hello","protocolVersion":4}"#,
-            r#"{"type":"hello","protocolVersion":4,"name":"x","extra":"y"}"#,
-            r#"{"type":"hello","protocolVersion":"4","name":"x"}"#,
+            r#"{"type":"hello","protocolVersion":6}"#,
+            r#"{"type":"hello","protocolVersion":6,"name":"x","extra":"y"}"#,
+            r#"{"type":"hello","protocolVersion":"5","name":"x"}"#,
             r#"{"type":"presence"}"#,
             r#"{"type":"presence","presence":{"activity":null,"updatedAt":1,"extra":1}}"#,
-            r#"{"type":"presence","presence":{"activity":{"id":"a","name":"A","url":"u","clientId":"1"},"updatedAt":1}}"#,
+            r#"{"type":"presence","presence":{"activity":{"id":"a","name":"A","clientId":"1"},"updatedAt":1}}"#,
+            r#"{"type":"presence","presence":{"activity":{"id":"a","name":"A","buttons":[{"label":"x","url":"u","extra":1}]},"updatedAt":1}}"#,
+            // The page's address stays in the browser since protocol 6.
+            r#"{"type":"presence","presence":{"activity":{"id":"a","name":"A","url":"https://example.com"},"updatedAt":1}}"#,
+            r#"{"type":"presence","presence":{"activity":null,"updatedAt":1},"platforms":["myspace"]}"#,
+            r#"{"type":"presence","presence":{"activity":null,"updatedAt":1},"platforms":"discord"}"#,
             r#"{"type":"ping","x":1}"#,
             r#"{"type":"status","all":true}"#,
             r#"{"type":"set","setting":"allowedOrigins","value":true}"#,
@@ -207,9 +243,9 @@ mod tests {
     fn serializes_server_messages() {
         assert_eq!(
             encode(&ServerMessage::Welcome {
-                protocol_version: 4
+                protocol_version: 6
             }),
-            r#"{"type":"welcome","protocolVersion":4}"#
+            r#"{"type":"welcome","protocolVersion":6}"#
         );
         assert_eq!(
             encode(&ServerMessage::Reject {

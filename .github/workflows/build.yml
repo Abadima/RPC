@@ -1,0 +1,370 @@
+name: Build
+
+# Everything a release ships, built and checked once. The Release workflow
+# (a version tag) and the Nightly workflow (a push to main) each call this and
+# publish what it produced; nothing here can publish. It ends with a workflow
+# artifact, release-assets, holding every file and SHA256SUMS.
+#
+# Desktop is one static binary per platform, named parousia-desktop-<os>-<arch>:
+#   Linux    musl, so no glibc or any other library is needed (x86_64, aarch64)
+#   Windows  the C runtime linked in, so only Windows' own DLLs are needed
+#            (x86_64, aarch64). ARM64 is cross-compiled on an x64 runner, so it
+#            is built and inspected but not run.
+# The browser side is parousia-chromium.zip, parousia-firefox.zip, and the
+# userscript parousia.user.js (plus a gzip of it). The Activity sources are
+# each repository's main branch when this runs, and the revisions used come
+# out as the `sources` output.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "The version being released (1.2.3 or 1.2.3-rc.1). Empty reads desktop/Cargo.toml."
+        type: string
+        default: ""
+    outputs:
+      version:
+        value: ${{ jobs.check.outputs.version }}
+      prerelease:
+        value: ${{ jobs.check.outputs.prerelease }}
+      sources:
+        description: "Where the Activities came from: name=revision for each source."
+        value: ${{ jobs.browser.outputs.sources }}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check the version
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Test the release scripts
+        run: node --test scripts/
+
+      - name: Read and check the version
+        id: version
+        env:
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          version="$REQUESTED"
+          if [ -z "$version" ]; then
+            version="$(sed -n 's/^version = "\(.*\)"$/\1/p' desktop/Cargo.toml | head -n 1)"
+          fi
+          node scripts/release-check.mjs "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          case "$version" in
+            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+  desktop-linux:
+    name: Desktop (linux-${{ matrix.arch }})
+    needs: check
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+    env:
+      ASSET: parousia-desktop-linux-${{ matrix.arch }}
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Test
+        run: cargo test --locked --target ${{ matrix.target }}
+        working-directory: desktop
+
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+        working-directory: desktop
+
+      - name: Stage
+        run: |
+          mkdir -p out
+          cp "desktop/target/${{ matrix.target }}/release/Parousia-Desktop" "out/$ASSET"
+          chmod +x "out/$ASSET"
+
+      # Standalone means no dynamic loader and no shared library to find.
+      - name: Check it is standalone
+        run: |
+          file "out/$ASSET"
+          if readelf -lW "out/$ASSET" | grep -q INTERP; then echo "::error::it asks for a dynamic loader"; exit 1; fi
+          if readelf -dW "out/$ASSET" | grep -q NEEDED; then echo "::error::it needs shared libraries"; exit 1; fi
+
+      - name: Smoke test
+        run: |
+          [ "$("out/$ASSET" --version)" = "Parousia-Desktop $VERSION" ]
+          runtime="$(mktemp -d "$RUNNER_TEMP/parousia.XXXXXX")"
+          chmod 700 "$runtime"
+          XDG_RUNTIME_DIR="$runtime" XDG_DATA_HOME="$runtime/data" XDG_CONFIG_HOME="$runtime/config" "out/$ASSET" &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          up=
+          for _ in $(seq 40); do
+            if curl -sf -m 1 http://127.0.0.1:57179/health | grep -qx ok; then up=1; break; fi
+            sleep 0.25
+          done
+          [ -n "$up" ] || { echo "::error::Desktop never answered /health"; exit 1; }
+          kill -0 "$pid"
+
+      - name: Upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: asset-desktop-linux-${{ matrix.arch }}
+          path: out/${{ env.ASSET }}
+          if-no-files-found: error
+          retention-days: 7
+
+      # What the binaries owe the crates inside them (the same for every
+      # target, so one leg writes it).
+      - name: Write the notices for its crates
+        if: matrix.arch == 'x86_64'
+        run: |
+          cargo fetch --locked --manifest-path desktop/Cargo.toml
+          mkdir -p notices
+          node scripts/rust-notices.mjs > notices/parousia-desktop-notices.txt
+          grep -q "^tungstenite " notices/parousia-desktop-notices.txt
+
+      - name: Upload the notices
+        if: matrix.arch == 'x86_64'
+        uses: actions/upload-artifact@v7
+        with:
+          name: asset-desktop-notices
+          path: notices/parousia-desktop-notices.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  desktop-windows:
+    name: Desktop (windows-${{ matrix.arch }})
+    needs: check
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            target: x86_64-pc-windows-msvc
+            runs: true
+          - arch: aarch64
+            target: aarch64-pc-windows-msvc
+            runs: false
+    env:
+      ASSET: parousia-desktop-windows-${{ matrix.arch }}.exe
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Test
+        if: matrix.runs
+        run: cargo test --locked --target ${{ matrix.target }}
+        working-directory: desktop
+
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+        working-directory: desktop
+
+      - name: Stage
+        run: |
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item "desktop/target/${{ matrix.target }}/release/Parousia-Desktop.exe" "out/$env:ASSET"
+
+      # Standalone means only Windows' own DLLs: nothing from the Visual C++
+      # runtime (crt-static) and nothing bundled next to the exe. Every DLL it
+      # imports must ship in System32 or be an API set stub.
+      - name: Check it is standalone
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -property installationPath
+          $dumpbin = Get-ChildItem "$vs\VC\Tools\MSVC" -Recurse -Filter dumpbin.exe |
+            Where-Object { $_.FullName -match 'Hostx64\\x64' } | Select-Object -First 1
+          $output = & $dumpbin.FullName /dependents "out/$env:ASSET"
+          $output
+          $found = $output | Where-Object { $_ -match '^\s+(\S+\.dll)\s*$' } | ForEach-Object { $Matches[1].ToLower() }
+          $runtime = '^(vcruntime|msvcp|msvcr|concrt|vcomp|vccorlib)'
+          $system = Join-Path $env:windir 'System32'
+          $unexpected = $found | Where-Object {
+            $_ -match $runtime -or ($_ -notlike 'api-ms-win-*' -and -not (Test-Path (Join-Path $system $_)))
+          }
+          if ($unexpected) { throw "Not part of Windows: $($unexpected -join ', ')" }
+
+      - name: Smoke test
+        if: matrix.runs
+        run: |
+          $exe = (Resolve-Path "out/$env:ASSET").Path
+          # Piping makes PowerShell wait for a GUI-subsystem exe and capture its output.
+          $version = (& $exe --version | Out-String).Trim()
+          if ($version -ne "Parousia-Desktop $env:VERSION") { throw "unexpected --version output: $version" }
+          $process = Start-Process $exe -PassThru
+          try {
+            $client = $null
+            for ($i = 0; $i -lt 40 -and -not $client; $i++) {
+              Start-Sleep -Milliseconds 250
+              try { $client = [System.Net.Sockets.TcpClient]::new('127.0.0.1', 57179) } catch {}
+            }
+            if (-not $client) { throw 'Desktop never listened on 127.0.0.1:57179' }
+            $client.Close()
+            if ($process.HasExited) { throw "Desktop exited early with code $($process.ExitCode)" }
+            if ($process.MainWindowHandle -ne 0) { throw 'Desktop opened a window' }
+          } finally {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: asset-desktop-windows-${{ matrix.arch }}
+          path: out/${{ env.ASSET }}
+          if-no-files-found: error
+          retention-days: 7
+
+  browser:
+    name: Extensions and userscript
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: browser
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    outputs:
+      sources: ${{ steps.sources.outputs.sources }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.2"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
+
+      # Each source's main branch, as it is now. A failed fetch can't leave a
+      # half-made copy, and with no earlier copy on a fresh runner it fails here.
+      - name: Fetch Activity sources (main of each repository)
+        run: bun run activities:fetch
+
+      - name: Build
+        run: bun run build
+
+      - name: Test
+        run: bun test
+
+      # The build records what it used; keep that with the release.
+      - name: Record the Activity revisions
+        id: sources
+        run: |
+          sources="$(jq -r '.sources | to_entries | map("\(.key)=\(.value[0:12])") | join(" ")' dist/chromium/activities/catalog.json)"
+          [ -n "$sources" ]
+          echo "sources=$sources" >> "$GITHUB_OUTPUT"
+          echo "Activity sources: $sources" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Lint the Firefox build
+        run: bun run firefox:lint
+
+      - name: Stage
+        run: |
+          mkdir -p ../out
+          cp dist/chromium.zip ../out/parousia-chromium.zip
+          cp dist/firefox.zip ../out/parousia-firefox.zip
+          cp dist/userscript/parousia.user.js dist/userscript/parousia.user.js.gz ../out/
+
+      # What is inside the files has to be the release, and the gzip has to be
+      # the userscript exactly.
+      - name: Check the packages
+        run: |
+          core="${VERSION%%-*}"
+          for browser in chromium firefox; do
+            [ "$(unzip -p "../out/parousia-$browser.zip" manifest.json | jq -r .version)" = "$core" ]
+          done
+          grep -qx "// @version      $core" ../out/parousia.user.js
+          gzip -dc ../out/parousia.user.js.gz | cmp - ../out/parousia.user.js
+
+      - name: Upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: asset-browser
+          path: out/*
+          if-no-files-found: error
+          retention-days: 7
+
+  assemble:
+    name: Checksums
+    needs: [check, desktop-linux, desktop-windows, browser]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download
+        uses: actions/download-artifact@v8
+        with:
+          pattern: asset-*
+          merge-multiple: true
+          path: release
+
+      - name: Check the files and write checksums
+        working-directory: release
+        run: |
+          expected="parousia-chromium.zip
+          parousia-desktop-linux-aarch64
+          parousia-desktop-linux-x86_64
+          parousia-desktop-notices.txt
+          parousia-desktop-windows-aarch64.exe
+          parousia-desktop-windows-x86_64.exe
+          parousia-firefox.zip
+          parousia.user.js
+          parousia.user.js.gz"
+          diff <(printf '%s\n' "$expected") <(ls | sort)
+          sha256sum -- * > SHA256SUMS
+          sha256sum -c SHA256SUMS
+          {
+            echo "| File | Size (bytes) |"
+            echo "| --- | ---: |"
+            for file in $(ls | sort); do printf '| %s | %s |\n' "$file" "$(stat -c %s "$file")"; done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-assets
+          path: release/*
+          if-no-files-found: error
+          retention-days: 14

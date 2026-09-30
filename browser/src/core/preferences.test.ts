@@ -3,6 +3,7 @@ import type { Activity } from "./activity";
 import {
   DEFAULT_PREFERENCES,
   applyPreferences,
+  enabledPlatforms,
   formatIdleTimeout,
   loadPreferences,
   parsePreferences,
@@ -28,6 +29,10 @@ const activity: Activity = {
   details: "Reading a page",
   state: "Documentation",
   url: "https://jena.systems",
+  detailsUrl: "https://jena.systems/docs",
+  stateUrl: "https://jena.systems/",
+  buttons: [{ label: "Read it", url: "https://jena.systems/docs" }],
+  discordClientId: "1553980756731363428",
   assets: { largeImage: "logo", largeText: "Page title", smallImage: "dot", smallText: "Reading" },
 };
 
@@ -45,11 +50,21 @@ describe("parsePreferences", () => {
         incognito: "reveal",
         platforms: { discord: false, fluxer: "yes" },
         discordRpcExtension: "no",
+        pageData: { media: false, thumbnails: "no", passwords: true },
       }),
     ).toEqual({
       ...DEFAULT_PREFERENCES,
       shareMediaDetails: false,
       platforms: { discord: false, fluxer: true, stoat: true },
+      pageData: { media: false, thumbnails: true, creatorIcons: true },
+    });
+  });
+
+  test("every kind of page data is allowed until switched off", () => {
+    expect(DEFAULT_PREFERENCES.pageData).toEqual({
+      media: true,
+      thumbnails: true,
+      creatorIcons: true,
     });
   });
 });
@@ -70,6 +85,15 @@ describe("idle timeout", () => {
 });
 
 describe("applyPreferences", () => {
+  test("without media details, a name an Activity set from the page becomes its own again", () => {
+    const song = { ...activity, name: "Never Gonna Give You Up" };
+    const off = { ...DEFAULT_PREFERENCES, shareMediaDetails: false };
+    expect(applyPreferences(song, off, false, "Jena Hub")?.name).toBe("Jena Hub");
+    expect(applyPreferences(song, DEFAULT_PREFERENCES, false, "Jena Hub")?.name).toBe(
+      "Never Gonna Give You Up",
+    );
+  });
+
   test("shares everything by default", () => {
     expect(applyPreferences(activity, DEFAULT_PREFERENCES)).toEqual(activity);
   });
@@ -80,8 +104,18 @@ describe("applyPreferences", () => {
       id: "jena",
       name: "Jena",
       url: "https://jena.systems",
+      discordClientId: "1553980756731363428",
       assets: { largeImage: "logo", smallImage: "dot" },
     });
+  });
+
+  test("lists the platforms turned on, in order", () => {
+    expect(enabledPlatforms(DEFAULT_PREFERENCES)).toEqual(["discord", "fluxer", "stoat"]);
+    const noDiscord = { ...DEFAULT_PREFERENCES.platforms, discord: false };
+    expect(enabledPlatforms({ ...DEFAULT_PREFERENCES, platforms: noDiscord })).toEqual([
+      "fluxer",
+      "stoat",
+    ]);
   });
 
   test("private tabs share nothing unless allowed", () => {

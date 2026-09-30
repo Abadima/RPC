@@ -2,9 +2,11 @@ import type { ChannelOpener, DesktopChannel } from "./channel";
 import {
   PROTOCOL_VERSION,
   parseServerMessage,
+  presenceWire,
   type DesktopReport,
   type DesktopSetting,
 } from "./desktop-protocol";
+import type { PlatformId } from "./preferences";
 import type { Presence } from "./presence";
 import type { PresenceTransport } from "./transport";
 
@@ -47,6 +49,8 @@ export interface DesktopConnectionOptions {
 
 /** What the background script and UI need from the connection. */
 export interface DesktopLink extends PresenceTransport {
+  /** Where Desktop may show this browser's Presence (Settings > Platforms). */
+  setPlatforms(platforms: readonly PlatformId[]): void;
   acquire(): () => void;
   getState(): ConnectionState;
   onStateChange(listener: (state: ConnectionState) => void): () => void;
@@ -84,6 +88,8 @@ export class DesktopConnection implements DesktopLink {
   readonly #setTimer: Timer;
 
   #latest: Presence | null = null;
+  /** `null` until chosen: Desktop then shows it everywhere. */
+  #platforms: readonly PlatformId[] | null = null;
   #uiDemand = 0;
   #session: Session | null = null;
   /** Desktop refused this build or version; don't retry until someone looks. */
@@ -106,10 +112,18 @@ export class DesktopConnection implements DesktopLink {
   /** Only the latest Presence matters: it's sent now if connected, and again after every reconnect. */
   send(presence: Presence): void {
     this.#latest = presence;
-    if (this.#session?.ready) {
-      this.#session.channel.send({ type: "presence", presence });
-    }
+    this.#sendPresence();
     this.#evaluate();
+  }
+
+  /** Sent with every Presence; a change resends the current one so Desktop can act on it. */
+  setPlatforms(platforms: readonly PlatformId[]): void {
+    const current = this.#platforms;
+    if (current?.length === platforms.length && current.every((id, i) => id === platforms[i])) {
+      return;
+    }
+    this.#platforms = [...platforms];
+    this.#sendPresence();
   }
 
   /** Keeps the connection up while a UI is showing its state; call the returned function when it closes. */
@@ -278,8 +292,18 @@ export class DesktopConnection implements DesktopLink {
     session.cancelTimeout = null;
     session.ready = true;
     this.#setState("connected");
-    if (this.#latest) session.channel.send({ type: "presence", presence: this.#latest });
+    this.#sendPresence();
     this.#evaluate();
+  }
+
+  #sendPresence(): void {
+    const latest = this.#latest;
+    if (!latest || !this.#session?.ready) return;
+    const presence = presenceWire(latest);
+    const platforms = this.#platforms;
+    this.#session.channel.send(
+      platforms ? { type: "presence", presence, platforms } : { type: "presence", presence },
+    );
   }
 
   #retry(): void {

@@ -1,0 +1,18 @@
+Parousia is licensed under the Apache License 2.0 (LICENSE). This build also
+contains the following, under their own licenses.
+
+Activities from PreMiD (activities/premid/)
+  PreMiD's Activities, compiled unchanged, with their license and the commit
+  they came from in activities/premid/LICENSE.txt and SOURCE.txt.
+  https://github.com/PreMiD/Activities
+  Mozilla Public License 2.0
+
+Poppins (fonts/)
+  Copyright 2020 The Poppins Project Authors
+  https://github.com/itfoundry/Poppins
+  SIL Open Font License 1.1 (fonts/OFL.txt)
+
+Font Awesome Free icons (drawn in the popup and dashboard)
+  Font Awesome Free 7 by @fontawesome, https://fontawesome.com
+  Icons: Creative Commons Attribution 4.0 International
+  https://fontawesome.com/license/free

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { activitiesPlugin } from "../../scripts/activities/plugin";
 
 /**
  * Bundling can behave differently than running the same source directly (as
@@ -14,6 +15,8 @@ describe("chromium bundle", () => {
       target: "browser",
       format: "esm",
       minify: true,
+      // No Activities: this is about the bundle itself.
+      plugins: [activitiesPlugin([])],
     });
     expect(result.success).toBe(true);
 
@@ -36,6 +39,7 @@ describe("chromium bundle", () => {
       runtime: {
         id: "self",
         lastError: undefined,
+        getURL: (path: string) => `chrome-extension://self/${path}`,
         onConnect: {
           addListener: (listener: (port: unknown) => void) => connectListeners.push(listener),
         },
@@ -51,7 +55,8 @@ describe("chromium bundle", () => {
           { id: 1, url: "https://example.com" },
         ]) as unknown as typeof chrome.tabs.query,
       },
-      windows: { onFocusChanged: noop, WINDOW_ID_NONE: -1 },
+      windows: { onFocusChanged: noop, onRemoved: noop, WINDOW_ID_NONE: -1 },
+      permissions: { onAdded: noop, onRemoved: noop, getAll: async () => ({ origins: [] }) },
       storage: {
         local: { get: async () => ({}), set: async () => {} },
         onChanged: { addListener: (): void => {} },
@@ -75,7 +80,7 @@ describe("chromium bundle", () => {
     for (const listener of connectListeners) {
       listener({
         name: "parousia-ui",
-        sender: { id: "self" },
+        sender: { id: "self", url: "chrome-extension://self/popup.html" },
         postMessage: (message: unknown) => posted.push(message),
         onMessage: noop,
         onDisconnect: noop,

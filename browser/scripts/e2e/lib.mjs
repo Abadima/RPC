@@ -73,20 +73,33 @@ export async function waitUntil(check, description, timeoutMs = STEP_TIMEOUT_MS)
 /**
  * A throwaway place for Desktop's files. The runtime directory holds the
  * IPC socket and must be private, like a real XDG_RUNTIME_DIR.
+ *
+ * Desktop looks for Discord only in `discordDir`, empty unless a check puts
+ * a fake Discord there (fake-discord.mjs), so a test run never shows
+ * anything on a real Discord. Only `discord:verify` passes a real one.
  */
-export async function workspace(prefix) {
+export async function workspace(prefix, { discordDir } = {}) {
   // Short, so socket paths stay under the 108-byte limit.
   const dir = await mkdtemp(join(tmpdir(), `${prefix}-`));
   const dataHome = join(dir, "data");
   const runtimeDir = join(dir, "run");
+  const ownDiscordDir = join(dir, "discord");
   await mkdir(runtimeDir, { recursive: true });
   await chmod(runtimeDir, 0o700);
+  await mkdir(ownDiscordDir, { mode: 0o700 });
+  const discord = discordDir ?? ownDiscordDir;
   return {
     dir,
     dataHome,
     runtimeDir,
+    discordDir: discord,
     configDir: join(dataHome, "parousia"),
-    env: { ...process.env, XDG_DATA_HOME: dataHome, XDG_RUNTIME_DIR: runtimeDir },
+    env: {
+      ...process.env,
+      XDG_DATA_HOME: dataHome,
+      XDG_RUNTIME_DIR: runtimeDir,
+      PAROUSIA_DISCORD_IPC_DIR: discord,
+    },
     cleanup: () => rm(dir, { recursive: true, force: true }),
   };
 }
@@ -178,16 +191,20 @@ export async function control(ws, ...args) {
  */
 export const QUIET_DISCORD = `chrome.storage.local.set({ preferences: { discordRpcExtension: false } })`;
 
-/**
- * The footer's status in one comparable line: its text without Desktop's
- * version, plus the channel it keeps in `data-channel` (the footer doesn't
- * show it), as `Connected to Parousia Desktop · WebSocket`.
- */
+/** Turns the extension's Settings > Platforms > Discord on or off, evaluated in the extension. */
+export const setDiscordPlatform = (on) => `(async () => {
+  const { preferences = {} } = await chrome.storage.local.get("preferences");
+  const platforms = { discord: true, fluxer: true, stoat: true, ...preferences.platforms, discord: ${on} };
+  await chrome.storage.local.set({ preferences: { ...preferences, platforms } });
+})()`;
+
+/** Parousia's own Discord Application, which Desktop shows Activities as by default. */
+export const PAROUSIA_CLIENT_ID = "1553980756731363428";
+
+/** The footer's status, without Desktop's version. */
 export const STATUS_LINE = `(() => {
   const label = document.getElementById("status-label");
-  if (!label) return null;
-  const text = label.textContent.replace(/ v\\S+$/, "");
-  return label.dataset.channel ? text + " · " + label.dataset.channel : text;
+  return label ? label.textContent.replace(/ v\\S+$/, "") : null;
 })()`;
 
 /** Popup helpers for any Playwright page showing `popup.html`. */

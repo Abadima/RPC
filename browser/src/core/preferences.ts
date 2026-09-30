@@ -1,4 +1,4 @@
-import type { Activity } from "./activity";
+import type { Activity, PageDataKind } from "./activity";
 
 /**
  * The extension's own settings, kept in `chrome.storage.local` so the
@@ -8,18 +8,25 @@ import type { Activity } from "./activity";
 export type IncognitoBehavior = "pause" | "share";
 export type PlatformId = "discord" | "fluxer" | "stoat";
 export type Language = "en";
+/** Which kinds of page data Activities may read, for every Activity at once. */
+export type PageDataPreferences = Readonly<Record<PageDataKind, boolean>>;
 
 export interface Preferences {
   language: Language;
   /** Off: publish only the Activity's name, never its details, state, or image captions. */
   shareMediaDetails: boolean;
-  /** How long presence stays after the browser loses focus; 0 clears it at once. */
+  /** How long presence stays after the browser loses focus; 0 clears it at once. Sound playing in the tab keeps it either way. */
   idleTimeoutMinutes: number;
   incognito: IncognitoBehavior;
   /** Which platforms should show presence, for Parousia Desktop's adapters. */
   platforms: Record<PlatformId, boolean>;
   /** Also show Discord presence through Discord-RPC-Extension's app, when it's running. */
   discordRpcExtension: boolean;
+  /**
+   * What Activities may read from pages they've been granted: switched off,
+   * a kind is never collected (native Activities) or never shown (PreMiD's).
+   */
+  pageData: PageDataPreferences;
 }
 
 export const PLATFORM_IDS: readonly PlatformId[] = ["discord", "fluxer", "stoat"];
@@ -32,6 +39,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   incognito: "pause",
   platforms: { discord: true, fluxer: true, stoat: true },
   discordRpcExtension: true,
+  pageData: { media: true, thumbnails: true, creatorIcons: true },
 };
 
 const STORAGE_KEY = "preferences";
@@ -43,6 +51,7 @@ const isObject = (value: unknown): value is Json => typeof value === "object" &&
 export function parsePreferences(value: unknown): Preferences {
   const stored = isObject(value) ? value : {};
   const platforms = isObject(stored.platforms) ? stored.platforms : {};
+  const pageData = isObject(stored.pageData) ? stored.pageData : {};
   const flag = (candidate: unknown, fallback: boolean): boolean =>
     typeof candidate === "boolean" ? candidate : fallback;
   return {
@@ -63,6 +72,11 @@ export function parsePreferences(value: unknown): Preferences {
       stoat: flag(platforms.stoat, DEFAULT_PREFERENCES.platforms.stoat),
     },
     discordRpcExtension: flag(stored.discordRpcExtension, DEFAULT_PREFERENCES.discordRpcExtension),
+    pageData: {
+      media: flag(pageData.media, DEFAULT_PREFERENCES.pageData.media),
+      thumbnails: flag(pageData.thumbnails, DEFAULT_PREFERENCES.pageData.thumbnails),
+      creatorIcons: flag(pageData.creatorIcons, DEFAULT_PREFERENCES.pageData.creatorIcons),
+    },
   };
 }
 
@@ -77,17 +91,39 @@ export function formatIdleTimeout(minutes: number): string {
   return minutes === 0 ? "Off" : minutes === 60 ? "1 h" : `${minutes} min`;
 }
 
-/** What may be shared of `activity` under `preferences`, from a tab that may be private. */
+/**
+ * What may be shared of `activity` under `preferences`, from a tab that may
+ * be private. Without media details: the Activity's own name (`ownName`: an
+ * Activity may set one from the page, like a song's title), link, and images
+ * only (no captions, detail or state links, or buttons, which describe the
+ * media too).
+ */
 export function applyPreferences(
   activity: Activity | null,
   preferences: Preferences,
   incognito = false,
+  ownName?: string,
 ): Activity | null {
   if (!activity || (incognito && preferences.incognito === "pause")) return null;
   if (preferences.shareMediaDetails) return activity;
-  const { details: _details, state: _state, assets, ...rest } = activity;
+  const {
+    name,
+    details: _details,
+    state: _state,
+    detailsUrl: _detailsUrl,
+    stateUrl: _stateUrl,
+    buttons: _buttons,
+    assets,
+    ...rest
+  } = activity;
   const images = assets && { largeImage: assets.largeImage, smallImage: assets.smallImage };
-  return images ? { ...rest, assets: images } : rest;
+  const shared = { ...rest, name: ownName ?? name };
+  return images ? { ...shared, assets: images } : shared;
+}
+
+/** The platforms turned on in Settings > Platforms, for Desktop. */
+export function enabledPlatforms(preferences: Preferences): PlatformId[] {
+  return PLATFORM_IDS.filter((id) => preferences.platforms[id]);
 }
 
 /** The slice of `chrome.storage.local` this needs; tests pass a fake. */

@@ -4,11 +4,11 @@ Parousia is in early development. See `project/roadmap.md` for where things stan
 
 ## Project Layout
 
-- `browser/`: the browser extension (Bun + TypeScript), targeting Chromium (Chrome/Edge), Firefox, Safari, and a userscript
+- `browser/`: the browser extension (Bun + TypeScript), targeting Chromium (Chrome/Edge), Firefox, and a userscript
 - `desktop/`: Parousia Desktop (Rust), including its platform adapters (Discord first; Fluxer/Stoat are roadmap items)
-- `packages/`: TypeScript shared by `browser/` and `website/` (the presence view)
 - `core/`, `adapters/`: placeholders from the project skeleton
-- `website/`: the `parousia.js.org` landing page and docs (Astro + Svelte 5)
+- [`parousia-project/website`](https://github.com/parousia-project/website): the `parousia.abadima.dev` landing page, downloads, and docs (Astro + Svelte 5), in its own repository
+- [`parousia-project/activities`](https://github.com/parousia-project/activities): Parousia's own Activities
 
 ## Getting Started
 
@@ -38,17 +38,25 @@ cargo fmt --check
 bun run desktop:verify
 ```
 
-**Website** (`website/`):
+CI runs all of the above on every pull request. Make sure they pass locally first. The website has its own checks in its own repository.
 
-```bash
-bun install
-bun run typecheck
-bun run lint
-bun run format:check
-bun run build
-```
+## Releasing
 
-CI runs all of the above on every pull request. Make sure they pass locally first.
+A release is a version tag on `main`; `.github/workflows/release.yml` does the rest: it tests and builds everything, then publishes the GitHub release with its files, `SHA256SUMS`, and build provenance attestations.
+
+1. Set the version in `desktop/Cargo.toml` (and `Cargo.lock`, by building) and in `browser/manifests/chromium.json` and `firefox.json`. Extension manifests take numbers only, so `1.2.3-rc.1` is `1.2.3` there. `node scripts/release-check.mjs v1.2.3` tells you what still disagrees.
+2. Merge to `main`, then tag and push: `git tag v1.2.3 && git push origin v1.2.3`. A tag with a suffix (`v1.2.3-rc.1`) is published as a pre-release.
+3. To try the whole pipeline first, run "Release" by hand from the Actions tab on any branch. It builds and checks everything, keeps the files as a workflow artifact, and publishes nothing.
+
+| File                                                                          | What it is                                                        |
+| ----------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `parousia-desktop-windows-x86_64.exe`, `parousia-desktop-windows-aarch64.exe` | Parousia Desktop for Windows; only Windows' own DLLs needed       |
+| `parousia-desktop-linux-x86_64`, `parousia-desktop-linux-aarch64`             | Parousia Desktop for Linux; static (musl), so no libraries needed |
+| `parousia-chromium.zip`, `parousia-firefox.zip`                               | The browser extension                                             |
+| `parousia.user.js`, `parousia.user.js.gz`                                     | The userscript, and the same file gzipped                         |
+| `SHA256SUMS`                                                                  | Checksums of all of the above                                     |
+
+The Windows ARM64 executable is cross-compiled on an x64 runner, so CI checks its imports but doesn't run it. There are no macOS or Safari artifacts.
 
 ## Guidelines
 
@@ -71,4 +79,4 @@ Use the issue templates. For security vulnerabilities, use [private reporting](h
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under this project's [MIT License](../LICENSE).
+By contributing, you agree that your contributions will be licensed under this project's [Apache License 2.0](../LICENSE).

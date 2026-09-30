@@ -1,19 +1,31 @@
+// Release builds on Windows are GUI-subsystem: no console window behind the
+// tray icon. Debug and test builds keep theirs.
+#![cfg_attr(
+    all(windows, not(debug_assertions), not(test)),
+    windows_subsystem = "windows"
+)]
+
 mod config;
 mod console;
 mod control;
+mod discord;
 mod http;
 mod hub;
 mod identity;
 #[cfg(unix)]
 mod ipc;
 mod peer;
+mod platform;
 mod presence;
 mod protocol;
 mod rate;
 mod server;
 mod session;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", windows))]
+#[cfg_attr(windows, path = "wintray.rs")]
 mod tray;
+#[cfg(windows)]
+mod winsys;
 mod ws;
 
 use std::io::IsTerminal;
@@ -23,6 +35,7 @@ use std::thread;
 
 use config::{AppPaths, Settings};
 use control::ControlRequest;
+use discord::DiscordAdapter;
 use hub::{Hub, Setting};
 use server::Server;
 
@@ -44,6 +57,11 @@ Commands (talk to the running Desktop):
   --json                        Print command results as JSON";
 
 fn main() -> ExitCode {
+    // Commands typed into a terminal print there; a plain launch stays windowless.
+    #[cfg(windows)]
+    if std::env::args_os().len() > 1 {
+        winsys::attach_parent_console();
+    }
     let args: Vec<String> = std::env::args_os()
         .skip(1)
         .map(|arg| arg.to_string_lossy().into_owned())
@@ -99,7 +117,23 @@ fn main() -> ExitCode {
 
 fn fail(message: impl std::fmt::Display) -> ExitCode {
     eprintln!("parousia-desktop: {message}");
+    #[cfg(windows)]
+    winsys::alert(&message.to_string());
     ExitCode::FAILURE
+}
+
+/// What to tell someone whose Desktop can't take its port. The port is fixed
+/// (the extensions connect to exactly this address), so the fix is theirs.
+fn bind_failure(err: &std::io::Error) -> String {
+    let address = server::ADDRESS;
+    if err.kind() == std::io::ErrorKind::AddrInUse {
+        format!(
+            "port {} is already in use, so Parousia Desktop can't start. Close whatever is using {address} (often another copy of Parousia Desktop that a previous run left behind), then start it again.",
+            server::DEFAULT_PORT
+        )
+    } else {
+        format!("can't listen on {address}: {err}. Browsers can only reach Parousia Desktop there.")
+    }
 }
 
 /// Silent unless `debug`: startup notes, connections, and refusals only
@@ -130,15 +164,19 @@ fn run_desktop(with_tray: bool, debug: bool) -> ExitCode {
     // run. Where there's no IPC socket yet, this also stops a second Desktop.
     let listener = match Server::bind() {
         Ok(listener) => listener,
-        Err(err) => {
-            return fail(format!(
-                "can't listen on {} ({err}); is something else using that port?",
-                server::ADDRESS
-            ));
-        }
+        Err(err) => return fail(bind_failure(&err)),
     };
+    let discord_client_id = settings
+        .discord_client_id
+        .clone()
+        .unwrap_or_else(|| discord::PAROUSIA_CLIENT_ID.to_string());
     let hub = Arc::new(Hub::new(settings, config_path, server::ADDRESS.to_string()));
     hub.set_debug(debug);
+    hub.add_adapter(Box::new(DiscordAdapter::new(
+        discord_client_id,
+        owner_uid(&paths),
+        hub.reporter(),
+    )));
     {
         let server = Server::new(Arc::clone(&hub));
         thread::spawn(move || server.serve(listener));
@@ -161,21 +199,36 @@ fn run_desktop(with_tray: bool, debug: bool) -> ExitCode {
     if std::io::stdin().is_terminal() {
         console::spawn(Arc::clone(&hub), quit);
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", windows))]
     if with_tray {
         match tray::run(Arc::clone(&hub)) {
             tray::Exit::Quit => quit(),
             tray::Exit::Unavailable(reason) if hub.debug() => eprintln!(
-                "parousia-desktop: no desktop session ({reason}); still running. Use `Parousia-Desktop status`."
+                "parousia-desktop: no tray ({reason}); still running. Use `Parousia-Desktop status`."
             ),
             tray::Exit::Unavailable(_) => {}
         }
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", windows)))]
     let _ = with_tray;
     loop {
         thread::park();
     }
+}
+
+/// This user's uid, as the owner of the data directory Desktop just made
+/// private to it: only a Discord socket with the same owner is trusted.
+#[cfg(unix)]
+fn owner_uid(paths: &AppPaths) -> Option<u32> {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata(&paths.data_dir)
+        .ok()
+        .map(|meta| meta.uid())
+}
+
+#[cfg(not(unix))]
+fn owner_uid(_paths: &AppPaths) -> Option<u32> {
+    None
 }
 
 /// Removes the socket so the next start doesn't have to probe it.
@@ -216,6 +269,27 @@ fn send(request: ControlRequest, json: bool) -> ExitCode {
 #[cfg(not(unix))]
 fn send(_request: ControlRequest, _json: bool) -> ExitCode {
     fail(
-        "controlling Desktop from another terminal isn't supported on this platform yet; type the command into Desktop's own window instead",
+        "controlling Desktop from another terminal isn't supported on this platform yet; use the tray menu or the Parousia extension's dashboard",
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Error, ErrorKind};
+
+    #[test]
+    fn a_taken_port_says_which_and_what_to_do() {
+        let message = bind_failure(&Error::from(ErrorKind::AddrInUse));
+        assert!(message.contains("57179"));
+        assert!(message.contains("already in use"));
+        assert!(message.contains("Close whatever is using 127.0.0.1:57179"));
+    }
+
+    #[test]
+    fn any_other_failure_keeps_its_reason() {
+        let message = bind_failure(&Error::new(ErrorKind::PermissionDenied, "denied"));
+        assert!(message.contains("denied"));
+        assert!(message.contains("127.0.0.1:57179"));
+    }
 }

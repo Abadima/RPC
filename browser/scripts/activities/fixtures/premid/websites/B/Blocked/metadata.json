@@ -1,0 +1,20 @@
+{
+  "$schema": "https://schemas.premid.app/metadata/1.16",
+  "apiVersion": 1,
+  "author": {
+    "name": "Test",
+    "id": "1"
+  },
+  "service": "Blocked",
+  "description": {
+    "en": "Blocked, for tests."
+  },
+  "url": "blocked.example",
+  "regExp": "^https?[:][/][/]blocked[.]example[/]",
+  "version": "1.0.0",
+  "logo": "https://cdn.example/blocked.png",
+  "thumbnail": "https://cdn.example/blocked-thumb.png",
+  "color": "#000000",
+  "category": "other",
+  "tags": ["test"]
+}

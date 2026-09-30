@@ -1,12 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { UI_PORT_NAME } from "../core/ui-port";
+import type { AdapterState, DesktopReport } from "../core/desktop-protocol";
 import { REPORT } from "../core/test-desktop";
 import {
   connectToBackground,
   connectionBadge,
   connectionHelp,
   connectionStatusLabel,
+  desktopPlatformLabel,
   discordBridgeLabel,
+  showsDiscordBridge,
   displayedState,
   isOffline,
 } from "./connection-status";
@@ -135,10 +138,43 @@ describe("the not-found screen", () => {
 });
 
 describe("Discord-RPC-Extension's app", () => {
+  test("Overview mentions it only until Parousia Desktop is connected", () => {
+    expect(showsDiscordBridge({ status: "connected" })).toBe(false);
+    for (const status of [
+      "idle",
+      "connecting",
+      "disconnected",
+      "not_allowed",
+      "incompatible",
+    ] as const) {
+      expect(showsDiscordBridge({ status })).toBe(true);
+    }
+  });
+
   test("reads as off, found with its version, or not running", () => {
     expect(discordBridgeLabel({ status: "off", version: null })).toBe("Off");
     expect(discordBridgeLabel({ status: "connected", version: "0.3.0" })).toBe("Connected, v0.3.0");
     expect(discordBridgeLabel({ status: "unavailable", version: null })).toBe("Not running");
     expect(discordBridgeLabel({ status: "connecting", version: null })).toBe("Looking for it…");
+  });
+});
+
+describe("Parousia Desktop's platforms", () => {
+  test("say what each adapter is doing, when Desktop has reported", () => {
+    const report = (
+      state: AdapterState,
+      activity: string | null = null,
+      error: string | null = null,
+    ): DesktopReport => ({
+      ...REPORT,
+      platforms: [{ platform: "discord", state, activity, error }],
+    });
+    expect(desktopPlatformLabel(null, "discord")).toBeNull();
+    expect(desktopPlatformLabel(report("idle"), "stoat")).toBeNull();
+    expect(desktopPlatformLabel(report("showing", "Jena Hub"), "discord")).toBe("Showing Jena Hub");
+    expect(desktopPlatformLabel(report("not_running"), "discord")).toBe("Not running");
+    expect(desktopPlatformLabel(report("refused", null, "Invalid Client ID"), "discord")).toBe(
+      "Refused: Invalid Client ID",
+    );
   });
 });

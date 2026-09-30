@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Parousia",
-  "version": "0.1.0",
-  "description": "Your Rich Presence, present on Discord and beyond.",
+  "version": "1.0.0",
+  "description": "Your Rich Presence on Discord and beyond.",
   "background": {
     "service_worker": "chromium.js",
     "type": "module"
@@ -23,6 +23,8 @@
     "128": "icons/icon-128.png"
   },
   "permissions": ["tabs", "storage"],
+  "optional_permissions": ["scripting"],
+  "optional_host_permissions": ["*://*/*"],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' ws://127.0.0.1:57179 ws://127.0.0.1:6969"
   },

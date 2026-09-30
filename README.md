@@ -11,7 +11,7 @@
 [![Browser CI](https://img.shields.io/github/actions/workflow/status/Abadima/rpc/browser-ci.yml?style=for-the-badge&logo=github-actions&label=Browser)](https://github.com/Abadima/rpc/actions/workflows/browser-ci.yml)
 [![Desktop CI](https://img.shields.io/github/actions/workflow/status/Abadima/rpc/desktop-ci.yml?style=for-the-badge&logo=github-actions&label=Desktop)](https://github.com/Abadima/rpc/actions/workflows/desktop-ci.yml)
 
-### Your Rich Presence, present on Discord and beyond.
+### Your Rich Presence on Discord and beyond.
 
 **Share what you're doing online in real-time on Discord, and soon on other platforms.**
 
@@ -29,15 +29,17 @@ Parousia is actively being built. APIs, architecture, package names, integration
 
 ## Documentation
 
-Documentation, guides, installation instructions, compatibility information, and development resources will be available at:
+Downloads, installation instructions, guides, compatibility information, and development resources are on the website:
 
-**[parousia.js.org](https://parousia.js.org)**
+**[parousia.abadima.dev](https://parousia.abadima.dev)** (source: [parousia-project/website](https://github.com/parousia-project/website))
+
+Built files for Windows and Linux, the browser extensions, and the userscript are published on the [Releases](https://github.com/Abadima/RPC/releases) page, each release with `SHA256SUMS`.
 
 ---
 
 ## Roadmap
 
-Phase 3 (the Browser ↔ Desktop link) is complete. Parousia is now in **Phase 4: Discord Adapter**, with **Phase 5: First Activity, End to End** next. See [`project/roadmap.md`](project/roadmap.md) for the full plan, covering the browser extension, the desktop app, Discord support, the Activity ecosystem, and beyond.
+Phases 1 to 7 are complete: an Activity for the page open in the browser shows up on Discord through Parousia Desktop, PreMiD's 1,400 Activities included once turned on. Native Activities live in [parousia-project/activities](https://github.com/parousia-project/activities). The release workflow is in place for the first release. See [`project/roadmap.md`](project/roadmap.md) for the full plan, covering the browser extension, the desktop app, Discord support, the Activity ecosystem, and beyond.
 
 ---
 
@@ -49,4 +51,4 @@ Contributions, issues, and discussions are welcome. See [`CONTRIBUTING.md`](.git
 
 ## License
 
-See [LICENSE](LICENSE) for the project's license.
+Parousia is licensed under the [Apache License 2.0](LICENSE). The extensions also carry PreMiD's Activities under the Mozilla Public License 2.0, a font under the SIL Open Font License, and icons under CC BY 4.0; each extension build lists them in `THIRD-PARTY-NOTICES.txt`, and each release has `parousia-desktop-notices.txt` for the crates inside Desktop (one, `option-ext`, is under MPL-2.0).

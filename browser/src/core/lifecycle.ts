@@ -1,5 +1,6 @@
 import type { Activity } from "./activity";
 import { createPresence, presenceEquals, type Presence } from "./presence";
+import type { Page } from "./registry";
 import type { PresenceRuntime } from "./runtime";
 import type { PresenceTransport } from "./transport";
 
@@ -17,12 +18,16 @@ export class PresenceController {
   ) {}
 
   /**
-   * Resolve `url` and publish it if it differs from the last published
+   * Resolve `page` (or no page: a browser page, which only the Default
+   * Activity covers) and publish it if it differs from the last published
    * Presence. `share` decides what of the Activity may leave the browser
    * (see preferences.ts); by default, all of it.
    */
-  update(url: URL, share: (activity: Activity | null) => Activity | null = (a) => a): void {
-    this.publish(createPresence(share(this.runtime.resolve(url).activity)));
+  update(
+    page: Page | null,
+    share: (activity: Activity | null) => Activity | null = (a) => a,
+  ): void {
+    this.publish(createPresence(share(this.runtime.resolve(page).activity)));
   }
 
   /** Publish an explicit "nothing" Presence, e.g. when a tab closes or loses focus. */
