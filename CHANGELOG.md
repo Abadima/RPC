@@ -1,6 +1,6 @@
 # VERSION 1
 
-## [V1.0.0](https://github.com/Abadima/RPC/releases/tag/v1.0.0) - V1 FIRST RELEASE
+## [V1.0.0-beta.1](https://github.com/Abadima/RPC/releases/tag/v1.0.0-beta.1) - V1 FIRST PUBLIC BETA
 
 ### ✅ Additions
 
