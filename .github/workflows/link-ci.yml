@@ -52,7 +52,7 @@ jobs:
         working-directory: browser
 
       - name: Cache Chromium automation build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('browser/bun.lock') }}
