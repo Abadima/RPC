@@ -55,7 +55,66 @@ describe("DesktopConnection demand", () => {
       protocolVersion: PROTOCOL_VERSION,
       name: "Test Browser",
     });
-    expect(desktop.presences()).toEqual([JSON.parse(JSON.stringify(presence))]);
+    // The page's address stays in the browser: Desktop gets only what it shows.
+    expect(desktop.presences()).toEqual([
+      { activity: { id: "a", name: "A" }, updatedAt: presence.updatedAt },
+    ]);
+  });
+
+  test("only the fields Desktop takes leave the browser, whatever else an Activity carries", async () => {
+    const desktop = new FakeDesktop();
+    const { connection } = harness(fakeChannel(desktop));
+    const full = {
+      ...activity,
+      details: "Details",
+      state: "State",
+      detailsUrl: "https://a.example/d",
+      stateUrl: "https://a.example/s",
+      assets: { largeImage: "https://a.example/l.png", largeText: "L" },
+      timestamps: { start: 1 },
+      buttons: [{ label: "Open", url: "https://a.example/" }],
+      discordClientId: "1553980756731363428",
+    };
+    const extra = {
+      ...full,
+      secret: "session=abc",
+      buttons: [{ label: "Open", url: "https://a.example/", x: 1 }],
+    };
+    connection.send(createPresence(extra));
+    await settle();
+    const { url: _url, ...expected } = full;
+    expect(desktop.presences()).toEqual([{ activity: expected, updatedAt: expect.any(Number) }]);
+  });
+
+  test("each Presence says where it may be shown, and a new choice resends it", async () => {
+    const desktop = new FakeDesktop();
+    const ws = fakeChannel(desktop);
+    const { connection, timers } = harness(ws);
+    connection.setPlatforms(["discord", "stoat"]);
+    connection.send(createPresence(activity));
+    await settle();
+    const platforms = (): unknown[] =>
+      desktop.received.filter((m) => m.type === "presence").map((m) => m.platforms);
+    expect(platforms()).toEqual([["discord", "stoat"]]);
+
+    connection.setPlatforms(["discord", "stoat"]);
+    expect(platforms()).toHaveLength(1);
+    connection.setPlatforms(["stoat"]);
+    expect(platforms()).toEqual([["discord", "stoat"], ["stoat"]]);
+
+    // And after Desktop comes back.
+    ws.opened[0]?.end();
+    timers.advance(10_000);
+    await settle();
+    expect(platforms().at(-1)).toEqual(["stoat"]);
+  });
+
+  test("without a choice, Presence goes without platforms (Desktop: everywhere)", async () => {
+    const desktop = new FakeDesktop();
+    const { connection } = harness(fakeChannel(desktop));
+    connection.send(createPresence(activity));
+    await settle();
+    expect(desktop.received.find((m) => m.type === "presence")).not.toHaveProperty("platforms");
   });
 
   test("an unneeded connection lingers, then closes to idle with no timers left", async () => {

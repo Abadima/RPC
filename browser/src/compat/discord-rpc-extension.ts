@@ -25,31 +25,117 @@ export const DISCORD_RPC_EXTENSION_IDS = {
 } as const;
 
 /**
- * The Discord Application ID to present as. Discord-RPC-Extension's protocol
- * requires one to render anything at all; which one (Parousia's own, or an
- * Activity's) is decided when this layer is switched on. Until it's set,
- * this whole compatibility layer stays inert: it registers with nothing and
- * answers nothing, rather than ever claiming a made-up identity to Discord.
+ * Parousia's own Discord Application: what an Activity without its own
+ * (`ActivityInfo.discordClientId`) shows as. Public, like every Discord
+ * client id. Parousia Desktop falls back to the same one.
  */
-export const PAROUSIA_DISCORD_CLIENT_ID: string | null = null;
+export const PAROUSIA_DISCORD_CLIENT_ID = "1553980756731363428";
 
+/**
+ * The Discord Application to answer Discord-RPC-Extension's own extension
+ * with. That cross-extension layer stays inert (registers with nothing,
+ * answers nothing) until one is chosen (see project/roadmap.md, Compatibility).
+ */
+export const DISCORD_RPC_EXTENSION_CLIENT_ID: string | null = null;
+
+/**
+ * What Discord-RPC-Extension's app hands to its RPC library's `setActivity`
+ * (@xhayper/discord-rpc), which renames these to Discord's own fields.
+ */
 export interface DiscordRpcExtensionPresence {
-  state?: string;
+  name?: string;
   details?: string;
+  detailsUrl?: string;
+  state?: string;
+  stateUrl?: string;
   startTimestamp?: number;
-  instance?: boolean;
+  endTimestamp?: number;
+  largeImageKey?: string;
+  largeImageText?: string;
+  smallImageKey?: string;
+  smallImageText?: string;
+  buttons?: Array<{ label: string; url: string }>;
+  instance: boolean;
 }
 
 export type DiscordRpcExtensionResponse =
   | { clientId: string; presence: DiscordRpcExtensionPresence }
   | Record<string, never>;
 
-/** Parousia's Activity as the Discord presence Discord-RPC-Extension passes on. Shared by both ways of reaching it. */
+const MAX_TEXT = 128;
+const MIN_TEXT = 2;
+const MAX_IMAGE = 256;
+const MAX_LINK = 256;
+const MAX_BUTTON_LABEL = 32;
+const MAX_BUTTON_URL = 512;
+const MAX_BUTTONS = 2;
+const MAX_TIME = 2_147_483_647_000;
+
+/** `value` if it's `min..=max` UTF-16 units; longer, the first `max - 1` (never half a pair) and "…". */
+function cut(value: string, min: number, max: number): string | undefined {
+  if (value.length < min) return undefined;
+  if (value.length <= max) return value;
+  let head = "";
+  for (const char of value) {
+    if (head.length + char.length >= max) break;
+    head += char;
+  }
+  return `${head.trimEnd()}…`;
+}
+
+const text = (value: string | undefined): string | undefined =>
+  value === undefined ? undefined : cut(value.trim(), MIN_TEXT, MAX_TEXT);
+
+function image(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length <= MAX_IMAGE ? trimmed : undefined;
+}
+
+const link = (value: string | undefined, max: number): string | undefined =>
+  value !== undefined && /^https?:\/\//.test(value) && value.length <= max ? value : undefined;
+
+const time = (value: number | undefined): number | undefined =>
+  value !== undefined && Number.isInteger(value) && value >= 1 && value <= MAX_TIME
+    ? value
+    : undefined;
+
+/**
+ * Parousia's Activity as a Discord activity. The same rules as Desktop's
+ * `desktop/src/discord/activity.rs`, and both are tested against the cases in
+ * `adapters/discord/activity-mapping.json`. Discord turns down a whole
+ * activity over one field it doesn't accept, so a field it can't take is
+ * left out instead:
+ *
+ * - Text (name, details, state, image captions) is trimmed. Under 2 UTF-16
+ *   units it's left out; over 128 it's cut to 127 and ends in "…".
+ * - Images (asset keys or URLs): at most 256 units.
+ * - Links for the details and state lines: `http(s)`, at most 256.
+ * - Buttons: the first 2 with a label, cut to 32 like text; URL `http(s)`, at most 512.
+ * - Times: whole milliseconds from 1 through 2147483647000, the most the RPC
+ *   library behind Discord-RPC-Extension's app accepts.
+ */
 export function toDiscordPresence(activity: Activity): DiscordRpcExtensionPresence {
+  const buttons = (activity.buttons ?? [])
+    .map((button) => ({
+      label: cut(button.label.trim(), 1, MAX_BUTTON_LABEL),
+      url: link(button.url, MAX_BUTTON_URL),
+    }))
+    .filter((button): button is { label: string; url: string } => !!button.label && !!button.url)
+    .slice(0, MAX_BUTTONS);
+  // Fields left `undefined` disappear when the presence is serialized.
   return {
-    state: activity.state,
-    details: activity.details,
-    startTimestamp: activity.timestamps?.start,
+    name: text(activity.name),
+    details: text(activity.details),
+    detailsUrl: link(activity.detailsUrl, MAX_LINK),
+    state: text(activity.state),
+    stateUrl: link(activity.stateUrl, MAX_LINK),
+    startTimestamp: time(activity.timestamps?.start),
+    endTimestamp: time(activity.timestamps?.end),
+    largeImageKey: image(activity.assets?.largeImage),
+    largeImageText: text(activity.assets?.largeText),
+    smallImageKey: image(activity.assets?.smallImage),
+    smallImageText: text(activity.assets?.smallText),
+    buttons: buttons.length > 0 ? buttons : undefined,
     instance: true,
   };
 }
@@ -78,13 +164,13 @@ function currentExtensionId(): string {
 
 /**
  * Wires Parousia's current Activity to Discord-RPC-Extension's presence
- * protocol, if installed. A no-op until PAROUSIA_DISCORD_CLIENT_ID is set.
+ * protocol, if installed. A no-op until DISCORD_RPC_EXTENSION_CLIENT_ID is set.
  */
 export function startDiscordRpcExtensionCompat(getActivity: () => Activity | null): void {
-  if (!PAROUSIA_DISCORD_CLIENT_ID) {
+  if (!DISCORD_RPC_EXTENSION_CLIENT_ID) {
     return;
   }
-  const clientId = PAROUSIA_DISCORD_CLIENT_ID;
+  const clientId = DISCORD_RPC_EXTENSION_CLIENT_ID;
   const extensionId = currentExtensionId();
 
   chrome.runtime.sendMessage(extensionId, { mode: "passive" }, () => {

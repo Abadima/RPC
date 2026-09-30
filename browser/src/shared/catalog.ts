@@ -16,12 +16,21 @@ export function indexActivities(activities: readonly ActivityInfo[]): IndexedAct
   return activities
     .map((info) => ({
       info,
-      haystack: fold([info.name, info.description ?? "", ...info.hosts].join(" ")),
+      // "premid" finds PreMiD's; other names and tags find what a site's also called.
+      haystack: fold(
+        [
+          info.name,
+          info.description ?? "",
+          ...info.hosts,
+          ...(info.keywords ?? []),
+          info.source === "premid" ? "premid" : "",
+        ].join(" "),
+      ),
     }))
     .sort((a, b) => a.info.name.localeCompare(b.info.name, "en", { numeric: true }));
 }
 
-/** Every word of `query` has to appear somewhere in the name, description, or sites. */
+/** Every word of `query` has to appear somewhere in the name, description, sites, or keywords. */
 export function searchActivities(index: readonly IndexedActivity[], query: string): ActivityInfo[] {
   const words = fold(query).split(/\s+/).filter(Boolean);
   return index

@@ -5,11 +5,13 @@ on:
     branches: ["main", "pre-2.0"]
     paths:
       - "browser/**"
+      - "adapters/discord/**"
       - ".github/workflows/browser-ci.yml"
   pull_request:
     branches: ["main", "pre-2.0"]
     paths:
       - "browser/**"
+      - "adapters/discord/**"
       - ".github/workflows/browser-ci.yml"
 
 permissions:
@@ -43,7 +45,13 @@ jobs:
       - name: Format check
         run: bun run format:check
 
-      - name: Build (chromium, firefox, safari, userscript)
+      - name: Fetch Activity sources (main of each repository)
+        run: bun run activities:fetch
+
+      - name: Check Activities (native and PreMiD)
+        run: bun run activities:check
+
+      - name: Build (chromium, firefox, userscript)
         run: bun run build
 
       - name: Test

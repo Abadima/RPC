@@ -1,0 +1,22 @@
+{
+  "$schema": "../../../schemas/metadata.json",
+  "apiVersion": 1,
+  "id": "example-site",
+  "name": "Example Site",
+  "description": "Pages on example.site, for tests.",
+  "version": "1.0.0",
+  "authors": [
+    {
+      "name": "Test"
+    }
+  ],
+  "matches": ["https://example.site/*"],
+  "settings": [
+    {
+      "id": "prefix",
+      "title": "Prefix",
+      "type": "text",
+      "default": "Reading"
+    }
+  ]
+}

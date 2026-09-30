@@ -93,10 +93,16 @@ const defaultTimer: Timer = (run, delayMs) => {
  * open (to show whether the app is there) or while there's an activity to
  * show, retrying every 10 seconds, and letting go 30 seconds after the last
  * need.
+ *
+ * It can also yield: while `setYielding(true)`, it neither connects, probes,
+ * nor shows anything, and what it had shown is cleared at once. The
+ * background yields while Parousia Desktop is connected (or hasn't yet
+ * failed), so this app is only a fallback.
  */
 export class DiscordRpcServerLink implements PresenceTransport {
   readonly #options: Required<DiscordRpcServerOptions>;
   #enabled = false;
+  #yielding = false;
   #uiDemand = 0;
   #latest: Activity | null = null;
   #socket: ServerSocket | null = null;
@@ -128,6 +134,23 @@ export class DiscordRpcServerLink implements PresenceTransport {
     }
     this.#setState("idle", null);
     this.#evaluate();
+  }
+
+  /**
+   * Steps aside for, or takes back from, the primary transport: a yielding
+   * link clears what it showed, closes, and stays quiet whatever wants it.
+   */
+  setYielding(yielding: boolean): void {
+    if (yielding === this.#yielding) return;
+    this.#yielding = yielding;
+    if (!this.#enabled) return;
+    if (yielding) {
+      this.#clear();
+      this.#close();
+      this.#setState("idle", null);
+    } else {
+      this.#evaluate();
+    }
   }
 
   /** Keeps the link up while a UI shows its state; call the returned function when it closes. */
@@ -166,7 +189,7 @@ export class DiscordRpcServerLink implements PresenceTransport {
   }
 
   #wanted(): boolean {
-    return this.#enabled && (this.#uiDemand > 0 || this.#shareable() !== null);
+    return this.#enabled && !this.#yielding && (this.#uiDemand > 0 || this.#shareable() !== null);
   }
 
   #evaluate(): void {

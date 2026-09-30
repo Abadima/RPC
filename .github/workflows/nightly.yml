@@ -1,0 +1,94 @@
+name: Nightly
+
+# Every push to main that changes what ships builds the whole release (the
+# same build.yml a version tag uses) and publishes it as a pre-release named
+# for the commit, dev-<7 characters of the sha>, so a fix can be tried before
+# the next version. Only the newest few are kept: older ones are deleted with
+# their tags, and only ever ones named dev-<commit> that are pre-releases, never
+# a version. Run it by hand from main to build again; from any other branch it
+# is a dry run and publishes nothing.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "browser/**"
+      - "desktop/**"
+      - "assets/**"
+      - "scripts/**"
+      - "LICENSE"
+      - ".github/workflows/build.yml"
+      - ".github/workflows/nightly.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A push while one is running waits, and a newer push replaces one already
+# waiting, so a burst of commits builds the first and the last.
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build
+    uses: ./.github/workflows/build.yml
+
+  publish:
+    name: Publish
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Only this job can write. It builds nothing.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SOURCES: ${{ needs.build.outputs.sources }}
+      VERSION: ${{ needs.build.outputs.version }}
+      # Newest pre-releases kept.
+      KEEP: "5"
+    steps:
+      - name: Download
+        uses: actions/download-artifact@v8
+        with:
+          name: release-assets
+          path: release
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: release/*
+
+      - name: Create the pre-release
+        run: |
+          tag="dev-${GITHUB_SHA::7}"
+          # A re-run of the same commit has nothing to add.
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "$tag already exists"
+            exit 0
+          fi
+          subject="$(gh api "repos/$GH_REPO/commits/$GITHUB_SHA" --jq '.commit.message | split("\n")[0]')"
+          {
+            echo "An automatic build of \`main\` at [\`${GITHUB_SHA::7}\`](https://github.com/$GH_REPO/commit/$GITHUB_SHA): $subject"
+            echo
+            echo "It is not a release. It can be broken, and it is deleted once newer builds arrive. Desktop reports itself as $VERSION. Check downloads with \`sha256sum -c SHA256SUMS\`."
+            echo
+            echo "Activities built from: $SOURCES"
+          } > notes.md
+          gh release create "$tag" release/* --target "$GITHUB_SHA" --prerelease --latest=false --title "Parousia $tag" --notes-file notes.md
+
+      - name: Delete older pre-releases
+        run: |
+          gh release list --limit 200 --json tagName,isPrerelease,createdAt |
+            jq -r --argjson keep "$KEEP" '
+              [.[] | select(.isPrerelease and (.tagName | test("^dev-[0-9a-f]{7}$")))]
+              | sort_by(.createdAt) | reverse | .[$keep:][].tagName' |
+            while read -r old; do
+              echo "deleting $old"
+              gh release delete "$old" --cleanup-tag --yes
+            done

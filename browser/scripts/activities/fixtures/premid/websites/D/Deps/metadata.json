@@ -1,0 +1,20 @@
+{
+  "$schema": "https://schemas.premid.app/metadata/1.16",
+  "apiVersion": 1,
+  "author": {
+    "name": "Test",
+    "id": "1"
+  },
+  "service": "Deps",
+  "description": {
+    "en": "Deps, for tests."
+  },
+  "url": "deps.example",
+  "regExp": "^https?[:][/][/]deps[.]example[/]",
+  "version": "1.0.0",
+  "logo": "https://cdn.example/deps.png",
+  "thumbnail": "https://cdn.example/deps-thumb.png",
+  "color": "#000000",
+  "category": "other",
+  "tags": ["test"]
+}

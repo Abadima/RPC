@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="color-scheme" content="dark" />
     <title>Parousia</title>
+    <script src="theme.js"></script>
     <link rel="stylesheet" href="theme.css" />
     <link rel="stylesheet" href="popup.css" />
   </head>
@@ -48,10 +49,31 @@
       </header>
 
       <main class="body" id="home-view">
-        <section class="section" id="activity-view" aria-labelledby="activity-label">
-          <h2 class="section-label" id="activity-label">Current activity</h2>
+        <section class="section" id="activity-view" aria-labelledby="activity-label" hidden>
+          <div class="section-head">
+            <h2 class="section-label" id="activity-label">Current activity</h2>
+            <button class="link-button" type="button" id="configure-button" hidden>
+              Configure activity
+            </button>
+          </div>
           <div class="content" id="content" aria-live="polite"></div>
         </section>
+
+        <!-- The tab's site has an Activity that isn't running: say why, and fix it in one click. -->
+        <section class="suggestion" id="suggestion-view" aria-labelledby="suggestion-name" hidden>
+          <div class="suggestion-main">
+            <span id="suggestion-icon"></span>
+            <div class="row-text">
+              <span class="row-title" id="suggestion-name"></span>
+              <span class="row-subtitle" id="suggestion-site"></span>
+            </div>
+            <span class="pill pill-quiet" id="suggestion-source" hidden>PreMiD</span>
+          </div>
+          <p class="suggestion-note" id="suggestion-note" role="status"></p>
+          <button class="button button-block" type="button" id="suggestion-action"></button>
+        </section>
+
+        <p class="idle-note" id="idle-view" role="status" hidden></p>
 
         <section class="offline" id="offline-view" hidden>
           <div class="banner" id="connection-help" role="status">
@@ -74,6 +96,11 @@
       <main class="body" id="settings-view" hidden>
         <h2 class="section-label" id="settings-heading">Preferences</h2>
         <div id="settings-slot"></div>
+      </main>
+
+      <main class="body" id="configure-view" hidden>
+        <p class="settings-hint">Changes apply right away.</p>
+        <div id="configure-slot"></div>
       </main>
 
       <footer class="footer">

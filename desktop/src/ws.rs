@@ -247,7 +247,7 @@ mod tests {
         let mut socket = connect(port, "/ws", Some(CHROMIUM)).unwrap();
         socket
             .write(Message::Text(
-                r#"{"type":"hello","protocolVersion":4,"name":"Flood"}"#.into(),
+                r#"{"type":"hello","protocolVersion":6,"name":"Flood"}"#.into(),
             ))
             .unwrap();
         // More than tungstenite's 128 KiB read buffer takes in at once, so
@@ -272,7 +272,7 @@ mod tests {
         let mut socket = connect(port, "/ws", Some(CHROMIUM)).unwrap();
         socket
             .send(Message::Text(
-                r#"{"type":"hello","protocolVersion":4,"name":"Chromium on Linux"}"#.into(),
+                r#"{"type":"hello","protocolVersion":6,"name":"Chromium on Linux"}"#.into(),
             ))
             .unwrap();
         assert_eq!(read_json(&mut socket)["type"], "welcome");

@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 
 use crate::hub::{Closer, Hub};
 use crate::identity::{ClientKind, Peer};
+use crate::platform::Platforms;
 use crate::presence::Presence;
 use crate::protocol::{
     self, ClientMessage, Envelope, PROTOCOL_VERSION, RejectReason, ServerMessage,
@@ -108,9 +109,12 @@ fn serve(channel: &mut impl Channel, peer: &Peer, hub: &Hub, id: u64) {
             reason: RejectReason::Malformed,
         };
         let reply = match serde_json::from_str::<ClientMessage>(&text) {
-            Ok(ClientMessage::Presence { presence }) => match Presence::try_from(*presence) {
+            Ok(ClientMessage::Presence {
+                presence,
+                platforms,
+            }) => match Presence::try_from(*presence) {
                 Ok(presence) => {
-                    hub.update_presence(id, presence);
+                    hub.update_presence(id, presence, Platforms::from_wire(platforms.as_deref()));
                     None
                 }
                 Err(_) => Some(malformed),
@@ -211,7 +215,7 @@ pub mod tests {
         }
     }
 
-    const HELLO: &str = r#"{"type":"hello","protocolVersion":4,"name":"Chromium on Linux"}"#;
+    const HELLO: &str = r#"{"type":"hello","protocolVersion":6,"name":"Chromium on Linux"}"#;
 
     fn peer(same_user: bool) -> Peer {
         Peer {
@@ -266,7 +270,15 @@ pub mod tests {
                 "reject:unsupported_version",
             ),
             (
-                r#"{"type":"hello","protocolVersion":4}"#,
+                r#"{"type":"hello","protocolVersion":4,"name":"Phase 3 build"}"#,
+                "reject:unsupported_version",
+            ),
+            (
+                r#"{"type":"hello","protocolVersion":5,"name":"Sends page addresses"}"#,
+                "reject:unsupported_version",
+            ),
+            (
+                r#"{"type":"hello","protocolVersion":6}"#,
                 "reject:malformed",
             ),
             ("garbage", "reject:malformed"),
@@ -296,7 +308,7 @@ pub mod tests {
         let hub = test_hub();
         let long = "x".repeat(600);
         let presence = format!(
-            r#"{{"type":"presence","presence":{{"activity":{{"id":"a","name":"{long}","url":"https://a.example"}},"updatedAt":1}}}}"#
+            r#"{{"type":"presence","presence":{{"activity":{{"id":"a","name":"{long}"}},"updatedAt":1}}}}"#
         );
         let mut channel = ScriptedChannel::new(&[HELLO, &presence, r#"{"type":"ping"}"#]);
         run(&mut channel, &peer(true), &hub);

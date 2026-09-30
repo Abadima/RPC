@@ -16,49 +16,167 @@
   src: url("fonts/poppins-600.woff2") format("woff2");
 }
 
+/*
+ * Tokens, in two layers. Each theme block sets every primitive (so no theme
+ * falls back on another's colors); the shared layer derives washes and lines
+ * from them; components use tokens only. A theme applies to <html> through
+ * data-theme (set by theme.js before the first paint) or to any element
+ * inside it: Settings > Appearance draws each theme's preview this way.
+ * `bun run contrast` checks every pair the views draw against WCAG 2.2 AA.
+ */
+
 :root {
   color-scheme: dark;
 
-  /* The Parousia palette. Everything below derives from these five. */
-  --cocoa: #906861;
-  --espresso: #2b2322;
-  --linen: #fbf9f8;
-  --almond: #e5ddd9;
-  --sage: #6b7b6e;
+  --font: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, monospace;
+  /* Browsers round outline widths down to whole pixels: 0.1538rem alone is 1.9994px, drawn as 1px. */
+  --focus-width: max(2px, 0.1538rem);
+}
 
-  --accent: var(--cocoa);
-  --accent-hover: #9d766f;
-  /* Cocoa and Sage are too dark for small text on Espresso; these lighter tints of them pass AA. */
-  --accent-text: #b59994;
-  --good-text: #9da8a1;
-  --accent-soft: rgb(144 104 97 / 16%);
-  --accent-line: rgb(144 104 97 / 38%);
+/* Derived from the primitives. Also on [data-theme], so a themed element recomputes them. */
+:root,
+[data-theme] {
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --accent-line: color-mix(in srgb, var(--accent) 40%, transparent);
+  --accent-glow: color-mix(in srgb, var(--accent) 10%, transparent);
+  /* Cards and rows are outlined in the accent, as in the design; decorative, so faint. */
+  --line: color-mix(in srgb, var(--accent) 30%, transparent);
+  --border: color-mix(in srgb, var(--ink) 10%, transparent);
+  --border-strong: color-mix(in srgb, var(--ink) 18%, transparent);
+  --hover: color-mix(in srgb, var(--ink) 6%, transparent);
+  --neutral-soft: color-mix(in srgb, var(--ink) 10%, transparent);
+  --track: color-mix(in srgb, var(--ink) 16%, transparent);
+  --good-soft: color-mix(in srgb, var(--good) 18%, transparent);
+  --warn-soft: color-mix(in srgb, var(--warn) 12%, transparent);
+  --warn-wash: color-mix(in srgb, var(--warn) 7%, transparent);
+  --warn-line: color-mix(in srgb, var(--warn) 45%, transparent);
+  --bad-soft: color-mix(in srgb, var(--bad) 12%, transparent);
+  --bad-wash: color-mix(in srgb, var(--bad) 7%, transparent);
+  --bad-line: color-mix(in srgb, var(--bad) 45%, transparent);
+}
 
-  --bg: var(--espresso);
+/*
+ * Atelier, the default: the Parousia palette. Vintage Cocoa #906861, Deep
+ * Espresso #2b2322, Warm Linen #fbf9f8, Muted Almond #e5ddd9, Earthy Sage
+ * #6b7b6e; the rest are tints and shades of them. Warnings and errors need
+ * colors the palette doesn't have; these are warmed to sit with it.
+ * Theme blocks share one specificity, so the later ones must stay later.
+ */
+:root,
+[data-theme="atelier"] {
+  --bg: #2b2322;
   --surface: #322928;
   --surface-raised: #3b3130;
   --field: #1f1a19;
-  --border: rgb(229 221 217 / 10%);
-  --border-strong: rgb(229 221 217 / 18%);
-  /* Cards, rows, and fields are outlined in Cocoa, as in the design. */
-  --line: rgb(144 104 97 / 30%);
+  /* What lines and washes are tinted with. */
+  --ink: #e5ddd9;
 
-  --text: var(--linen);
-  --text-muted: rgb(229 221 217 / 78%);
-  --text-faint: rgb(229 221 217 / 58%);
+  --text: #fbf9f8;
+  --text-muted: #bcb4b1;
+  --text-faint: #a0958f;
 
-  --good: var(--sage);
-  /* Warnings and errors need colors the palette doesn't have; these are warmed to sit with it. */
+  --accent: #906861;
+  /* Darker on hover: Linen on a lighter Cocoa would fall under AA. */
+  --accent-hover: #7f5b55;
+  --on-accent: #fbf9f8;
+  /* Cocoa and Sage are too dark for small text on Espresso; these lighter tints pass AA. */
+  --accent-text: #b89c97;
+  /* Outlines marking what's selected: Cocoa itself is 2.9:1 on a card, just under AA. */
+  --selection: #976d66;
+  --focus: #cdb2ac;
+  /* Outlines that show where a field is: at least 3:1 against what's around them. */
+  --control-line: #8a726d;
+  /* A light over the accent fill; none here. */
+  --sheen: none;
+
+  --good: #6b7b6e;
+  --good-text: #a3b9a8;
   --warn: #d4a24c;
+  --warn-text: #d4a24c;
   --bad: #d9695f;
-  --idle: rgb(229 221 217 / 35%);
+  --bad-text: #e8867c;
 
   --radius-card: 0.9231rem;
   --radius-row: 0.6154rem;
   --radius-field: 0.4615rem;
+}
 
-  --font: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, monospace;
+/*
+ * Botanique: a pine forest at dusk. Deep green grounds cooled with slate,
+ * moss for the accent, and status colors pulled away from the moss (jade
+ * for connected, ochre, terracotta) so they still read apart. The moss is
+ * light enough to carry dark text, which keeps buttons calm and legible.
+ */
+[data-theme="botanique"] {
+  --bg: #16221f;
+  --surface: #1c2a26;
+  --surface-raised: #24342f;
+  --field: #101a17;
+  --ink: #d2e0d8;
+
+  --text: #eef4f0;
+  --text-muted: #b2c3ba;
+  --text-faint: #93a79c;
+
+  --accent: #8fa872;
+  --accent-hover: #a2ba85;
+  --on-accent: #101a15;
+  --accent-text: #adc493;
+  --selection: var(--accent);
+  --focus: #c8dcb0;
+  --control-line: #6c8579;
+  --sheen: none;
+
+  --good: #52b394;
+  --good-text: #74c9ae;
+  --warn: #d9ab5c;
+  --warn-text: #dcb068;
+  --bad: #e07b6d;
+  --bad-text: #eb9185;
+
+  --radius-card: 1.0769rem;
+  --radius-row: 0.7692rem;
+  --radius-field: 0.6154rem;
+}
+
+/*
+ * Monolith: an architect's studio. Warm charcoal and raw concrete, bone
+ * white for text, and brushed bronze as the only metal, with a faint light
+ * across its fills. Corners are tight. Warnings are signal yellow and
+ * connected is verdigris, the patina bronze takes on, so neither is
+ * mistaken for the bronze.
+ */
+[data-theme="monolith"] {
+  --bg: #1c1b19;
+  --surface: #242220;
+  --surface-raised: #2e2b28;
+  --field: #151412;
+  --ink: #d9d3c9;
+
+  --text: #f3eee5;
+  --text-muted: #c0b9ae;
+  --text-faint: #a29a8f;
+
+  --accent: #b08a5c;
+  --accent-hover: #c09a6c;
+  --on-accent: #17140f;
+  --accent-text: #d0ae85;
+  --selection: var(--accent);
+  --focus: #ece2d0;
+  --control-line: #7e776e;
+  --sheen: linear-gradient(180deg, rgb(255 250 240 / 14%), transparent 70%);
+
+  --good: #74a893;
+  --good-text: #93c2ae;
+  --warn: #e4c04e;
+  --warn-text: #e4c04e;
+  --bad: #e2725f;
+  --bad-text: #ec8a79;
+
+  --radius-card: 0.3077rem;
+  --radius-row: 0.2308rem;
+  --radius-field: 0.1538rem;
 }
 
 * {
@@ -85,7 +203,7 @@ p {
 }
 
 :focus-visible {
-  outline: 0.1538rem solid var(--accent-text);
+  outline: var(--focus-width) solid var(--focus);
   outline-offset: 0.1538rem;
 }
 
@@ -142,26 +260,31 @@ p {
 
 /* Status: one tone vocabulary for dots and badges. */
 
+/* Idle is a hollow ring, the rest filled: told apart by shape as well as color. */
 .status-dot {
   width: 0.4615rem;
   height: 0.4615rem;
+  border: 0.1154rem solid var(--text-faint);
   border-radius: 76.8462rem;
-  background: var(--idle);
   flex-shrink: 0;
 }
 
 .status-dot[data-tone="good"] {
+  border-color: var(--good);
   background: var(--good);
-  box-shadow: 0 0 0 0.2308rem rgb(107 123 110 / 16%);
+  box-shadow: 0 0 0 0.2308rem var(--good-soft);
 }
 .status-dot[data-tone="busy"] {
+  border-color: var(--accent-text);
   background: var(--accent-text);
   animation: pulse 1.2s ease-in-out infinite;
 }
 .status-dot[data-tone="warn"] {
+  border-color: var(--warn);
   background: var(--warn);
 }
 .status-dot[data-tone="bad"] {
+  border-color: var(--bad);
   background: var(--bad);
 }
 
@@ -176,7 +299,7 @@ p {
   align-items: center;
   padding: 0.2308rem 0.6154rem;
   border-radius: 76.8462rem;
-  background: rgb(229 221 217 / 10%);
+  background: var(--neutral-soft);
   color: var(--text-muted);
   font-size: 0.7692rem;
   font-weight: 600;
@@ -186,7 +309,7 @@ p {
   white-space: nowrap;
 }
 .badge[data-tone="good"] {
-  background: rgb(107 123 110 / 18%);
+  background: var(--good-soft);
   color: var(--good-text);
 }
 .badge[data-tone="busy"] {
@@ -194,12 +317,12 @@ p {
   color: var(--accent-text);
 }
 .badge[data-tone="warn"] {
-  background: rgb(212 162 76 / 12%);
-  color: var(--warn);
+  background: var(--warn-soft);
+  color: var(--warn-text);
 }
 .badge[data-tone="bad"] {
-  background: rgb(217 105 95 / 12%);
-  color: var(--bad);
+  background: var(--bad-soft);
+  color: var(--bad-text);
 }
 
 /* Controls */
@@ -222,7 +345,7 @@ p {
     color 120ms;
 }
 .icon-button:hover {
-  background: rgb(229 221 217 / 6%);
+  background: var(--hover);
   color: var(--text);
 }
 
@@ -234,15 +357,16 @@ p {
   padding: 0.6923rem 1.0769rem;
   border: 1px solid transparent;
   border-radius: var(--radius-row);
-  background: var(--accent);
-  color: var(--linen);
+  background-color: var(--accent);
+  background-image: var(--sheen);
+  color: var(--on-accent);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
   transition: background-color 120ms;
 }
 .button:hover {
-  background: var(--accent-hover);
+  background-color: var(--accent-hover);
 }
 .button-quiet {
   background: none;
@@ -250,7 +374,7 @@ p {
   color: var(--text);
 }
 .button-quiet:hover {
-  background: rgb(229 221 217 / 5%);
+  background: var(--hover);
 }
 
 .link-button {
@@ -277,7 +401,7 @@ p {
   height: 1.5385rem;
   margin: 0;
   border-radius: 76.8462rem;
-  background: rgb(229 221 217 / 12%);
+  background: var(--track);
   cursor: pointer;
   transition: background-color 150ms;
 }
@@ -295,12 +419,85 @@ p {
 .switch:checked {
   background: var(--accent);
 }
+/* On the accent fill the knob takes the accent's own text color, which some themes keep dark. */
 .switch:checked::after {
+  background: var(--on-accent);
   transform: translateX(1.2308rem);
 }
 .switch:disabled {
   cursor: not-allowed;
   opacity: 0.4;
+}
+
+/* A radio drawn to match: an empty ring, or a ring around a dot once chosen. */
+.radio {
+  appearance: none;
+  flex-shrink: 0;
+  width: 1.3846rem;
+  height: 1.3846rem;
+  margin: 0;
+  border: 0.1538rem solid var(--control-line);
+  border-radius: 76.8462rem;
+  background: var(--field);
+  cursor: pointer;
+}
+.radio:hover {
+  border-color: var(--accent);
+}
+.radio:checked {
+  border-color: var(--selection);
+  background: var(--selection);
+  box-shadow: inset 0 0 0 0.2308rem var(--field);
+}
+
+/* Settings > Appearance: each row shows its theme in that theme's own tokens. */
+.theme-option {
+  border-radius: calc(var(--radius-card) - 1px);
+}
+.theme-option:has(:checked) {
+  background: var(--accent-soft);
+}
+
+.theme-preview {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  justify-content: center;
+  gap: 0.3077rem;
+  width: 4.9231rem;
+  height: 3.5385rem;
+  padding: 0.4615rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-row);
+  background: var(--bg);
+}
+.theme-preview-card {
+  display: flex;
+  align-items: center;
+  gap: 0.3077rem;
+  padding: 0.3077rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-field);
+  background: var(--surface);
+}
+.theme-preview-dot {
+  width: 0.4615rem;
+  height: 0.4615rem;
+  border-radius: 76.8462rem;
+  background: var(--good);
+}
+.theme-preview-line {
+  flex: 1;
+  height: 0.3077rem;
+  border-radius: 76.8462rem;
+  background: var(--text-muted);
+}
+.theme-preview-button {
+  width: 55%;
+  height: 0.6923rem;
+  border-radius: var(--radius-field);
+  background-color: var(--accent);
+  background-image: var(--sheen);
 }
 
 /* Surfaces */
@@ -373,25 +570,25 @@ button.row {
   flex-direction: column;
   gap: 0.9231rem;
   padding: 1.0769rem;
-  border: 1px solid rgb(217 105 95 / 45%);
+  border: 1px solid var(--bad-line);
   border-radius: var(--radius-card);
-  background: rgb(217 105 95 / 7%);
+  background: var(--bad-wash);
 }
 .banner[data-tone="warn"] {
-  border-color: rgb(212 162 76 / 45%);
-  background: rgb(212 162 76 / 7%);
+  border-color: var(--warn-line);
+  background: var(--warn-wash);
 }
 .banner-main {
   display: flex;
   gap: 0.9231rem;
 }
 .banner-icon {
-  color: var(--bad);
+  color: var(--bad-text);
   font-size: 1.3846rem;
   line-height: 1.2;
 }
 .banner[data-tone="warn"] .banner-icon {
-  color: var(--warn);
+  color: var(--warn-text);
 }
 .banner-text {
   display: flex;
@@ -514,7 +711,7 @@ button.row {
 }
 
 .category[aria-current] {
-  border-color: var(--accent);
+  border-color: var(--selection);
   background: var(--accent-soft);
 }
 
@@ -528,6 +725,76 @@ button.row {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.pill-warn {
+  background: var(--warn-soft);
+  color: var(--warn-text);
+}
+
+.pill-quiet {
+  background: var(--field);
+  color: var(--text-muted);
+}
+
+/* The letter shows until the image loads, and for good if it doesn't. */
+.activity-icon {
+  position: relative;
+  width: 2.4615rem;
+  height: 2.4615rem;
+  overflow: hidden;
+}
+.activity-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+.activity-icon[data-icon="image"] {
+  background: var(--field);
+}
+.activity-icon[data-icon="image"] .activity-image {
+  opacity: 1;
+}
+.activity-icon[data-icon="image"] .activity-letter {
+  visibility: hidden;
+}
+
+/* One of a few, like a radio group: which implementation of a website runs. */
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3077rem;
+  padding: 0.3077rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-row);
+  background: var(--field);
+}
+.segment {
+  flex: 1;
+  min-width: 7rem;
+  padding: 0.6154rem 0.9231rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-field);
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.segment:hover {
+  color: var(--text);
+}
+.segment[aria-checked="true"] {
+  border-color: var(--selection);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.segment:disabled {
+  cursor: progress;
 }
 
 .settings-page-body {
@@ -605,7 +872,7 @@ label.setting {
   align-items: center;
   gap: 0.3077rem;
   padding: 0.2308rem;
-  border: 1px solid var(--line);
+  border: 1px solid var(--control-line);
   border-radius: var(--radius-field);
   background: var(--field);
 }
@@ -653,7 +920,7 @@ label.setting {
   appearance: none;
   width: 100%;
   padding: 0.5385rem 2.4615rem 0.5385rem 0.9231rem;
-  border: 1px solid var(--line);
+  border: 1px solid var(--control-line);
   border-radius: var(--radius-field);
   background: var(--field);
   color: var(--text);
@@ -661,7 +928,7 @@ label.setting {
   cursor: pointer;
 }
 .select select:hover {
-  border-color: var(--accent-line);
+  border-color: var(--accent);
 }
 .select .icon {
   position: absolute;
@@ -669,6 +936,26 @@ label.setting {
   color: var(--text-muted);
   font-size: 0.8462rem;
   pointer-events: none;
+}
+
+.settings-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9231rem;
+}
+
+.text-field {
+  width: 12.3077rem;
+  padding: 0.5385rem 0.9231rem;
+  border: 1px solid var(--control-line);
+  border-radius: var(--radius-field);
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+}
+.text-field:hover,
+.text-field:focus {
+  border-color: var(--accent);
 }
 
 .info-note,
@@ -684,8 +971,8 @@ label.setting {
   margin: 0 1.0769rem 1.0769rem;
   padding: 0.7692rem 0.9231rem;
   border-radius: var(--radius-row);
-  background: rgb(212 162 76 / 8%);
-  color: var(--warn);
+  background: var(--warn-wash);
+  color: var(--warn-text);
   font-size: 0.9231rem;
 }
 
@@ -758,7 +1045,7 @@ code {
   font-size: 0.92em;
 }
 
-/* Shared presence view (packages/presence-view) */
+/* Presence view (shared/presence-view.ts) */
 
 .presence-card {
   display: flex;
@@ -768,7 +1055,7 @@ code {
   padding: 1.2308rem;
   border: 1px solid var(--accent-line);
   border-radius: var(--radius-card);
-  background: linear-gradient(160deg, rgb(144 104 97 / 10%), transparent 55%), var(--surface);
+  background: linear-gradient(160deg, var(--accent-glow), transparent 55%), var(--surface);
 }
 
 .presence-top {
@@ -815,7 +1102,7 @@ code {
   height: 0.6154rem;
   border-radius: 76.8462rem;
   background: var(--good);
-  box-shadow: 0 0 0 0.3077rem rgb(107 123 110 / 15%);
+  box-shadow: 0 0 0 0.3077rem var(--good-soft);
 }
 
 .presence-body {

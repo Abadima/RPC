@@ -1,0 +1,8 @@
+# Statically link the C runtime so a Windows exe needs no Visual C++
+# Redistributable. Scoped to the Windows targets: Linux release builds get
+# the same result from musl, which links statically by default.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

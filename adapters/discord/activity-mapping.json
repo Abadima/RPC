@@ -1,0 +1,256 @@
+{
+  "$comment": "Parousia Activity -> Discord RPC activity. Checked by desktop/src/discord/activity.rs and browser/src/compat/discord-rpc-extension.test.ts; the rules are in both files.",
+  "cases": [
+    {
+      "name": "everything Discord shows",
+      "activity": {
+        "id": "jena",
+        "name": "Jena Hub",
+        "details": "Playing Chess",
+        "state": "In the Arcade",
+        "detailsUrl": "https://jena.systems/apps/3851919",
+        "stateUrl": "https://jena.systems/apps",
+        "discordClientId": "1553980756731363428",
+        "assets": {
+          "largeImage": "https://jena.systems/icons/icon-512.png",
+          "largeText": "Jena Hub",
+          "smallImage": "parousia-square",
+          "smallText": "Parousia"
+        },
+        "timestamps": {
+          "start": 1790000000000,
+          "end": 1790000600000
+        },
+        "buttons": [
+          {
+            "label": "Play Chess",
+            "url": "https://jena.systems/apps/3851919"
+          }
+        ]
+      },
+      "discord": {
+        "name": "Jena Hub",
+        "details": "Playing Chess",
+        "details_url": "https://jena.systems/apps/3851919",
+        "state": "In the Arcade",
+        "state_url": "https://jena.systems/apps",
+        "timestamps": {
+          "start": 1790000000000,
+          "end": 1790000600000
+        },
+        "assets": {
+          "large_image": "https://jena.systems/icons/icon-512.png",
+          "large_text": "Jena Hub",
+          "small_image": "parousia-square",
+          "small_text": "Parousia"
+        },
+        "buttons": [
+          {
+            "label": "Play Chess",
+            "url": "https://jena.systems/apps/3851919"
+          }
+        ],
+        "instance": true
+      }
+    },
+    {
+      "name": "only the required fields",
+      "activity": {
+        "id": "jena",
+        "name": "Jena Hub"
+      },
+      "discord": {
+        "name": "Jena Hub",
+        "instance": true
+      }
+    },
+    {
+      "name": "text under two characters or blank is left out",
+      "activity": {
+        "id": "jena",
+        "name": "J",
+        "details": "x",
+        "state": "   ",
+        "assets": {
+          "largeText": " ",
+          "smallText": "ok"
+        }
+      },
+      "discord": {
+        "assets": {
+          "small_text": "ok"
+        },
+        "instance": true
+      }
+    },
+    {
+      "name": "text is trimmed",
+      "activity": {
+        "id": "jena",
+        "name": "Jena Hub",
+        "details": "  Browsing commands  "
+      },
+      "discord": {
+        "name": "Jena Hub",
+        "details": "Browsing commands",
+        "instance": true
+      }
+    },
+    {
+      "name": "long text is cut to 128 with an ellipsis",
+      "activity": {
+        "id": "jena",
+        "name": "Jena Hub",
+        "details": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb😀cc"
+      },
+      "discord": {
+        "name": "Jena Hub",
+        "details": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…",
+        "state": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb…",
+        "instance": true
+      }
+    },
+    {
+      "name": "no space before the ellipsis",
+      "activity": {
+        "id": "jena",
+        "name": "Jena Hub",
+        "details": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbb"
+      },
+      "discord": {
+        "name": "Jena Hub",
+        "details": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…",
+        "instance": true
+      }
+    },
+    {
+      "name": "times outside what Discord takes are left out",
+      "activity": {
+        "id": "jena",
+        "name": "Jena Hub",
+        "timestamps": {
+          "start": 0,
+          "end": 2147483647001
+        }
+      },
+      "discord": {
+        "name": "Jena Hub",
+        "instance": true
+      }
+    },
+    {
+      "name": "times at the edges are kept",
+      "activity": {
+        "id": "jena",
+        "name": "Jena Hub",
+        "timestamps": {
+          "start": 1,
+          "end": 2147483647000
+        }
+      },
+      "discord": {
+        "name": "Jena Hub",
+        "timestamps": {
+          "start": 1,
+          "end": 2147483647000
+        },
+        "instance": true
+      }
+    },
+    {
+      "name": "images over 256 characters are left out",
+      "activity": {
+        "id": "jena",
+        "name": "Jena Hub",
+        "assets": {
+          "largeImage": "https://example.com/iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
+          "smallImage": "https://example.com/iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii"
+        }
+      },
+      "discord": {
+        "name": "Jena Hub",
+        "assets": {
+          "small_image": "https://example.com/iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii"
+        },
+        "instance": true
+      }
+    },
+    {
+      "name": "links over 256 characters are left out",
+      "activity": {
+        "id": "jena",
+        "name": "Jena Hub",
+        "details": "Reading",
+        "detailsUrl": "https://example.com/ppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
+        "stateUrl": "https://example.com/pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
+        "state": "A page"
+      },
+      "discord": {
+        "name": "Jena Hub",
+        "details": "Reading",
+        "state": "A page",
+        "state_url": "https://example.com/pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
+        "instance": true
+      }
+    },
+    {
+      "name": "button labels are cut to 32 and blank ones dropped",
+      "activity": {
+        "id": "jena",
+        "name": "Jena Hub",
+        "buttons": [
+          {
+            "label": "   ",
+            "url": "https://jena.systems/"
+          },
+          {
+            "label": "Open the full Jena Hub arcade game list",
+            "url": "https://jena.systems/apps"
+          }
+        ]
+      },
+      "discord": {
+        "name": "Jena Hub",
+        "buttons": [
+          {
+            "label": "Open the full Jena Hub arcade g…",
+            "url": "https://jena.systems/apps"
+          }
+        ],
+        "instance": true
+      }
+    },
+    {
+      "name": "http and https buttons",
+      "activity": {
+        "id": "jena",
+        "name": "Jena Hub",
+        "buttons": [
+          {
+            "label": "One",
+            "url": "https://a.example/"
+          },
+          {
+            "label": "Two",
+            "url": "http://b.example/"
+          }
+        ]
+      },
+      "discord": {
+        "name": "Jena Hub",
+        "buttons": [
+          {
+            "label": "One",
+            "url": "https://a.example/"
+          },
+          {
+            "label": "Two",
+            "url": "http://b.example/"
+          }
+        ],
+        "instance": true
+      }
+    }
+  ]
+}

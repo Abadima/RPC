@@ -86,6 +86,7 @@ describe("DiscordRpcServerLink", () => {
         clientId: "1234567890",
         extId: "parousia-test",
         presence: {
+          name: "Jena",
           details: "Reading a page",
           state: "Documentation",
           startTimestamp: 1_700_000_000_000,
@@ -172,5 +173,77 @@ describe("DiscordRpcServerLink", () => {
     expect(last()?.closed).toBe(true);
     expect(link.getState()).toEqual({ status: "off", version: null });
     expect(timers.pending()).toBe(0);
+  });
+
+  test("yielding: no connecting or probing whatever wants it, and nothing left showing", () => {
+    const { link, timers, sockets } = harness();
+    link.setEnabled(true);
+    link.setYielding(true);
+    // A popup being open or an activity being there doesn't make it connect.
+    const release = link.acquire();
+    link.send(createPresence(jena));
+    timers.advance(120_000);
+    expect(sockets).toHaveLength(0);
+    expect(link.getState()).toEqual({ status: "idle", version: null });
+    release();
+  });
+
+  test("yielding while connected clears what it showed and closes at once, leaving no timers", () => {
+    const { link, timers, last, sockets } = harness();
+    link.setEnabled(true);
+    link.send(createPresence(jena));
+    last()?.accept();
+    expect(last()?.sent).toHaveLength(1);
+
+    link.setYielding(true);
+    expect(last()?.sent.at(-1)).toEqual({ action: "disconnect" });
+    expect(last()?.closed).toBe(true);
+    expect(link.getState()).toEqual({ status: "idle", version: null });
+    expect(timers.pending()).toBe(0);
+    timers.advance(120_000);
+    expect(sockets).toHaveLength(1);
+  });
+
+  test("yielding while retrying stops the retries", () => {
+    const { link, timers, sockets } = harness();
+    link.setEnabled(true);
+    link.acquire();
+    sockets[0]?.refuse();
+    expect(timers.pending()).toBe(1);
+    link.setYielding(true);
+    expect(timers.pending()).toBe(0);
+    timers.advance(60_000);
+    expect(sockets).toHaveLength(1);
+  });
+
+  test("taking back shows the latest activity on one new connection, however often it flips", () => {
+    const { link, sockets, last } = harness();
+    link.setEnabled(true);
+    link.setYielding(true);
+    link.send(createPresence(jena));
+    expect(sockets).toHaveLength(0);
+
+    link.setYielding(false);
+    link.setYielding(false);
+    expect(sockets).toHaveLength(1);
+    last()?.accept();
+    expect(last()?.sent.at(-1)).toMatchObject({ presence: { name: "Jena" } });
+
+    link.setYielding(true);
+    link.setYielding(true);
+    link.setYielding(false);
+    expect(sockets).toHaveLength(2);
+  });
+
+  test("a yielding link that is enabled later, or disabled, stays quiet and consistent", () => {
+    const { link, sockets } = harness();
+    link.setYielding(true);
+    link.setEnabled(true);
+    link.send(createPresence(jena));
+    expect(sockets).toHaveLength(0);
+    link.setEnabled(false);
+    link.setYielding(false);
+    expect(sockets).toHaveLength(0);
+    expect(link.getState().status).toBe("off");
   });
 });

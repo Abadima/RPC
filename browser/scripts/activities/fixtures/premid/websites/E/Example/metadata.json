@@ -1,0 +1,84 @@
+{
+  "$schema": "https://schemas.premid.app/metadata/1.16",
+  "apiVersion": 1,
+  "author": {
+    "name": "Test",
+    "id": "1"
+  },
+  "service": "Example",
+  "description": {
+    "en": "Example, for tests."
+  },
+  "url": ["example.com", "www.example.com"],
+  "regExp": "^https?[:][/][/](www[.])?example[.]com[/]",
+  "version": "1.0.0",
+  "logo": "https://cdn.example/example.png",
+  "thumbnail": "https://cdn.example/example-thumb.png",
+  "color": "#000000",
+  "category": "videos",
+  "tags": ["video"],
+  "altnames": ["Ejemplo"],
+  "iframe": true,
+  "iFrameRegExp": "^https?[:][/][/]player[.]example[/]",
+  "settings": [
+    {
+      "id": "lang",
+      "multiLanguage": true
+    },
+    {
+      "id": "buttons",
+      "title": "Show Buttons",
+      "icon": "fad fa-link",
+      "value": true
+    },
+    {
+      "id": "cover",
+      "title": "Cover",
+      "icon": "fad fa-image",
+      "value": 1,
+      "values": ["Logo", "Cover"],
+      "if": {
+        "buttons": true
+      }
+    },
+    {
+      "id": "format",
+      "title": "Format",
+      "icon": "fad fa-pen",
+      "value": "%title%",
+      "placeholder": "%title%"
+    },
+    {
+      "id": "ttl",
+      "title": "Cache TTL (minutes)",
+      "icon": "fad fa-clock",
+      "value": 360
+    },
+    {
+      "id": "mode",
+      "title": "Cache mode",
+      "icon": "fad fa-database",
+      "value": "session",
+      "values": ["off", "session"]
+    },
+    {
+      "id": "polish",
+      "title": "Polish only",
+      "icon": "fad fa-flag",
+      "value": false,
+      "if": {
+        "lang": "pl"
+      }
+    },
+    {
+      "id": "english",
+      "title": "English only",
+      "icon": "fad fa-flag",
+      "value": false,
+      "if": {
+        "lang": "en",
+        "buttons": true
+      }
+    }
+  ]
+}

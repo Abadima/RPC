@@ -1,19 +1,24 @@
 //! Desktop's shared state: settings, the live connections with the latest
-//! Presence each one reported, a short in-memory event log, and the
-//! extensions recently turned away. Nothing about a client outlives its
-//! connection. Sessions (`session.rs`), the tray, the console, and control
-//! requests all go through here.
+//! Presence each one reported, the platform adapters, a short in-memory
+//! event log, and the extensions recently turned away. Nothing about a
+//! client outlives its connection. Sessions (`session.rs`), the tray, the
+//! console, and control requests all go through here.
+//!
+//! What each platform shows: of the connections that allow it, the one
+//! whose Activity changed most recently. When that one clears or goes away,
+//! the next most recent still-current Activity takes over.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
 use crate::config::Settings;
 use crate::identity::{self, ClientKind, Origin, Peer};
-use crate::presence::Presence;
+use crate::platform::{AdapterStatus, PlatformAdapter, Platforms, Reporter};
+use crate::presence::{Activity, Presence};
 
 const MAX_EVENTS: usize = 20;
 const MAX_REFUSED: usize = 8;
@@ -58,6 +63,8 @@ pub struct Status {
     pub refused: Vec<RefusedStatus>,
     pub events: Vec<EventStatus>,
     pub debug: bool,
+    /// Each platform adapter's state.
+    pub platforms: Vec<AdapterStatus>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -122,6 +129,9 @@ struct Inner {
     /// Debug mode: off at every start, so Desktop prints nothing and keeps no
     /// event history unless someone turns it on for this run.
     debug: bool,
+    adapters: Vec<Routed>,
+    /// Orders Presence changes across connections.
+    next_seq: u64,
 }
 
 struct Live {
@@ -129,7 +139,16 @@ struct Live {
     name: String,
     since: u64,
     presence: Option<Presence>,
+    platforms: Platforms,
+    /// When this connection's Presence last changed, in `next_seq` order.
+    seq: u64,
     closer: Closer,
+}
+
+struct Routed {
+    adapter: Box<dyn PlatformAdapter>,
+    /// What it was last told to show.
+    given: Option<Activity>,
 }
 
 struct Refused {
@@ -154,6 +173,8 @@ impl Hub {
                 events: VecDeque::new(),
                 refused: Vec::new(),
                 debug: false,
+                adapters: Vec::new(),
+                next_seq: 0,
             }),
             config_path,
             address,
@@ -167,8 +188,8 @@ impl Hub {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    // Only the tray (Linux) listens so far.
-    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    // Only the tray (Linux, Windows) listens so far.
+    #[cfg_attr(not(any(target_os = "linux", windows)), allow(dead_code))]
     pub fn set_listener(&self, listener: Listener) {
         *self.listener.lock().unwrap_or_else(|p| p.into_inner()) = Some(listener);
     }
@@ -186,6 +207,30 @@ impl Hub {
 
     pub fn request_show(&self) {
         self.notify(HubEvent::ShowRequested);
+    }
+
+    /// Adds a platform adapter and tells it what to show right away.
+    pub fn add_adapter(&self, adapter: Box<dyn PlatformAdapter>) {
+        let mut inner = self.lock();
+        inner.adapters.push(Routed {
+            adapter,
+            given: None,
+        });
+        route(&mut inner);
+    }
+
+    /// For an adapter to report what it's doing: kept in the event log in
+    /// debug mode, and the tray is refreshed. Holds the Hub weakly, since
+    /// the Hub owns the adapter.
+    pub fn reporter(self: &Arc<Self>) -> Reporter {
+        let hub: Weak<Self> = Arc::downgrade(self);
+        Box::new(move |text| {
+            let Some(hub) = hub.upgrade() else {
+                return;
+            };
+            log_event(&mut hub.lock(), text);
+            hub.notify(HubEvent::Changed);
+        })
     }
 
     /// The WebSocket's gate: only allowed Parousia extension origins, and web
@@ -242,6 +287,8 @@ impl Hub {
                 name,
                 since: unix_now(),
                 presence: None,
+                platforms: Platforms::ALL,
+                seq: 0,
                 closer,
             },
         );
@@ -250,13 +297,16 @@ impl Hub {
         id
     }
 
-    pub fn update_presence(&self, id: ConnId, presence: Presence) {
+    /// `platforms` are where this connection's Presence may be shown.
+    pub fn update_presence(&self, id: ConnId, presence: Presence, platforms: Platforms) {
         let mut inner = self.lock();
         let debug = inner.debug;
+        let seq = inner.next_seq + 1;
         let Some(live) = inner.connections.get_mut(&id) else {
             return;
         };
         let changed = live.presence.as_ref().map(|p| &p.activity) != Some(&presence.activity);
+        let rerouted = changed || live.platforms != platforms;
         if changed && debug {
             println!(
                 "parousia-desktop: presence from {}: {}",
@@ -268,6 +318,12 @@ impl Hub {
             );
         }
         live.presence = Some(presence);
+        live.platforms = platforms;
+        if rerouted {
+            live.seq = seq;
+            inner.next_seq = seq;
+            route(&mut inner);
+        }
         drop(inner);
         if changed {
             self.notify(HubEvent::Changed);
@@ -282,6 +338,7 @@ impl Hub {
         };
         let text = format!("{} disconnected", live.name);
         log_event(&mut inner, text);
+        route(&mut inner);
         drop(inner);
         self.notify(HubEvent::Changed);
     }
@@ -426,6 +483,36 @@ impl Hub {
                 })
                 .collect(),
             debug: inner.debug,
+            platforms: inner
+                .adapters
+                .iter()
+                .map(|routed| routed.adapter.status())
+                .collect(),
+        }
+    }
+}
+
+/// Tells each adapter what it should now show, if that changed.
+fn route(inner: &mut Inner) {
+    let Inner {
+        adapters,
+        connections,
+        ..
+    } = inner;
+    for routed in adapters {
+        let platform = routed.adapter.platform();
+        let winner = connections
+            .values()
+            .filter(|live| live.platforms.contains(platform))
+            .filter_map(|live| {
+                let activity = live.presence.as_ref()?.activity.as_ref()?;
+                Some((live.seq, activity))
+            })
+            .max_by_key(|(seq, _)| *seq)
+            .map(|(_, activity)| activity.clone());
+        if winner != routed.given {
+            routed.given.clone_from(&winner);
+            routed.adapter.show(winner);
         }
     }
 }
@@ -490,6 +577,7 @@ fn take_closers(inner: &mut Inner, matches: impl Fn(&Live) -> bool) -> Vec<Close
         log_event(inner, text);
         closers.push(live.closer);
     }
+    route(inner);
     closers
 }
 
@@ -518,7 +606,7 @@ fn sanitize_name(name: &str, kind: ClientKind) -> String {
 pub mod tests {
     use super::*;
     use crate::config::tests::temp_dir;
-    use std::sync::Arc;
+    use crate::platform::Platform;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     pub const CHROMIUM: &str = "chrome-extension://abcdefghijklmnopabcdefghijklmnop";
@@ -590,6 +678,7 @@ pub mod tests {
         let hub = test_hub_with(Settings {
             allowed_origins: vec![CHROMIUM.to_string()],
             allow_userscripts: true,
+            ..Settings::default()
         });
         hub.set_debug(true);
         let closed = Arc::new(AtomicUsize::new(0));
@@ -667,33 +756,157 @@ pub mod tests {
         assert!(hub.disallow(CHROMIUM).is_err());
     }
 
+    pub fn example_activity(id: &str) -> Activity {
+        Activity {
+            id: id.into(),
+            name: id.to_uppercase(),
+            details: None,
+            state: None,
+            assets: None,
+            timestamps: None,
+            discord_client_id: None,
+            details_url: None,
+            state_url: None,
+            buttons: Vec::new(),
+        }
+    }
+
+    fn presence(activity: Option<&str>) -> Presence {
+        Presence {
+            activity: activity.map(example_activity),
+            updated_at: 1,
+        }
+    }
+
     #[test]
     fn presence_is_kept_per_connection_and_dropped_with_it() {
         let hub = test_hub();
         hub.set_debug(true);
         let id = hub.connect(admit(&hub, CHROMIUM), "Chromium on Linux", noop_closer());
-        hub.update_presence(
-            id,
-            Presence {
-                activity: Some(crate::presence::Activity {
-                    id: "example".into(),
-                    name: "Example".into(),
-                    details: None,
-                    state: None,
-                    url: "https://example.com".into(),
-                    assets: None,
-                    timestamps: None,
-                }),
-                updated_at: 1,
-            },
-        );
+        hub.update_presence(id, presence(Some("example")), Platforms::ALL);
         let status = hub.status();
-        assert_eq!(status.clients[0].activity.as_deref(), Some("Example"));
+        assert_eq!(status.clients[0].activity.as_deref(), Some("EXAMPLE"));
         hub.disconnect(id);
         let status = hub.status();
         assert!(status.clients.is_empty());
         assert_eq!(status.events[0].text, "Chromium on Linux disconnected");
         assert_eq!(status.events[1].text, "Chromium on Linux connected");
+    }
+
+    /// Records what the Hub tells it to show.
+    struct Recorder {
+        platform: Platform,
+        shown: Arc<Mutex<Vec<Option<String>>>>,
+    }
+
+    impl PlatformAdapter for Recorder {
+        fn platform(&self) -> Platform {
+            self.platform
+        }
+
+        fn show(&self, activity: Option<Activity>) {
+            self.shown.lock().unwrap().push(activity.map(|a| a.id));
+        }
+
+        fn status(&self) -> AdapterStatus {
+            AdapterStatus {
+                platform: self.platform,
+                state: crate::platform::AdapterState::Idle,
+                activity: None,
+                error: None,
+            }
+        }
+    }
+
+    fn recorder(hub: &Hub, platform: Platform) -> Arc<Mutex<Vec<Option<String>>>> {
+        let shown = Arc::new(Mutex::new(Vec::new()));
+        hub.add_adapter(Box::new(Recorder {
+            platform,
+            shown: Arc::clone(&shown),
+        }));
+        shown
+    }
+
+    fn calls(shown: &Mutex<Vec<Option<String>>>) -> Vec<Option<String>> {
+        shown.lock().unwrap().clone()
+    }
+
+    fn ids(expected: &[Option<&str>]) -> Vec<Option<String>> {
+        expected.iter().map(|id| id.map(String::from)).collect()
+    }
+
+    #[test]
+    fn the_latest_change_wins_and_the_next_takes_over_when_it_ends() {
+        let hub = test_hub();
+        let discord = recorder(&hub, Platform::Discord);
+        let chrome = hub.connect(admit(&hub, CHROMIUM), "Chromium", noop_closer());
+        let firefox = hub.connect(admit(&hub, FIREFOX), "Firefox", noop_closer());
+
+        hub.update_presence(chrome, presence(Some("youtube")), Platforms::ALL);
+        hub.update_presence(firefox, presence(Some("jena")), Platforms::ALL);
+        // Resending the same thing isn't a change, so Firefox keeps it.
+        hub.update_presence(chrome, presence(Some("youtube")), Platforms::ALL);
+        // Firefox moves on to nothing: Chromium's is still current.
+        hub.update_presence(firefox, presence(None), Platforms::ALL);
+        hub.update_presence(firefox, presence(Some("jena")), Platforms::ALL);
+        hub.disconnect(firefox);
+        hub.disconnect(chrome);
+        assert_eq!(
+            calls(&discord),
+            ids(&[
+                Some("youtube"),
+                Some("jena"),
+                Some("youtube"),
+                Some("jena"),
+                Some("youtube"),
+                None
+            ])
+        );
+    }
+
+    #[test]
+    fn a_platform_only_shows_connections_that_allow_it() {
+        let hub = test_hub();
+        let discord = recorder(&hub, Platform::Discord);
+        let stoat = recorder(&hub, Platform::Stoat);
+        let chrome = hub.connect(admit(&hub, CHROMIUM), "Chromium", noop_closer());
+        let firefox = hub.connect(admit(&hub, FIREFOX), "Firefox", noop_closer());
+
+        let stoat_only = Platforms::from_wire(Some(&[Platform::Stoat]));
+        hub.update_presence(chrome, presence(Some("youtube")), Platforms::ALL);
+        hub.update_presence(firefox, presence(Some("jena")), stoat_only);
+        assert_eq!(calls(&discord), ids(&[Some("youtube")]));
+        assert_eq!(calls(&stoat), ids(&[Some("youtube"), Some("jena")]));
+
+        // Turning Discord off in Chromium clears it there, and nothing else
+        // allows Discord.
+        let none = Platforms::from_wire(Some(&[]));
+        hub.update_presence(chrome, presence(Some("youtube")), none);
+        assert_eq!(calls(&discord), ids(&[Some("youtube"), None]));
+        assert_eq!(calls(&stoat), ids(&[Some("youtube"), Some("jena")]));
+    }
+
+    #[test]
+    fn disallowing_a_browser_clears_what_it_showed() {
+        let hub = test_hub();
+        let chrome = hub.connect(admit(&hub, CHROMIUM), "Chromium", noop_closer());
+        hub.update_presence(chrome, presence(Some("youtube")), Platforms::ALL);
+        // Added late: told about what's already there.
+        let discord = recorder(&hub, Platform::Discord);
+        hub.disallow(CHROMIUM).unwrap();
+        assert_eq!(calls(&discord), ids(&[Some("youtube"), None]));
+        assert_eq!(hub.status().platforms.len(), 1);
+    }
+
+    #[test]
+    fn adapters_report_into_the_debug_log() {
+        let hub = Arc::new(test_hub());
+        let report = hub.reporter();
+        report("Discord: connecting".into());
+        assert!(hub.status().events.is_empty(), "silent by default");
+        hub.set_debug(true);
+        report("Discord: showing Jena Hub".into());
+        assert_eq!(hub.status().events[0].text, "Discord: showing Jena Hub");
     }
 
     #[test]

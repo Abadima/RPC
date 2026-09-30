@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::identity;
+use crate::presence::is_discord_id;
 
 pub struct AppPaths {
     /// `~/.local/share/parousia` on Linux, `%APPDATA%\parousia` on Windows,
@@ -77,6 +78,10 @@ pub struct Settings {
     /// allowing them lets any web page publish presence. Off by default.
     #[serde(default)]
     pub allow_userscripts: bool,
+    /// The Discord Application to show Activities as when they don't name
+    /// their own; Parousia's when unset. Public, not a secret.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discord_client_id: Option<String>,
 }
 
 impl Settings {
@@ -91,6 +96,13 @@ impl Settings {
         };
         for origin in &settings.allowed_origins {
             identity::validate_allowed_origin(origin).map_err(io::Error::other)?;
+        }
+        if let Some(id) = &settings.discord_client_id
+            && !is_discord_id(id)
+        {
+            return Err(io::Error::other(format!(
+                "discordClientId {id:?} isn't a Discord Application id"
+            )));
         }
         Ok(settings)
     }
@@ -149,6 +161,7 @@ pub mod tests {
         let settings = Settings {
             allowed_origins: vec![CHROMIUM.to_string()],
             allow_userscripts: true,
+            discord_client_id: Some("1553980756731363428".to_string()),
         };
         settings.save(&path).unwrap();
         let loaded = Settings::load(&path).unwrap();
@@ -175,6 +188,8 @@ pub mod tests {
             r#"{"allowedOrigins":["chrome-extension://*"]}"#,
             r#"{"allowUserScripts":true}"#,
             r#"{"webSocket":false}"#,
+            r#"{"discordClientId":"parousia"}"#,
+            r#"{"discordClientId":1553980756731363428}"#,
             "not json",
         ] {
             let dir = temp_dir("settings-bad");

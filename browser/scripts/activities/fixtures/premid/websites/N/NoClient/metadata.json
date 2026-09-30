@@ -1,0 +1,20 @@
+{
+  "$schema": "https://schemas.premid.app/metadata/1.16",
+  "apiVersion": 1,
+  "author": {
+    "name": "Test",
+    "id": "1"
+  },
+  "service": "NoClient",
+  "description": {
+    "en": "NoClient, for tests."
+  },
+  "url": "noclient.example",
+  "regExp": "^https?[:][/][/]noclient[.]example[/]",
+  "version": "1.0.0",
+  "logo": "https://cdn.example/noclient.png",
+  "thumbnail": "https://cdn.example/noclient-thumb.png",
+  "color": "#000000",
+  "category": "other",
+  "tags": ["test"]
+}

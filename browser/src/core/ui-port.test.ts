@@ -39,7 +39,20 @@ describe("ui-port messages", () => {
     expect(
       parseUiEvent({ type: "discord", state: { status: "connected", version: "0.3.0" } }),
     ).toEqual({ type: "discord", state: { status: "connected", version: "0.3.0" } });
+    expect(
+      parseUiEvent({
+        type: "activity",
+        activity: { id: "jena", name: "Jena Hub", configurable: true },
+      }),
+    ).toEqual({ type: "activity", activity: { id: "jena", name: "Jena Hub", configurable: true } });
+    expect(parseUiEvent({ type: "activity", activity: null })).toEqual({
+      type: "activity",
+      activity: null,
+    });
     for (const value of [
+      { type: "activity", activity: { name: "No id" } },
+      { type: "activity", activity: { id: "x".repeat(257), name: "Long id" } },
+      { type: "activity", activity: { id: "a", name: "A", configurable: "yes" } },
       { type: "state", state: { status: "pairing_required" } },
       { type: "state", state: null },
       { type: "discord", state: { status: "joined", version: null } },

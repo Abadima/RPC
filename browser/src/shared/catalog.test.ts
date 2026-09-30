@@ -15,13 +15,26 @@ const catalog: ActivityInfo[] = Array.from({ length: 1400 }, (_, i) => ({
   id: `activity-${i}`,
   name: `Activity ${String(i).padStart(4, "0")}`,
   hosts: [`site${i}.example`],
+  source: "parousia",
 }));
 
 describe("searchActivities", () => {
   const index = indexActivities([
     ...catalog,
-    { id: "cafe", name: "Café Reader", description: "Menus and orders", hosts: ["cafe.example"] },
-    { id: "tube", name: "Tube", description: "Video playback", hosts: ["tube.example"] },
+    {
+      id: "cafe",
+      name: "Café Reader",
+      description: "Menus and orders",
+      hosts: ["cafe.example"],
+      source: "parousia",
+    },
+    {
+      id: "tube",
+      name: "Tube",
+      description: "Video playback",
+      hosts: ["tube.example"],
+      source: "premid",
+    },
   ]);
 
   test("an empty query lists everything, sorted by name", () => {
@@ -35,6 +48,21 @@ describe("searchActivities", () => {
     expect(searchActivities(index, "VIDEO tube.example").map((a) => a.id)).toEqual(["tube"]);
     expect(searchActivities(index, "video menus")).toEqual([]);
     expect(searchActivities(index, "site1399")).toHaveLength(1);
+  });
+
+  test("finds an Activity by its other names and tags, and PreMiD's by the word premid", () => {
+    const withKeywords = indexActivities([
+      ...catalog,
+      {
+        id: "premid:YouTube",
+        name: "YouTube",
+        hosts: ["www.youtube.com"],
+        source: "premid",
+        keywords: ["Ютюб", "video"],
+      },
+    ]);
+    expect(searchActivities(withKeywords, "ютюб").map((a) => a.id)).toEqual(["premid:YouTube"]);
+    expect(searchActivities(withKeywords, "premid").map((a) => a.id)).toEqual(["premid:YouTube"]);
   });
 });
 

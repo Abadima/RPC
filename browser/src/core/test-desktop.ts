@@ -23,6 +23,7 @@ export const REPORT: DesktopReport = {
   settings: { allowedOrigins: [], allowUserscripts: false },
   refused: [],
   events: [],
+  platforms: [{ platform: "discord", state: "idle", activity: null, error: null }],
 };
 
 export class FakeDesktop {

@@ -18,5 +18,6 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["bun", "chrome"]
   },
-  "include": ["src", "build.ts"]
+  "include": ["src", "scripts", "build.ts"],
+  "exclude": ["scripts/activities/fixtures"]
 }

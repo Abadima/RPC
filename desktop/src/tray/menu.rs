@@ -9,12 +9,15 @@
 use crate::control::{ago, web_socket_line};
 use crate::hub::{ClientStatus, Setting, Status};
 
+#[cfg(target_os = "linux")]
 use super::dbus::Value;
 
 pub const ROOT: i32 = 0;
 const TITLE: i32 = 1;
 const STATUS: i32 = 2;
 const SEPARATOR_1: i32 = 3;
+/// One status line per platform adapter.
+const PLATFORM_BASE: i32 = 4;
 const BROWSERS: i32 = 10;
 const DIAGNOSTICS: i32 = 20;
 const WEB_SOCKET: i32 = 24;
@@ -90,6 +93,7 @@ impl Item {
         }
     }
 
+    #[cfg(any(target_os = "linux", test))]
     pub fn find(&self, id: i32) -> Option<&Item> {
         if self.id == id {
             return Some(self);
@@ -97,6 +101,7 @@ impl Item {
         self.children.iter().find_map(|child| child.find(id))
     }
 
+    #[cfg(any(target_os = "linux", test))]
     pub fn all(&self) -> Vec<&Item> {
         let mut items = vec![self];
         for child in &self.children {
@@ -199,20 +204,26 @@ pub fn build(status: &Status) -> Item {
         ],
     );
 
-    Item::submenu(
-        ROOT,
-        "",
-        vec![
-            Item::info(TITLE, "Parousia Desktop"),
-            Item::info(STATUS, status_line(status)),
-            Item::separator(SEPARATOR_1),
-            browsers,
-            Item::submenu(DIAGNOSTICS, "Diagnostics", diagnostics),
-            settings,
-            Item::separator(SEPARATOR_2),
-            Item::action(QUIT, "Quit Parousia Desktop"),
-        ],
-    )
+    let mut items = vec![
+        Item::info(TITLE, "Parousia Desktop"),
+        Item::info(STATUS, status_line(status)),
+    ];
+    items.extend(
+        status
+            .platforms
+            .iter()
+            .zip(PLATFORM_BASE..BROWSERS)
+            .map(|(platform, id)| Item::info(id, platform.describe())),
+    );
+    items.extend([
+        Item::separator(SEPARATOR_1),
+        browsers,
+        Item::submenu(DIAGNOSTICS, "Diagnostics", diagnostics),
+        settings,
+        Item::separator(SEPARATOR_2),
+        Item::action(QUIT, "Quit Parousia Desktop"),
+    ]);
+    Item::submenu(ROOT, "", items)
 }
 
 fn client_item(client: &ClientStatus) -> Item {
@@ -262,10 +273,12 @@ pub fn action_for(status: &Status, id: i32) -> Option<Action> {
 }
 
 /// dbusmenu treats `_` as a mnemonic marker; a literal one is doubled.
+#[cfg(target_os = "linux")]
 fn escape_label(label: &str) -> String {
     label.replace('_', "__")
 }
 
+#[cfg(target_os = "linux")]
 pub fn properties(item: &Item, filter: &[String]) -> Value {
     let wanted = |name: &str| filter.is_empty() || filter.iter().any(|f| f == name);
     let mut entries = Vec::new();
@@ -293,6 +306,7 @@ pub fn properties(item: &Item, filter: &[String]) -> Value {
     Value::dict(entries)
 }
 
+#[cfg(target_os = "linux")]
 /// `(ia{sv}av)`, recursing `depth` levels (`None` for all of them).
 pub fn layout(item: &Item, depth: Option<usize>, filter: &[String]) -> Value {
     let children = match depth {
@@ -347,6 +361,22 @@ mod tests {
             "{labels:?}"
         );
         assert_eq!(menu.find(TOGGLE_USERSCRIPTS).unwrap().checked, Some(false));
+    }
+
+    #[test]
+    fn each_platform_has_a_status_line() {
+        let mut status = test_hub().status();
+        status.platforms.push(crate::platform::AdapterStatus {
+            platform: crate::platform::Platform::Discord,
+            state: crate::platform::AdapterState::NotRunning,
+            activity: None,
+            error: None,
+        });
+        let menu = build(&status);
+        assert_eq!(
+            menu.find(PLATFORM_BASE).unwrap().label,
+            "Discord: not running, trying again"
+        );
     }
 
     #[test]
@@ -411,6 +441,7 @@ mod tests {
         const { assert!(EVENT_BASE + 10 < REFUSED_BIT) };
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn checkmarks_and_submenus_are_marked_for_the_host() {
         let item = Item::check(99, "my_setting", true);

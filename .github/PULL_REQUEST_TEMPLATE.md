@@ -4,7 +4,7 @@
 
 ## Component(s)
 
-<!-- browser / desktop / core / adapters (which one) / packages / website / other -->
+<!-- browser / desktop / core / adapters (which one) / release workflow / other -->
 
 ## Type of Change
 

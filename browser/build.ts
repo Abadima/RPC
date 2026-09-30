@@ -1,10 +1,13 @@
 import { mkdir, rm } from "node:fs/promises";
 import { watch } from "node:fs";
 import { join } from "node:path";
+import { gzipSync } from "node:zlib";
+import { buildActivities } from "./scripts/activities/build";
 import { loadDevKey } from "./scripts/dev-key";
+import { userscriptHeader, type HeaderSource } from "./scripts/userscript-header";
 import { writeZip } from "./scripts/zip";
 
-interface ExtensionManifest {
+interface ExtensionManifest extends HeaderSource {
   manifest_version: number;
   [key: string]: unknown;
 }
@@ -32,18 +35,28 @@ async function writeManifest(target: string, targetDir: string, dev: boolean): P
   await Bun.write(join(targetDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
-const outDir = "dist";
-const extensionTargets = ["chromium", "firefox", "safari"] as const;
+/** `PAROUSIA_BUILD_DIR` builds somewhere else, for checks that need a build of their own. */
+const outDir = process.env.PAROUSIA_BUILD_DIR ?? "dist";
+const extensionTargets = ["chromium", "firefox"] as const;
 const iconSizes = [16, 32, 48, 128] as const;
 const popupFonts = ["poppins-400.woff2", "poppins-600.woff2", "OFL.txt"] as const;
 
-async function bundle(entrypoint: string, targetDir: string): Promise<void> {
+/** Resolves `parousia:activities` (the native Activities); set once per build. */
+let plugins: Bun.BunPlugin[] = [];
+
+async function bundle(
+  entrypoint: string,
+  targetDir: string,
+  { format = "esm", naming }: { format?: "esm" | "iife"; naming?: string } = {},
+): Promise<void> {
   const result = await Bun.build({
     entrypoints: [entrypoint],
     outdir: targetDir,
     target: "browser",
-    format: "esm",
+    format,
+    ...(naming && { naming }),
     minify: true,
+    plugins,
   });
 
   if (!result.success) {
@@ -66,20 +79,45 @@ async function writeFonts(targetDir: string): Promise<void> {
   }
 }
 
+/** Minified: the sources keep their comments, the build doesn't ship them. Fonts stay as files. */
+async function writeCss(source: string, targetDir: string): Promise<void> {
+  const result = await Bun.build({
+    entrypoints: [source],
+    outdir: targetDir,
+    minify: true,
+    external: ["*.woff2"],
+  });
+  if (!result.success) {
+    for (const log of result.logs) console.error(log);
+    throw new Error(`build failed for ${source}`);
+  }
+}
+
 async function writeTheme(targetDir: string): Promise<void> {
-  await copyFile(join("src", "shared", "theme.css"), join(targetDir, "theme.css"));
+  await writeCss(join("src", "shared", "theme.css"), targetDir);
+  // A classic script, loaded in <head> so the chosen theme is on before the first paint.
+  await bundle(join("src", "shared", "theme-boot.ts"), targetDir, {
+    format: "iife",
+    naming: "theme.js",
+  });
 }
 
 async function writePopup(targetDir: string): Promise<void> {
   await bundle(join("src", "popup", "popup.ts"), targetDir);
   await copyFile(join("src", "popup", "popup.html"), join(targetDir, "popup.html"));
-  await copyFile(join("src", "popup", "popup.css"), join(targetDir, "popup.css"));
+  await writeCss(join("src", "popup", "popup.css"), targetDir);
 }
 
 async function writeFullscreen(targetDir: string): Promise<void> {
   await bundle(join("src", "fullscreen", "fullscreen.ts"), targetDir);
   await copyFile(join("src", "fullscreen", "fullscreen.html"), join(targetDir, "fullscreen.html"));
-  await copyFile(join("src", "fullscreen", "fullscreen.css"), join(targetDir, "fullscreen.css"));
+  await writeCss(join("src", "fullscreen", "fullscreen.css"), targetDir);
+}
+
+/** The project's license and what else an extension carries, inside the package itself. */
+async function writeLegal(targetDir: string): Promise<void> {
+  await copyFile(join("..", "LICENSE"), join(targetDir, "LICENSE"));
+  await copyFile("THIRD-PARTY-NOTICES.txt", join(targetDir, "THIRD-PARTY-NOTICES.txt"));
 }
 
 async function writeIcons(targetDir: string): Promise<void> {
@@ -91,60 +129,43 @@ async function writeIcons(targetDir: string): Promise<void> {
   }
 }
 
-/**
- * A userscript manager only recognizes a script as a userscript, and only
- * knows what to run it on, from an `==UserScript==` metadata block (and a
- * `.user.js` file name to offer installing it). The one grant is a menu
- * command for checking the connection, since a userscript has no popup.
- * `@inject-into content` (Violentmonkey) and `@sandbox DOM` (Tampermonkey)
- * run it in the isolated world, out of reach of the page's own scripts.
- * `@noframes` keeps embedded iframes from each opening their own connection.
- * Matching every site mirrors the extension's own `tabs` permission: broad
- * reach is inherent to "detect activity on whatever site the user is on".
- */
 async function writeUserscript(targetDir: string): Promise<void> {
   await bundle(join("src", "userscript", "index.ts"), targetDir);
 
   const manifest = (await Bun.file(join("manifests", "chromium.json")).json()) as ExtensionManifest;
-  const header = [
-    "// ==UserScript==",
-    "// @name         Parousia",
-    "// @namespace    https://github.com/Abadima/RPC",
-    `// @version      ${manifest.version}`,
-    `// @description  ${manifest.description}`,
-    "// @match        *://*/*",
-    "// @run-at       document-start",
-    "// @noframes",
-    "// @inject-into  content",
-    "// @sandbox      DOM",
-    "// @grant        GM_registerMenuCommand",
-    "// ==/UserScript==",
-    "",
-  ].join("\n");
+  const header = userscriptHeader(manifest);
 
   const bundlePath = join(targetDir, "index.js");
   const bundled = await Bun.file(bundlePath).text();
-  await Bun.write(join(targetDir, "parousia.user.js"), header + bundled);
+  const script = header + bundled;
+  await Bun.write(join(targetDir, "parousia.user.js"), script);
+  // A manager installs the plain file; the .gz is for mirrors that serve it precompressed.
+  await Bun.write(join(targetDir, "parousia.user.js.gz"), gzipSync(script, { level: 9 }));
   await rm(bundlePath);
 }
 
 async function build(dev: boolean): Promise<void> {
   await rm(outDir, { recursive: true, force: true });
+  // Native Activities are bundled in; PreMiD's are packaged files (see scripts/activities/).
+  const activities = await buildActivities();
+  for (const line of activities.summary) console.log(`[build] ${line}`);
+  plugins = [activities.plugin];
 
   for (const target of extensionTargets) {
     const targetDir = join(outDir, target);
     await mkdir(targetDir, { recursive: true });
     await bundle(join("src", "platforms", `${target}.ts`), targetDir);
     await writeIcons(targetDir);
+    await writeLegal(targetDir);
     await writeFonts(targetDir);
     await writeTheme(targetDir);
     await writePopup(targetDir);
     await writeFullscreen(targetDir);
+    await activities.writeTo(targetDir);
     await writeManifest(target, targetDir, dev);
 
-    if (target === "firefox") {
-      await writeZip(targetDir, join(outDir, "firefox.zip"));
-    }
+    // Store uploads (AMO, Chrome Web Store) and release assets.
+    await writeZip(targetDir, join(outDir, `${target}.zip`));
   }
 
   await writeUserscript(join(outDir, "userscript"));

@@ -72,19 +72,19 @@ Compatibility with existing ecosystems should be treated as a practical feature 
 
 ## Website
 
-The Parousia project website will be hosted through GitHub Pages at `parousia.js.org`.
+The Parousia project website will be hosted through GitHub Pages at `parousia.abadima.dev`.
 
 The website will provide:
 
 - The Parousia landing page
 - Project documentation
-- Installation information
+- Installation information and downloads
 - Developer documentation
 - Activity documentation
 - Compatibility information
 - Privacy and security information
 
-The website should remain consolidated into a single project rather than separating the landing page and documentation into unrelated repositories or applications.
+The website should remain consolidated into a single project rather than separating the landing page and documentation into unrelated repositories or applications. That project has its own repository, [parousia-project/website](https://github.com/parousia-project/website).
 
 ## Long-Term Direction
 

@@ -41,10 +41,10 @@ pub struct Peer {
     pub same_user: bool,
 }
 
-/// Empty until the first store listing: Chrome Web Store and Edge Add-ons
-/// origins go here as each goes live. Until then, builds are listed in
-/// `allowedOrigins`.
-pub const PRODUCTION_CHROMIUM_ORIGINS: &[&str] = &[];
+/// The Chrome Web Store listing. Other builds (unpacked, sideloaded) are
+/// listed in `allowedOrigins`.
+pub const PRODUCTION_CHROMIUM_ORIGINS: &[&str] =
+    &["chrome-extension://achhedhokopfgfnigkfchklhbebbhebd"];
 
 const MAX_ORIGIN_LEN: usize = 255;
 
@@ -193,6 +193,27 @@ mod tests {
         assert!(validate_allowed_origin(FIREFOX).is_ok());
         for bad in ["https://example.com", "null", "chrome-extension://*"] {
             assert!(validate_allowed_origin(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn the_store_listing_is_allowed_without_config_and_nothing_near_it_is() {
+        for origin in PRODUCTION_CHROMIUM_ORIGINS {
+            assert_eq!(
+                classify_origin(origin),
+                Origin::Extension(ClientKind::ChromiumExtension)
+            );
+            assert!(is_allowed_origin(origin, &[]));
+        }
+        // One letter off, a different scheme, or a trailing slash is someone else.
+        let store = PRODUCTION_CHROMIUM_ORIGINS[0];
+        for other in [
+            "chrome-extension://achhedhokopfgfnigkfchklhbebbhebe",
+            "moz-extension://achhedhokopfgfnigkfchklhbebbhebd",
+            "chrome-extension://achhedhokopfgfnigkfchklhbebbhebd/",
+        ] {
+            assert_ne!(other, store);
+            assert!(!is_allowed_origin(other, &[]), "{other}");
         }
     }
 

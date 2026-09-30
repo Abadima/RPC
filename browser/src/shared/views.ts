@@ -1,40 +1,25 @@
 import { faClock } from "@fortawesome/free-solid-svg-icons/faClock";
 import { faMoon } from "@fortawesome/free-solid-svg-icons/faMoon";
-import { faPuzzlePiece } from "@fortawesome/free-solid-svg-icons/faPuzzlePiece";
-import type { PresenceSnapshot, PresenceViewOptions } from "../../../packages/presence-view/mount";
+import type { PresenceSnapshot, PresenceViewOptions } from "./presence-view";
 import type { ConnectionState } from "../core/desktop-connection";
-import type { BridgeState } from "../core/ui-port";
-import { applyPreferences, type Preferences } from "../core/preferences";
-import { builtInActivities } from "../core/activities";
-import { PresenceRuntime } from "../core/runtime";
+import type { BridgeState, UiActivity } from "../core/ui-port";
 import { connectionBadge, connectionHelp, type ConnectionHelp } from "./connection-status";
 import { icon } from "./icons";
 import { DESKTOP_DOWNLOAD } from "./links";
 
 /** Icons for the shared presence view, the same in the popup and dashboard. */
 export const presenceIcons: PresenceViewOptions = {
-  icon: (name) => icon(name === "elapsed" ? faClock : name === "empty" ? faMoon : faPuzzlePiece),
+  icon: (name) => icon(name === "elapsed" ? faClock : faMoon),
 };
 
-/** The Activity on the active tab of the window `query` picks, as Privacy settings let it be shared. */
-export async function activeTabSnapshot(
-  query: chrome.tabs.QueryInfo,
-  preferences: Preferences,
-): Promise<PresenceSnapshot> {
-  const [tab] = await chrome.tabs.query({ active: true, ...query });
-  const runtime = new PresenceRuntime(builtInActivities());
-  const resolved = tab?.url ? runtime.resolve(new URL(tab.url)).activity : null;
-  const activity = applyPreferences(resolved, preferences, tab?.incognito ?? false);
-
-  return {
-    available: true,
-    activity: activity && {
-      name: activity.name,
-      details: activity.details,
-      state: activity.state,
-      startedAt: activity.timestamps?.start,
-    },
-  };
+/**
+ * What the presence view shows: the Activity the background is sharing (it
+ * pushes every change), already as Privacy settings allow. Asking the
+ * background rather than looking at the tab here is what makes a PreMiD
+ * Activity, which only its page script knows, show up too.
+ */
+export function presenceSnapshot(activity: UiActivity | null): PresenceSnapshot {
+  return { activity };
 }
 
 export function renderBadge(badge: HTMLElement, state: ConnectionState, sharing: boolean): void {

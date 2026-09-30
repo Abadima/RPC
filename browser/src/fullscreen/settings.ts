@@ -27,5 +27,6 @@ export function settingsView(context: ViewContext, segment: string | undefined):
     title: `${pageTitle(current)} Settings`,
     element,
     update: (shell) => page.update(shell.settings),
+    destroy: () => page.destroy?.(),
   };
 }
