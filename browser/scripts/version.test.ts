@@ -37,19 +37,26 @@ describe("the extension's version", () => {
     expect((await readdir(manifestDir)).sort()).toEqual(["chromium.json", "firefox.json"]);
   });
 
-  test("is the same in every manifest and in package.json, in a form the stores accept", async () => {
+  test("is the release in Chromium's manifest and package.json, in a form the stores accept", async () => {
     const chromium = await read("chromium.json");
-    const firefox = await read("firefox.json");
     const pkg = (await Bun.file(join(root, "package.json")).json()) as { version: string };
     expect(chromium.version).toMatch(STORE_VERSION);
-    expect(firefox.version).toBe(chromium.version);
     expect(pkg.version).toBe(chromium.version);
+  });
+
+  test("is the release, or a store revision of it, in Firefox's manifest", async () => {
+    // Mozilla takes each version once, so a fix to a released build goes out as 1.1.0.1.
+    const release = (await read("chromium.json")).version;
+    const firefox = (await read("firefox.json")).version;
+    expect(firefox).toMatch(STORE_VERSION);
+    expect(firefox === release || firefox.startsWith(`${release}.`)).toBe(true);
   });
 
   test("is the 1.1.0 release", async () => {
     // Bump this with the manifests and package.json when the next release is cut.
-    // Desktop versions on its own (desktop/Cargo.toml); the tag is Desktop's.
+    // Desktop versions on its own (desktop/Cargo.toml); the tag is the extension's.
     expect((await read("chromium.json")).version).toBe("1.1.0");
+    expect((await read("firefox.json")).version).toBe("1.1.0.1");
   });
 
   test("is the userscript's version too", async () => {

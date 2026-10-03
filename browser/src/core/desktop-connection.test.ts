@@ -247,6 +247,16 @@ describe("DesktopConnection refusals and reconnecting", () => {
     }
   });
 
+  test("a store revision of the extension (a fourth number) is the same release", async () => {
+    const desktop = new FakeDesktop();
+    desktop.version = "1.1.0";
+    const { connection } = harness(fakeChannel(desktop), "1.1.0.1");
+    connection.send(createPresence(activity));
+    await settle();
+    expect(connection.getState()).toEqual({ status: "connected", desktopVersion: "1.1.0" });
+    expect(desktop.presences()).toHaveLength(1);
+  });
+
   test("another minor, patch, or beta stays connected and says which side to update", async () => {
     for (const [desktopVersion, update] of [
       ["1.2.0", undefined],

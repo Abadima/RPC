@@ -5,7 +5,8 @@ name: Release
 # SHA256SUMS, build provenance, and the CHANGELOG.md section for that version
 # as its notes. Run it by hand from any branch for a dry run: it checks and
 # builds all of it and keeps the files as a workflow artifact, and publishes
-# nothing. Builds of main between releases are Nightly's (dev-<commit>).
+# nothing. A release made by hand for the tag is filled in, not an error. Builds of
+# main between releases are Nightly's (dev-<commit>).
 #
 # The build is build.yml, shared with Nightly.
 on:
@@ -128,4 +129,11 @@ jobs:
           printf '\n<!-- parousia-desktop: %s -->\n' "$DESKTOP" >> notes.md
           flags=(--latest)
           if [ "$PRERELEASE" = true ]; then flags=(--prerelease); fi
-          gh release create "$TAG" release/* --verify-tag --title "Parousia $TAG" --notes-file notes.md "${flags[@]}"
+          # A release made by hand for this tag (a draft, or published with no files)
+          # gets the files, the notes, and publishing; otherwise it's created here.
+          if gh release list --limit 100 --json tagName --jq '.[].tagName' | grep -Fxq "$TAG"; then
+            gh release upload "$TAG" release/* --clobber
+            gh release edit "$TAG" --title "Parousia $TAG" --notes-file notes.md --draft=false "${flags[@]}"
+          else
+            gh release create "$TAG" release/* --verify-tag --title "Parousia $TAG" --notes-file notes.md "${flags[@]}"
+          fi
