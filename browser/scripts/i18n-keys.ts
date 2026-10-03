@@ -49,9 +49,14 @@ const words = (text: string): string => text.replaceAll(/\s+/g, " ").trim();
 
 /** Fixed text in a page: each run of text between tags, and the attributes a language may translate. */
 export function pageStrings(html: string): string[] {
-  const stripped = html
-    .replaceAll(/<!--[\s\S]*?-->/g, "")
-    .replaceAll(/<(script|style)[\s\S]*?<\/\1>/g, "");
+  let stripped = html;
+  let previous: string;
+  do {
+    previous = stripped;
+    stripped = stripped
+      .replaceAll(/<!--[\s\S]*?-->/g, "")
+      .replaceAll(/<(script|style)[\s\S]*?<\/\1>/g, "");
+  } while (stripped !== previous);
   const found: string[] = [];
   for (const segment of stripped.split(/<[^>]*>/)) {
     const text = words(decode(segment));
