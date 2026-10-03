@@ -17,6 +17,25 @@ describe("isShowableImage", () => {
     expect(isShowableImage("")).toBe(false);
     expect(isShowableImage(undefined)).toBe(false);
   });
+
+  test("refuses an https address that isn't a real one, which Discord couldn't fetch", () => {
+    for (const value of [
+      "https://",
+      "https:///",
+      "https:///logo.png",
+      "https://?x=1",
+      "https://#top",
+      "https://exa mple.com/a.png",
+      "https://exa<mple.com/a.png",
+      "https://[::1/a.png",
+      "https://example.com:99999/a.png",
+      "HTTPS://",
+    ]) {
+      expect(isShowableImage(value)).toBe(false);
+    }
+    expect(isShowableImage("HTTPS://Example.com/a.png")).toBe(true);
+    expect(isShowableImage("https://example.com:8443/a.png?v=1")).toBe(true);
+  });
 });
 
 describe("faviconImage", () => {
@@ -70,6 +89,21 @@ describe("withSiteImage", () => {
       const shown = withSiteImage({ ...base, assets: { largeImage } }, { icon: ICON });
       expect(shown.assets?.largeImage).toBe(ICON);
     }
+  });
+
+  test("a malformed https image falls back to the site's logo, then its favicon", () => {
+    const favicon = "https://www.example.com/static/favicon-196.png";
+    for (const largeImage of ["https://", "https:///x.png", "https://exa mple.com/a.png"]) {
+      const activity: Activity = { ...base, assets: { largeImage, largeText: "Album" } };
+      expect(withSiteImage(activity, { icon: ICON }).assets).toEqual({
+        largeText: "Album",
+        largeImage: ICON,
+      });
+      expect(withSiteImage(activity, {}, favicon).assets?.largeImage).toBe(favicon);
+      expect(withSiteImage(activity, {}).assets).toEqual({ largeText: "Album" });
+    }
+    // A malformed icon doesn't block the favicon either.
+    expect(withSiteImage(base, { icon: "https://" }, favicon).assets?.largeImage).toBe(favicon);
   });
 
   test("the site's logo comes before its favicon, and the favicon before nothing", () => {

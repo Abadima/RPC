@@ -1,6 +1,8 @@
 # VERSION 1
 
-## [V1.0.0-beta.2](https://github.com/Abadima/RPC/releases/tag/v1.0.0-beta.2) - V1 SECOND BETA
+## [V1.0.1](https://github.com/Abadima/RPC/releases/tag/v1.0.1) - V1 FIRST STABLE RELEASE
+
+Parousia Desktop **1.0.1**, and the browser extension and userscript **1.1.0**. This is the first stable release; it carries everything since the first public beta.
 
 ### ✨ New Features
 
@@ -18,7 +20,7 @@
 
 - **Smart Presence Throttling:** Rapid changes (e.g., scrubbing through videos) are rate-limited to update at most once every 2 seconds. Activity switching and clearing still happen instantly.
 
-- **Improved Image Fallbacks:** When a site lacks a custom image, Parousia uses the site logo or tab favicon before defaulting to the Parousia logo.
+- **Improved Image Fallbacks:** When a site lacks a custom image, Parousia uses the site logo or tab favicon before defaulting to the Parousia logo. An image that isn't a real `https` address (such as a bare `https://`) counts as no image, so the fallback applies to it too.
 
 - **YouTube Thumbnail Control:** Added a simplified "Show video thumbnail" toggle. When disabled, the YouTube logo is used instead.
 
@@ -47,6 +49,10 @@
   - Multi-user safety checks prevent unauthorized connections and conflicting local instances.
 
 ### ⚠️ Changes & Deprecations
+
+- **Firefox Add-ons:** Parousia is now on [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/parousia/). Desktop still asks you to allow a Firefox install once, since Firefox gives every install its own identity. The Chrome Web Store listing is in review; until it is up, the Chromium extension loads from `parousia-chromium.zip`.
+
+- **Separate Versions:** Parousia Desktop and the extension now have their own version numbers (Desktop **1.0.1**, extension and userscript **1.1.0**). A release is tagged with Desktop's, and the extension's manifests, `package.json`, and the userscript all carry the extension's.
 
 - **Cross-Version Compatibility:** Extension and Desktop remain connected across different minor/patch/beta versions; only major version differences force a disconnection.
 

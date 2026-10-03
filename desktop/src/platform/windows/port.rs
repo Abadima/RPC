@@ -11,11 +11,34 @@
 use std::io::{self, Read, Write};
 use std::mem::zeroed;
 use std::net::{Ipv4Addr, TcpListener, TcpStream};
+use std::thread::sleep;
+use std::time::{Duration, Instant};
 
 use windows_sys::Win32::Networking::WinSock::{
     AF_INET, IPPROTO_TCP, SO_REUSEADDR, SOCK_STREAM, SOCKADDR, SOCKADDR_IN, SOL_SOCKET,
     WSAGetLastError, WSASocketW, bind, closesocket, listen, setsockopt,
 };
+
+/// Accepts one connection, or panics after `wait`. A plain `accept` would block
+/// the test run forever if the connection went to another listener, and the
+/// stream it returns is blocking again whatever the listener's mode.
+fn accept_within(listener: &TcpListener, wait: Duration) -> TcpStream {
+    listener.set_nonblocking(true).unwrap();
+    let deadline = Instant::now() + wait;
+    loop {
+        match listener.accept() {
+            Ok((stream, _)) => {
+                stream.set_nonblocking(false).unwrap();
+                stream.set_read_timeout(Some(wait)).unwrap();
+                return stream;
+            }
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock && Instant::now() < deadline => {
+                sleep(Duration::from_millis(10));
+            }
+            Err(err) => panic!("the loopback-specific listener got no connection: {err}"),
+        }
+    }
+}
 
 /// Binds a TCP socket to `ip:port` after setting `SO_REUSEADDR`, as a program
 /// trying to share or take over a port would, and listens on it.
@@ -71,12 +94,9 @@ fn a_wildcard_listener_on_the_port_doesnt_get_loopback_connections() {
     let port = desktop.local_addr().unwrap().port();
     // Whether Windows lets it bind at all, loopback traffic goes to the more specific socket.
     let squatter = bind_sharing(Ipv4Addr::UNSPECIFIED, port);
-let mut client = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    let mut client = TcpStream::connect(("127.0.0.1", port)).unwrap();
     client.write_all(b"x").unwrap();
-    desktop.set_nonblocking(true).unwrap();
-    let (mut accepted, _) = desktop
-        .accept()
-        .expect("the loopback-specific listener did not receive the connection");
+    let mut accepted = accept_within(&desktop, Duration::from_secs(5));
     let mut byte = [0u8; 1];
     accepted.read_exact(&mut byte).unwrap();
     assert_eq!(&byte, b"x");

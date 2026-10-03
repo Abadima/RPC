@@ -88,7 +88,7 @@ It only connects while something needs Desktop: an Activity is being reported, o
 
 Getting connected:
 
-- **Store builds** of the Chromium extension will be recognized out of the box once listings exist.
+- **The Chrome Web Store build** of the Chromium extension will be recognized out of the box once its listing is up.
 - **Development builds and every Firefox install** (its `moz-extension://` origin is random per install) reach Desktop by an origin it has to be told about, once. The popup shows "Not allowed by Parousia Desktop" with the exact command (`Parousia-Desktop allow chrome-extension://…`), and the tray's Diagnostics → Refused menu has a one-click "Allow". `bun run dev` gives the Chromium build a stable id (from a per-machine key in `.dev-key.json`) and prints it.
 - **The userscript** connects only after "Allow userscripts" is turned on in Desktop (tray, the extension's Settings, or `Parousia-Desktop set userscripts on`). Its manager menu's "Parousia Desktop status" says whether it's connected and how to allow it.
 

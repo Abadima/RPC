@@ -39,7 +39,8 @@ This roadmap tracks remaining milestones. See `project/architecture.md` for arch
 
 - [ ] Run release workflows manually and verify the resulting artifacts/releases
 - [ ] Complete Firefox per-install origin handling
-- [ ] Complete Chrome Web Store and AMO store listings/reviews
+- [x] Firefox listing approved on AMO
+- [ ] Complete the Chrome Web Store review
 - [ ] Code-sign Windows binaries
 - [ ] Add macOS builds
 - [ ] Complete final security, privacy, permission, dependency, performance, and cross-platform compatibility audits

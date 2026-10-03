@@ -156,12 +156,20 @@ try {
 
   // --- Versions: another minor keeps working and says who's behind; another major doesn't ---
   // Copies of the build with another version, each its own extension (and origin).
+  // Desktop and the extension version on their own, so each case is Desktop's
+  // own version, a minor above it, and the next major.
+  const [major, minor, patch] = (
+    await readFile(join(browserDir, "..", "desktop", "Cargo.toml"), "utf8")
+  )
+    .match(/^version = "(\d+)\.(\d+)\.(\d+)/m)
+    .slice(1)
+    .map(Number);
   const notice = (page) =>
     page.$eval("#update-notice", (el) => (el.hidden ? null : el.textContent));
-  assert((await notice(popupA)) === null, "the same version shows no update notice");
   for (const [version, expectation] of [
-    ["1.1.0", /A newer Parousia Desktop is available/],
-    ["2.0.0", null],
+    [`${major}.${minor}.${patch}`, "level"],
+    [`${major}.${minor + 1}.0`, /A newer Parousia Desktop is available/],
+    [`${major + 1}.0.0`, null],
   ]) {
     const dir = join(ws.dir, `extension-${version}`);
     await cp(extensionDir, dir, { recursive: true });
@@ -171,7 +179,11 @@ try {
     const other = await launch(join(ws.dir, `profile-${version}`), dir);
     await control(ws, "allow", other.origin);
     let page = await openPopup(other);
-    if (expectation) {
+    if (expectation === "level") {
+      await popup.waitForStatus(page, /^Connected to Parousia Desktop/);
+      await sleep(300);
+      assert((await notice(page)) === null, "the same version shows no update notice");
+    } else if (expectation) {
       await popup.waitForStatus(page, /^Connected to Parousia Desktop/);
       await waitUntil(async () => (await notice(page)) !== null, "the update notice");
       assert(expectation.test(await notice(page)), `v${version}: ${await notice(page)}`);

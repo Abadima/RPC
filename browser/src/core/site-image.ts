@@ -4,6 +4,21 @@ import type { Activity, ActivityInfo } from "./activity";
 export const MAX_IMAGE = 256;
 
 /**
+ * An `https` address with a host, as `new URL` reads it. The text is checked
+ * for its own host first: `new URL("https:///x.png")` is `https://x.png/`, but
+ * Discord is given the text as written.
+ */
+function isHttpsAddress(value: string): boolean {
+  if (!/^https:\/\/[^/?#\s]/i.test(value)) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname !== "";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Whether Discord can show `value` as an image: an `https` address within the
  * limit, or a short asset key of the Discord Application it's shown as.
  * Anything else is dropped further on, and Discord then shows the
@@ -12,7 +27,7 @@ export const MAX_IMAGE = 256;
  */
 export function isShowableImage(value: string | undefined): value is string {
   if (!value) return false;
-  if (/^https:\/\//i.test(value)) return value.length <= MAX_IMAGE;
+  if (/^https:/i.test(value)) return value.length <= MAX_IMAGE && isHttpsAddress(value);
   return /^[\w-]{1,64}$/.test(value);
 }
 

@@ -46,9 +46,10 @@ describe("the extension's version", () => {
     expect(pkg.version).toBe(chromium.version);
   });
 
-  test("is the 1.0.0 release", async () => {
+  test("is the 1.1.0 release", async () => {
     // Bump this with the manifests and package.json when the next release is cut.
-    expect((await read("chromium.json")).version).toBe("1.0.0");
+    // Desktop versions on its own (desktop/Cargo.toml); the tag is Desktop's.
+    expect((await read("chromium.json")).version).toBe("1.1.0");
   });
 
   test("is the userscript's version too", async () => {

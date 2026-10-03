@@ -37,8 +37,8 @@ ws://127.0.0.1:57179/ws
 
 Desktop identifies browser clients by their `Origin`.
 
-- Store builds are recognized automatically once their listings exist.
-- Development and Firefox builds must be allowed once with `Parousia-Desktop allow <origin>`.
+- The Chrome Web Store build is recognized automatically once its listing is up.
+- Development builds and every Firefox install (the Add-ons listing included, since Firefox gives each install its own origin) must be allowed once with `Parousia-Desktop allow <origin>`.
 - Refused extensions can also be allowed from the tray's Diagnostics menu.
 - Userscripts are disabled by default and require **Allow userscripts**.
 - On Linux and Windows, connections from other OS users are refused before anything is read.
