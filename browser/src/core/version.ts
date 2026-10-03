@@ -9,9 +9,11 @@
 /** Which side is older and could update. */
 export type UpdateNotice = "desktop" | "extension";
 
-const RELEASE = /^(\d{1,9})\.(\d{1,9})\.(\d{1,9})(?:[-+][\w.+-]{0,32})?$/;
+// An optional fourth number is a store revision: Firefox takes each version once,
+// so a fix to 1.1.0 ships as 1.1.0.1. It is the same release and never compared.
+const RELEASE = /^(\d{1,9})\.(\d{1,9})\.(\d{1,9})(?:\.\d{1,9})?(?:[-+][\w.+-]{0,32})?$/;
 
-/** A release's major, minor, and patch numbers; `null` for text that isn't one. A beta suffix is ignored: extension stores have no such versions. */
+/** A release's major, minor, and patch numbers; `null` for text that isn't one. A store revision (a fourth number) or a beta suffix is ignored. */
 export function parseRelease(text: string): readonly [number, number, number] | null {
   const match = RELEASE.exec(text);
   return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;

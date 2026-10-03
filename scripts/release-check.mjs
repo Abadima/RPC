@@ -4,8 +4,10 @@
 // and the release is the extension's version: both manifests and
 // browser/package.json carry its numbers (`1.2.3`; a pre-release suffix such
 // as `1.2.3-rc.1` lives in the tag alone, because the stores take nothing
-// else). Parousia Desktop versions on its own (desktop/Cargo.toml), so it only
-// has to be a release number; the workflows read it from there.
+// else). Firefox's manifest may add a fourth number (1.2.3.1), since Mozilla
+// takes each version once and a fix has to go out as a new one. Parousia Desktop versions on its own
+// (desktop/Cargo.toml), so it only has to be a release number; the workflows
+// read it from there.
 //
 //   node scripts/release-check.mjs v1.2.3
 import { readFileSync } from "node:fs";
@@ -28,6 +30,11 @@ function packageVersion(cargoToml) {
   return /^version\s*=\s*"([^"]+)"/m.exec(section)?.[1] ?? null;
 }
 
+/** Whether `version` is `core` or a store revision of it (`core` and one more number, as 1.1.0.1 is of 1.1.0). */
+function isRevisionOf(core, version) {
+  return version === core || new RegExp(`^${core.replaceAll(".", "\\.")}\\.\\d{1,9}$`).test(version);
+}
+
 /** Everything that disagrees with `input`, as messages; empty means the release can go ahead. */
 export function checkRelease(input, root) {
   const parsed = parseVersion(input);
@@ -44,8 +51,10 @@ export function checkRelease(input, root) {
   ];
   for (const path of files) {
     const { version } = JSON.parse(readFileSync(join(root, path), "utf8"));
-    if (version !== parsed.core) {
-      problems.push(`${path} has version ${version}, the release needs ${parsed.core}`);
+    const allowed = path.endsWith("firefox.json") ? isRevisionOf(parsed.core, version) : version === parsed.core;
+    if (!allowed) {
+      const needs = path.endsWith("firefox.json") ? `${parsed.core} or a revision of it (${parsed.core}.1)` : parsed.core;
+      problems.push(`${path} has version ${version}, the release needs ${needs}`);
     }
   }
   return problems;

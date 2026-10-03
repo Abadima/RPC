@@ -315,16 +315,15 @@ jobs:
           cp dist/userscript/parousia.user.js dist/userscript/parousia.user.js.gz ../out/
 
       # What is inside the files has to be the release, and the gzip has to be
-      # the userscript exactly. The extension has a version of its own (the
-      # manifests', which release-check keeps in step with each other); only
-      # Desktop carries the tag's.
+      # the userscript exactly. Each package carries its own manifest's version
+      # (release-check holds them to the release; Firefox's may be a later
+      # patch), and the userscript carries Chromium's.
       - name: Check the packages
         run: |
-          extension="$(jq -r .version manifests/chromium.json)"
           for browser in chromium firefox; do
-            [ "$(unzip -p "../out/parousia-$browser.zip" manifest.json | jq -r .version)" = "$extension" ]
+            [ "$(unzip -p "../out/parousia-$browser.zip" manifest.json | jq -r .version)" = "$(jq -r .version "manifests/$browser.json")" ]
           done
-          grep -qx "// @version      $extension" ../out/parousia.user.js
+          grep -qx "// @version      $(jq -r .version manifests/chromium.json)" ../out/parousia.user.js
           gzip -dc ../out/parousia.user.js.gz | cmp - ../out/parousia.user.js
 
       - name: Upload
