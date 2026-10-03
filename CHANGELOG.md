@@ -1,8 +1,8 @@
 # VERSION 1
 
-## [V1.0.1](https://github.com/Abadima/RPC/releases/tag/v1.0.1) - V1 FIRST STABLE RELEASE
+## [V1.1.0](https://github.com/Abadima/RPC/releases/tag/v1.1.0) - V1 FIRST STABLE RELEASE
 
-Parousia Desktop **1.0.1**, and the browser extension and userscript **1.1.0**. This is the first stable release; it carries everything since the first public beta.
+This release carries the browser extension and userscript **1.1.0** and Parousia Desktop **1.0.1**. It is the first stable release, with everything since the first public beta.
 
 ### ✨ New Features
 
@@ -14,7 +14,7 @@ Parousia Desktop **1.0.1**, and the browser extension and userscript **1.1.0**. 
 
 - **Expanded Activity Info:** PreMiD and native activities now send activity types (_Listening to, Watching, Competing in_), status lines, party sizes ("2 of 5"), and image links to Discord.
 
-- **Version Update Notices:** Extension and Desktop apps with minor/patch version mismatches will continue working together, but will display an update notice with a "Not now" option.
+* **Version Update Notices:** Extension and Desktop minor/patch versions remain compatible. Update notices only appear when an update is actually needed. The extension checks GitHub's latest release at most once per day to determine whether a newer Desktop version is available. The request is unauthenticated, sends no user or page data, and failed checks show nothing. Both notices include a "Not now" option.
 
 ### ⚡ Performance & Usability Improvements
 
@@ -52,7 +52,7 @@ Parousia Desktop **1.0.1**, and the browser extension and userscript **1.1.0**. 
 
 - **Firefox Add-ons:** Parousia is now on [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/parousia/). Desktop still asks you to allow a Firefox install once, since Firefox gives every install its own identity. The Chrome Web Store listing is in review; until it is up, the Chromium extension loads from `parousia-chromium.zip`.
 
-- **Separate Versions:** Parousia Desktop and the extension now have their own version numbers (Desktop **1.0.1**, extension and userscript **1.1.0**). A release is tagged with Desktop's, and the extension's manifests, `package.json`, and the userscript all carry the extension's.
+- **Separate Versions:** Parousia Desktop and the extension now have their own version numbers (Desktop **1.0.1**, extension and userscript **1.1.0**). A release is named for the extension's, which its manifests, `package.json`, and the userscript carry, and its notes name the Desktop it contains.
 
 - **Cross-Version Compatibility:** Extension and Desktop remain connected across different minor/patch/beta versions; only major version differences force a disconnection.
 
