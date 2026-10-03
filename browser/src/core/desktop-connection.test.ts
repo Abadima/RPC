@@ -14,7 +14,10 @@ import {
 
 const activity = { id: "a", name: "A", url: "https://a.example" };
 
-function harness(channel: ChannelOpener): {
+function harness(
+  channel: ChannelOpener,
+  version = "1.0.0",
+): {
   connection: DesktopConnection;
   timers: ManualTimers;
   states: ConnectionState[];
@@ -23,6 +26,7 @@ function harness(channel: ChannelOpener): {
   const connection = new DesktopConnection({
     channel,
     clientName: "Test Browser",
+    version,
     setTimer: timers.setTimer,
   });
   const states: ConnectionState[] = [];
@@ -48,11 +52,12 @@ describe("DesktopConnection demand", () => {
     connection.send(presence);
     await settle();
 
-    expect(connection.getState()).toEqual({ status: "connected" });
+    expect(connection.getState()).toEqual({ status: "connected", desktopVersion: "1.0.0" });
     expect(states.map((s) => s.status)).toEqual(["connecting", "connected"]);
     expect(desktop.received[0]).toEqual({
       type: "hello",
       protocolVersion: PROTOCOL_VERSION,
+      version: "1.0.0",
       name: "Test Browser",
     });
     // The page's address stays in the browser: Desktop gets only what it shows.
@@ -223,13 +228,46 @@ describe("DesktopConnection refusals and reconnecting", () => {
     expect(connection.getState().status).toBe("incompatible");
   });
 
-  test("a welcome for another protocol version isn't accepted", async () => {
-    const desktop = new FakeDesktop();
-    desktop.protocolVersion = PROTOCOL_VERSION - 1;
-    const { connection } = harness(fakeChannel(desktop));
-    connection.acquire();
-    await settle();
-    expect(connection.getState().status).toBe("disconnected");
+  test("a welcome for another protocol version or major isn't accepted", async () => {
+    for (const change of [
+      (desktop: FakeDesktop) => (desktop.protocolVersion = PROTOCOL_VERSION - 1),
+      (desktop: FakeDesktop) => (desktop.version = "2.0.0"),
+      (desktop: FakeDesktop) => (desktop.version = "0.9.0"),
+      (desktop: FakeDesktop) => (desktop.version = "not a version"),
+    ]) {
+      const desktop = new FakeDesktop();
+      change(desktop);
+      const ws = fakeChannel(desktop);
+      const { connection, timers } = harness(ws);
+      connection.send(createPresence(activity));
+      await settle();
+      expect(connection.getState()).toEqual({ status: "incompatible" });
+      timers.advance(120_000);
+      expect(ws.opened).toHaveLength(1);
+    }
+  });
+
+  test("another minor, patch, or beta stays connected and says which side to update", async () => {
+    for (const [desktopVersion, update] of [
+      ["1.2.0", undefined],
+      ["1.2.0-beta.4", undefined],
+      ["1.1.9", "desktop"],
+      ["1.0.0-beta.1", "desktop"],
+      ["1.3.0", "extension"],
+      ["1.2.1", "extension"],
+    ] as const) {
+      const desktop = new FakeDesktop();
+      desktop.version = desktopVersion;
+      const { connection } = harness(fakeChannel(desktop), "1.2.0");
+      connection.send(createPresence(activity));
+      await settle();
+      expect(connection.getState()).toEqual({
+        status: "connected",
+        desktopVersion,
+        ...(update && { update }),
+      });
+      expect(desktop.presences()).toHaveLength(1);
+    }
   });
 
   test("with Desktop absent it retries every 10 seconds, and picks it up once it starts", async () => {
@@ -253,7 +291,7 @@ describe("DesktopConnection refusals and reconnecting", () => {
     ws.behavior = "normal";
     timers.advance(10_000);
     await settle();
-    expect(connection.getState()).toEqual({ status: "connected" });
+    expect(connection.getState()).toMatchObject({ status: "connected" });
     expect(desktop.presences()).toHaveLength(1);
   });
 
@@ -271,7 +309,7 @@ describe("DesktopConnection refusals and reconnecting", () => {
     connection.reconnect();
     await settle();
     expect(ws.opened).toHaveLength(3);
-    expect(connection.getState()).toEqual({ status: "connected" });
+    expect(connection.getState()).toMatchObject({ status: "connected" });
     expect(timers.pending()).toBe(0);
 
     connection.reconnect();

@@ -3,13 +3,13 @@
 // playwright-core's isolated Chromium (never a system browser profile). Runs
 // in CI; `real:verify` covers installed browsers.
 //
-// Desktop runs against a throwaway data and runtime directory. Linux only;
+// Desktop runs against a throwaway data and runtime directory. Linux and Windows;
 // port 57179 must be free. Prerequisites: `bun run build` here, and
 // `cargo build` in ../desktop.
 //
 // Covers: Desktop absent, then starting after the browser; an unrecognized
 // build refused until it's allowed; two browsers at once; a detected
-// Activity (Jena Hub, its page served by the test) reaching Discord through
+// Activity (Abadima's Portfolio, its page served by the test) reaching Discord through
 // Desktop, following Settings > Platforms, and clearing when the browser
 // disconnects; disallowing connected browsers; userscripts off by default,
 // then opted in; hostile input straight to the socket; a second launch; the
@@ -19,8 +19,8 @@
 // at it and never at a real Discord.
 
 import { chromium } from "playwright-core";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { cp, readFile, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { startFakeDiscord } from "./e2e/fake-discord.mjs";
 import { connectRaw } from "./e2e/raw-ws.mjs";
 import {
@@ -33,24 +33,28 @@ import {
   logger,
   popup,
   setDiscordPlatform,
+  sleep,
   startDesktop,
   status,
   STEP_TIMEOUT_MS,
   waitUntil,
+  windows,
   workspace,
 } from "./e2e/lib.mjs";
 
 const log = logger("desktop-link");
-const extensionDir = join(browserDir, "dist", "chromium");
+/** What Desktop calls this OS in a browser's name ("Chromium on Linux"). */
+const os = windows ? "Windows" : "Linux";
+const extensionDir = resolve(browserDir, process.env.PAROUSIA_BUILD_DIR ?? "dist", "chromium");
 const escape = (text) => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 
-async function launch(userDataDir) {
+async function launch(userDataDir, dir = extensionDir) {
   // channel "chromium" runs the full build in new headless mode, which
   // (unlike the headless shell) can load extensions.
   const context = await chromium.launchPersistentContext(userDataDir, {
     channel: "chromium",
     headless: true,
-    args: [`--disable-extensions-except=${extensionDir}`, `--load-extension=${extensionDir}`],
+    args: [`--disable-extensions-except=${dir}`, `--load-extension=${dir}`],
   });
   const worker =
     context.serviceWorkers()[0] ??
@@ -72,19 +76,24 @@ async function reopen(browser, page) {
   return openPopup(browser);
 }
 
-const HELLO = JSON.stringify({ type: "hello", protocolVersion: 6, name: "Raw client" });
-const JENA_GAME = "https://jena.systems/apps/3851919";
+const HELLO = JSON.stringify({
+  type: "hello",
+  protocolVersion: 1,
+  version: "1.0.0",
+  name: "Raw client",
+});
+const PORTFOLIO_PAGE = "https://abadima.dev/pages/projects";
 
-/** Opens a Jena Hub game page, served here with the real site's title (no network). */
-async function openJenaGame(browser) {
+/** Opens a portfolio page (a native Activity that reads only the address and title, so it needs no page data), served here (no network). */
+async function openPortfolioPage(browser) {
   const page = await browser.context.newPage();
-  await page.route("https://jena.systems/**", (route) =>
+  await page.route("https://abadima.dev/**", (route) =>
     route.fulfill({
       contentType: "text/html",
-      body: "<!doctype html><title>Chess - Jena V3</title><p>Chess</p>",
+      body: "<!doctype html><title>Projects - Abadima</title><p>Projects</p>",
     }),
   );
-  await page.goto(JENA_GAME);
+  await page.goto(PORTFOLIO_PAGE);
   return page;
 }
 
@@ -130,8 +139,8 @@ try {
   assert(saved.allowedOrigins.includes(a.origin), "and persists it to config.json");
   popupA = await reopen(a, popupA);
   await popup.waitForStatus(popupA, /^Connected to Parousia Desktop$/);
-  await desktop.waitFor(new RegExp(`Chromium on Linux connected from ${escape(a.origin)}`), since);
-  await desktop.waitFor(/presence from Chromium on Linux: none/, since);
+  await desktop.waitFor(new RegExp(`Chromium on ${os} connected from ${escape(a.origin)}`), since);
+  await desktop.waitFor(new RegExp(`presence from Chromium on ${os}: none`), since);
   log("allowed from the CLI: connects, Presence arrives; saved to config.json");
 
   // --- A second browser, at the same time ---
@@ -145,34 +154,110 @@ try {
   assert(report.clients.length === 2, `two clients (${report.clients.length})`);
   log("two browsers connected at once, sharing the one allowed build's origin");
 
+  // --- Versions: another minor keeps working and says who's behind; another major doesn't ---
+  // Copies of the build with another version, each its own extension (and origin).
+  const notice = (page) =>
+    page.$eval("#update-notice", (el) => (el.hidden ? null : el.textContent));
+  assert((await notice(popupA)) === null, "the same version shows no update notice");
+  for (const [version, expectation] of [
+    ["1.1.0", /A newer Parousia Desktop is available/],
+    ["2.0.0", null],
+  ]) {
+    const dir = join(ws.dir, `extension-${version}`);
+    await cp(extensionDir, dir, { recursive: true });
+    const manifestPath = join(dir, "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    await writeFile(manifestPath, JSON.stringify({ ...manifest, version }));
+    const other = await launch(join(ws.dir, `profile-${version}`), dir);
+    await control(ws, "allow", other.origin);
+    let page = await openPopup(other);
+    if (expectation) {
+      await popup.waitForStatus(page, /^Connected to Parousia Desktop/);
+      await waitUntil(async () => (await notice(page)) !== null, "the update notice");
+      assert(expectation.test(await notice(page)), `v${version}: ${await notice(page)}`);
+      assert(
+        (await page.textContent("#update-notice a")) === "Update Parousia Desktop",
+        "with the download",
+      );
+      await page.click("#update-notice button");
+      assert((await notice(page)) === null, "Not now hides it");
+      page = await reopen(other, page);
+      await popup.waitForStatus(page, /^Connected to Parousia Desktop/);
+      await sleep(300);
+      assert((await notice(page)) === null, "and it stays hidden when the popup opens again");
+    } else {
+      await popup.waitForStatus(page, /^Parousia Desktop version mismatch$/);
+      assert(/Versions don't match/.test(await popup.help(page)), "another major is refused");
+      assert((await notice(page)) === null, "with no update notice");
+    }
+    await other.context.close();
+  }
+  await waitUntil(async () => (await status(ws)).clients.length === 2, "the extra browsers to go");
+  log(
+    "versions: a newer extension still connects and offers the Desktop download once ('Not now' is remembered); another major version is refused as a mismatch",
+  );
+
   // --- Discord: a detected Activity, through Desktop ---
-  const jenaPage = await openJenaGame(b);
-  const shown = await discord.waitFor((a) => a?.details === "Playing Chess", "Playing Chess");
+  const portfolioPage = await openPortfolioPage(b);
+  const shown = await discord.waitFor(
+    (a) => a?.details === "Browsing projects",
+    "Browsing projects",
+  );
   assert(
     discord.handshakes.at(-1) === PAROUSIA_CLIENT_ID,
     `as Parousia's Discord Application (${discord.handshakes})`,
   );
   assert(
-    shown.name === "Jena Hub" &&
-      shown.state === "In the Arcade" &&
-      shown.details_url === JENA_GAME &&
-      shown.buttons?.[0]?.label === "Play Chess" &&
-      shown.assets?.large_image === "https://jena.systems/icons/icon-512.png",
+    shown.name === "Abadima" &&
+      shown.state === "Exploring the portfolio" &&
+      shown.details_url === PORTFOLIO_PAGE &&
+      shown.buttons?.[0]?.label === "Open Abadima's Portfolio" &&
+      shown.assets?.large_image === "https://abadima.dev/assets/imgs/abadima_fav.ico",
     `the whole activity arrives (${JSON.stringify(shown)})`,
   );
   report = await status(ws);
   const adapter = report.platforms.find((p) => p.platform === "discord");
   assert(
-    adapter?.state === "showing" && adapter.activity === "Jena Hub",
+    adapter?.state === "showing" && adapter.activity === "Abadima",
     `Desktop reports it (${JSON.stringify(report.platforms)})`,
   );
-  log('a Jena Hub game page is detected and Discord shows "Playing Chess" through Desktop');
+  log('an abadima.dev page is detected and Discord shows "Browsing projects" through Desktop');
 
   await b.worker.evaluate(setDiscordPlatform(false));
   await discord.waitFor((a) => a === null, "nothing once Discord is turned off");
   await b.worker.evaluate(setDiscordPlatform(true));
-  await discord.waitFor((a) => a?.details === "Playing Chess", "it again once turned on");
+  await discord.waitFor((a) => a?.details === "Browsing projects", "it again once turned on");
   log("Settings > Platforms: turning Discord off clears it there, on shows it again");
+
+  // --- Discord quitting and starting again ---
+  const quitAt = Date.now();
+  await discord.quit();
+  await waitUntil(
+    async () => (await status(ws)).platforms[0]?.state === "not_running",
+    "Desktop to notice Discord quit",
+    3000,
+  );
+  assert(
+    Date.now() - quitAt < 3000,
+    `Discord quitting is noticed at once, not at the next update (${Date.now() - quitAt} ms)`,
+  );
+  const shownBefore = discord.activities.length;
+  const connectionsBefore = discord.handshakes.length;
+  await discord.reopen();
+  await waitUntil(
+    () => discord.activities.length > shownBefore,
+    "it to be shown again once Discord is back",
+  );
+  assert(discord.activities.at(-1)?.details === "Browsing projects", "the same Activity");
+  assert(
+    discord.handshakes.length === connectionsBefore + 1 &&
+      discord.handshakes.at(-1) === PAROUSIA_CLIENT_ID,
+    `on a new connection (${discord.handshakes})`,
+  );
+  assert((await status(ws)).platforms[0]?.state === "showing", "and Desktop says it's showing");
+  log(
+    "Discord quits and starts again: noticed at once, and the Activity is shown again on a new connection",
+  );
 
   // --- Disallowing drops connected browsers ---
   await control(ws, "disallow", a.origin);
@@ -188,12 +273,12 @@ try {
   await popup.waitForStatus(popupA, /^Connected to Parousia Desktop$/);
   await popup.waitForStatus(popupB, /^Connected to Parousia Desktop$/);
   // The popups opened as tabs; the game's tab is the one being looked at again.
-  await jenaPage.bringToFront();
-  await discord.waitFor((a) => a?.details === "Playing Chess", "it again after reconnecting");
+  await portfolioPage.bringToFront();
+  await discord.waitFor((a) => a?.details === "Browsing projects", "it again after reconnecting");
   log(
     "disallowed while connected: both dropped at once and refused, and Discord cleared; allowed again, both reconnect and Discord shows it again",
   );
-  await jenaPage.close();
+  await portfolioPage.close();
   await discord.waitFor((a) => a === null, "nothing once the page is closed");
   log("closing the page clears Discord");
 
@@ -230,20 +315,26 @@ try {
   assert((await unknown.next()) === null, "and closed before anything is read");
   // Any local process can claim an allowed origin (see project/threat-model.md).
   // Desktop must still hold up against whatever it sends.
-  const old = await connectRaw({ origin: a.origin });
-  old.sendText('{"type":"hello","protocolVersion":2,"clientId":"x","clientNonce":"y","proof":"z"}');
-  assert((await old.next())?.reason === "unsupported_version", "a v2 hello: unsupported_version");
-  const v4 = await connectRaw({ origin: a.origin });
-  v4.sendText('{"type":"hello","protocolVersion":4,"name":"Phase 3 build"}');
-  assert((await v4.next())?.reason === "unsupported_version", "a v4 hello: unsupported_version");
-  // Protocol 5 sent each page's address along; since 6 it stays in the browser.
-  const v5 = await connectRaw({ origin: a.origin });
-  v5.sendText('{"type":"hello","protocolVersion":5,"name":"Sends page addresses"}');
-  assert((await v5.next())?.reason === "unsupported_version", "a v5 hello: unsupported_version");
+  for (const [label, hello] of [
+    ["another protocol", { protocolVersion: 2, version: "1.0.0", name: "x" }],
+    ["another major", { protocolVersion: 1, version: "2.0.0", name: "x" }],
+    ["no version", { protocolVersion: 1, name: "x" }],
+  ]) {
+    const conn = await connectRaw({ origin: a.origin });
+    conn.sendText(JSON.stringify({ type: "hello", ...hello }));
+    assert((await conn.next())?.reason === "unsupported_version", `${label}: unsupported_version`);
+  }
+  // Another minor, patch, or beta is welcome: the extension tells its user to update.
+  const newer = await connectRaw({ origin: a.origin });
+  newer.sendText(
+    JSON.stringify({ type: "hello", protocolVersion: 1, version: "1.9.0-beta.3", name: "Newer" }),
+  );
+  assert((await newer.next())?.type === "welcome", "another minor and beta: welcome");
+  newer.close();
   for (const hostile of [
     "{not json",
     "[]",
-    JSON.stringify({ type: "hello", protocolVersion: 6, name: "x", extra: true }),
+    JSON.stringify({ type: "hello", protocolVersion: 1, version: "1.0.0", name: "x", extra: true }),
     JSON.stringify({ type: "ping" }),
   ]) {
     const conn = await connectRaw({ origin: a.origin });
@@ -270,7 +361,7 @@ try {
     "and real clients unaffected",
   );
   log(
-    "hostile input: unknown extension told origin_not_allowed; v2, v4, v5, malformed, oversized, silent, and flooding connections are rejected and closed; Desktop stays up",
+    "hostile input: unknown extension told origin_not_allowed; another protocol or major version, malformed, oversized, silent, and flooding connections are rejected and closed; Desktop stays up",
   );
 
   // --- A second launch ---

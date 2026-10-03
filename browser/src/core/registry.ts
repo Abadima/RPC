@@ -9,6 +9,8 @@ export interface PageMedia {
   artist?: string;
   album?: string;
   playing?: boolean;
+  /** Whether the element it reads is a `<video>` or an `<audio>`: "Watching" or "Listening to". */
+  kind?: "video" | "audio";
   /** Seconds. */
   duration?: number;
   /**
@@ -20,17 +22,31 @@ export interface PageMedia {
   end?: number;
 }
 
+/** An image the page shows: its `https` address, and the alt text it gives. */
+export interface PageImage {
+  src: string;
+  alt?: string;
+}
+
 /** What Parousia's collector read from a page, only of the kinds its Activity may take. */
 export interface PageData {
   media?: PageMedia;
   /** An `https` image of what's shown. */
   thumbnail?: string;
+  /**
+   * The `https` images the page has loaded, in page order and a few of them:
+   * for an Activity that knows where its site keeps a cover or an avatar
+   * (the address says which), which a page's og:image seldom is.
+   */
+  images?: PageImage[];
 }
 
 /** What an Activity sees of a page: its URL, and its title (which `tabs` exposes, like the URL). */
 export interface Page {
   url: URL;
   title: string;
+  /** The tab's favicon, which `tabs` exposes like the URL: the last image to fall back on before Discord's Application icon. */
+  favicon?: string;
   /** The page data kinds the Activity has here: declared, allowed in Settings > Privacy, and the site granted. */
   granted?: readonly PageDataKind[];
   /** What Parousia's collector read (native Activities that take page data). */

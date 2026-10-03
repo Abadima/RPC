@@ -56,6 +56,7 @@ import {
   track,
   waitUntil,
   workspace,
+  readManifest,
 } from "./e2e/lib.mjs";
 
 const log = logger("activities");
@@ -66,6 +67,8 @@ const GUIDE_NATIVE = "discordjs-guide";
 const GUIDE_CLIENT = "819865300173324288";
 const GUIDE_PAGE = "https://discordjs.guide/creating-your-bot/slash-commands";
 const JUMMBOX = "premid:Jummbox";
+const ARCH = "premid:ArchLinux";
+const ARCH_CLIENT = "929881116679237653";
 const TUNES_PAGE = "https://tunes.example/listen/1";
 const EXAMPLE_PAGE = "https://example.site/docs";
 const NOTHING_PAGE = "https://nothing.example/";
@@ -186,13 +189,11 @@ try {
     },
   });
   await cp(join(ws.dir, "dist", "chromium"), extensionDir, { recursive: true });
-  const read = async (path) => JSON.parse(await readFile(join(extensionDir, path), "utf8"));
-  const index = await read("activities/index.json");
+  const guide = await readManifest(extensionDir, GUIDE);
   assert(
-    index.files[GUIDE] && index.files[JUMMBOX],
+    guide && (await readManifest(extensionDir, JUMMBOX)),
     "both PreMiD Activities are packaged (run `bun run activities:fetch`)",
   );
-  const guide = await read(`activities/${index.files[GUIDE]}.json`);
   assert(
     guide.script.clientIds[0] === GUIDE_CLIENT,
     `DiscordJS Guide has its own client id (${guide.script.clientIds})`,
@@ -205,7 +206,17 @@ try {
   const manifestPath = join(extensionDir, "manifest.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
   manifest.permissions = [...manifest.permissions, "scripting"];
-  manifest.host_permissions = [...guide.info.origins, "https://tunes.example/*"];
+  // Arch Linux's regExp takes every subdomain of archlinux.org, so what it asks for does too.
+  const arch = await readManifest(extensionDir, ARCH);
+  assert(
+    JSON.stringify(arch?.info.origins) === JSON.stringify(["*://*.archlinux.org/*"]),
+    `Arch Linux asks for its subdomains (${arch?.info.origins})`,
+  );
+  manifest.host_permissions = [
+    ...guide.info.origins,
+    ...arch.info.origins,
+    "https://tunes.example/*",
+  ];
   await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
   log(
     "built with PreMiD's Activities, the native test ones, and a native DiscordJS Guide; DiscordJS Guide's and Tunes' sites held as granted, Jummbox's not",
@@ -273,12 +284,21 @@ try {
   await serve(
     guidePage,
     "https://discordjs.guide",
-    "<!doctype html><title>Slash commands | discord.js Guide</title><h1>Slash Commands</h1>",
+    `<!doctype html><title>Slash commands | discord.js Guide</title>
+     <link rel="icon" type="image/png" href="https://discordjs.guide/static/guide.png?v=7">
+     <h1>Slash Commands</h1>`,
+  );
+  // The test Activity has no icon of its own and sends no image, so what shows
+  // is the tab's favicon (without its query string), never Parousia's logo.
+  await guidePage.route("https://discordjs.guide/static/guide.png*", (route) =>
+    route.fulfill({ contentType: "image/png", body: PNG }),
   );
   await guidePage.goto(GUIDE_PAGE);
   const native = await shown(
-    (a) => a?.details === "Reading the guide",
-    "the native DiscordJS Guide, on until turned off",
+    (a) =>
+      a?.details === "Reading the guide" &&
+      a.assets?.large_image === "https://discordjs.guide/static/guide.png",
+    "the native DiscordJS Guide, on until turned off, with the page's favicon as its image",
   );
   assert(native.state === "Slash commands | discord.js Guide", `from the title (${native.state})`);
   assert(discord.handshakes.at(-1) === PAROUSIA_CLIENT_ID, "as Parousia's own Application");
@@ -494,11 +514,13 @@ try {
   await dashboard.locator('[data-kind="thumbnails"] .switch').click();
   await tunes.bringToFront();
   await shown(
-    (a) => a?.details === "Never Gonna Give You Up" && !a.assets?.large_image,
-    "no artwork once thumbnails are off",
+    (a) =>
+      a?.details === "Never Gonna Give You Up" &&
+      a.assets?.large_image === "https://tunes.example/icon.png",
+    "the site's own logo, not the song's artwork (and not Parousia's logo), once thumbnails are off",
   );
   log(
-    "native: Tunes is off until the popup turns it on in one click; then the collector reads the page's Media Session, and no artwork once thumbnails are off",
+    "native: Tunes is off until the popup turns it on in one click; then the collector reads the page's Media Session, and the site's logo instead of the artwork once thumbnails are off",
   );
 
   // --- The popup while sharing: Configure activity ---
@@ -833,6 +855,26 @@ try {
     `layout: one column at 360px, then ${columns.slice(1).join(", ")} across tablet, laptop, desktop, and ultrawide; the Default Activity form fits a phone`,
   );
   await dashboard.close();
+
+  // --- A subdomain the regExp takes: access asked for the whole site, so it runs ---
+  await setStates({ ...(await states()), [ARCH]: { on: true } });
+  const archPage = await context.newPage();
+  await serve(
+    archPage,
+    "https://bbs.archlinux.org",
+    "<!doctype html><title>Arch Linux Forums</title>",
+  );
+  await archPage.goto("https://bbs.archlinux.org/index.php");
+  await archPage.bringToFront();
+  await shown((a) => a?.details === "Browsing the forums", "Arch Linux on bbs.archlinux.org");
+  assert(
+    discord.handshakes.at(-1) === ARCH_CLIENT,
+    `as its own Application (${discord.handshakes})`,
+  );
+  await archPage.close();
+  log(
+    "Arch Linux: asks for *.archlinux.org, and runs on bbs.archlinux.org, a subdomain its regExp takes",
+  );
 
   // --- Turned off ---
   await guidePage.bringToFront();

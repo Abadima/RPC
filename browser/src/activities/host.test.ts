@@ -103,8 +103,7 @@ function setup(
       reads.push({ tabId, frameId, spec });
       return JSON.stringify({ "player.title": "Song" });
     },
-    loadIndex: async () => ({ [PREMID]: "premid/example" }),
-    loadManifest: async (file) => (file === "premid/example" ? manifest : null),
+    loadManifest: async (id) => (id === PREMID ? manifest : null),
     saveState: async (id, patch) => {
       saved.push([id, patch]);
     },
@@ -347,6 +346,20 @@ describe("PageHost: PreMiD Activities", () => {
       value: { "player.title": "Song" },
     });
     expect(saved).toEqual([[PREMID, { hidden: ["buttons"] }]]);
+  });
+
+  test("a setting hidden again, or shown when it isn't hidden, is no change to save", async () => {
+    const { host, page, saved } = setup();
+    await host.setStates({ [PREMID]: { on: true, hidden: ["buttons"] } });
+    const port = page();
+    port.send({ type: "hello", activity: PREMID, clientId: DEFAULT_CLIENT });
+    port.send({ type: "hide", ids: ["buttons"], hidden: true });
+    port.send({ type: "hide", ids: ["cover"], hidden: false });
+    await settle();
+    expect(saved).toEqual([]);
+    port.send({ type: "hide", ids: ["buttons", "cover"], hidden: true });
+    await settle();
+    expect(saved).toEqual([[PREMID, { hidden: ["buttons", "cover"] }]]);
   });
 
   test("turning it off, or taking its site back, stops its script and drops what it reported", async () => {

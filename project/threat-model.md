@@ -1,100 +1,241 @@
 # Threat Model
 
-This covers the two links Parousia runs on one machine: between its browser clients (the extension and the userscript) and Parousia Desktop, a WebSocket on `127.0.0.1:57179` (see `project/architecture.md`, Communication Protocol); and between Desktop and the Discord app, Discord's local RPC socket (see Platform Adapter Architecture there). It gets revisited whenever either link changes, and again during release hardening.
+Parousia has two local communication links:
 
-## What's Being Protected
+1. **Browser ↔ Desktop:** WebSocket on `127.0.0.1:57179`
+2. **Desktop ↔ Discord:** Discord's local RPC socket
 
-- **The user's presence.** Only what the user's own Parousia builds report should reach a platform like Discord, and it should disappear when the browser stops reporting it.
-- **Desktop's settings**: the allowlist of extension builds and the userscript switch. Changing them changes who can publish.
-- **Desktop itself**: memory, threads, and CPU. It should stay small and idle whatever a client sends.
-- **What Desktop knows**: connected browsers, their activity names, refused extensions. That's diagnostic information about the user.
+See `project/architecture.md` for protocol and platform details. This document is revisited whenever either link changes and during release hardening.
 
-There are no secrets on this link. Nothing is issued, paired, or stored per client.
+## What's Protected
+
+- **Presence:** only accepted Parousia clients may publish it, and it disappears when the client disconnects.
+- **Settings:** extension allowlist and userscript access.
+- **Desktop resources:** CPU, memory, threads, connections, and message handling.
+- **Diagnostic data:** connected clients, Activity names, refused origins, and debug events.
+
+There are no client secrets, pairing credentials, or per-client stored state.
 
 ## Trust Boundaries
 
-| Party | Trusted? | Why |
-| --- | --- | --- |
-| A recognized Parousia extension build | Yes, to publish Presence and read status; to change settings only where the OS confirms the connection is this user's (Linux) | The browser sets its `Origin`, and nothing else in the browser can claim it |
-| A web page | No | Any site the user visits can open a WebSocket to `127.0.0.1` |
-| Another extension | No | Extensions can open WebSockets too, with their own origin |
-| The userscript | Only to publish Presence, only when allowed | It runs as the page, so it has the page's origin and can't be told apart from the page |
-| Another OS user on the same machine | No | Loopback is shared by every user |
-| A process running as the same OS user | Out of scope | It can read Desktop's config, talk to its IPC socket, and send any `Origin`. That's true of every local app, and no scheme on this link could change it without an OS-level secret store and signed builds |
+| Source                        | Trust                                                            |
+| ----------------------------- | ---------------------------------------------------------------- |
+| Recognized Parousia extension | May publish Presence and use allowed commands                    |
+| Web page                      | Untrusted                                                        |
+| Other extension               | Untrusted                                                        |
+| Userscript                    | May publish Presence only when explicitly enabled                |
+| Other OS user                 | Untrusted                                                        |
+| Same OS user                  | Out of scope; local processes can access local files and sockets |
 
-## Threats and Defenses
+Extension identity is determined by the browser-provided `Origin`, which Desktop matches exactly.
 
-**A web page connects to Desktop.** Browsers attach the page's `Origin` to every WebSocket handshake and pages can't change it. Desktop decides on the `Origin` before completing the upgrade: a web origin (or `null`) gets a bare `403` with no body while userscripts are off, the default. Browsers report a refused upgrade and a closed port as the same failure, so the handshake itself tells a page nothing. DNS rebinding changes nothing either: the page's `Origin` is still its own. There's no HTTP API to reach instead: `GET /health` returns a fixed body with no CORS headers, so a page can't read it. It can still tell whether something answers on the port (a `no-cors` request completes where a closed port fails), so whether Desktop is running is observable to any page; nothing else is.
+## Browser ↔ Desktop
 
-**Another extension connects.** Its `Origin` is its own `chrome-extension://` or `moz-extension://` origin. Desktop matches allowed origins exactly, never by scheme. An unrecognized extension origin gets one `reject {reason: "origin_not_allowed"}` and a close, and nothing it sends is read. It's listed as refused so the user can allow it if it's really a Parousia build, which only the tray, CLI, or console can do. A browser can't allow anything.
+### Origin checks
 
-**A page publishes presence while userscripts are allowed.** Accepted risk, and why the switch is off by default and says so ("any web page can connect while this is on"). A userscript connection can only publish Presence: `status` and `set` are refused, so a page can't read the allowlist, see other clients, or turn the switch back on for later.
+Desktop validates the WebSocket `Origin` before accepting a connection.
 
-**Another OS user connects.** On Linux, Desktop looks up the connecting socket's owner in `/proc/net/tcp` before reading anything, and drops connections from other users (and ones it can't find). On macOS and Windows that check isn't implemented yet: another local user could send any `Origin` and publish presence into this user's Desktop, or read its status. They still can't change settings, because `set` requires a connection the OS confirmed is this user's. Windows' `GetExtendedTcpTable` and macOS's `libproc` can close this gap; see the roadmap.
+- Web pages and unknown extensions are rejected.
+- Allowed extension origins must match exactly.
+- Userscripts are disabled by default and cannot read status or change settings.
+- A page can observe whether port `57179` is reachable, but cannot use the protocol without an accepted origin.
+- Linux rejects connections belonging to another OS user.
 
-**Something else is squatting port 57179.** Desktop refuses to start if the port is already bound, so it never runs believing it's reachable when a different process actually holds the port. If a malicious local program holds the port while Desktop isn't running, what the extension sends reaches it instead: a display name ("Firefox on Linux") and Presence (Activity names and what they show, such as a video's title; since protocol 6, never the page's address). The same is true of port 6969, where the extension talks to Discord-RPC-Extension's app while Desktop isn't connected: it sends that app only Rich Presence (`{clientId, presence, extId}`) and reads back only a version. The extension validates everything it receives strictly (`parseServerMessage`), caps messages at 16 KiB, and treats anything that isn't Desktop as "nothing there". That program would have to run as the same user or as another user on the same machine; the first is out of scope, the second is the gap above.
+### Input validation
 
-**Malformed or hostile input.** Every message is parsed into strict types (unknown fields and unknown message types are errors), every frame in either direction is capped at 16 KiB, Presence fields are length-limited, every link (the details and state lines, buttons) must be `http(s)`, a `discordClientId` must be a Discord id, there are at most two buttons, and client names are stripped of control and bidirectional-override characters before appearing in menus or logs. A malformed frame gets a non-fatal `reject {reason: "malformed"}`.
+Both sides use strict message schemas.
 
-**A client picks the Discord Application.** An Activity may name its own Discord Application (`discordClientId`), so a client can make Discord show "Playing <any Application>". That's no more than a client can already do by publishing any text it likes, and it's limited to what clients may publish at all: recognized builds, and web pages only while userscripts are allowed.
+- The upgrade request is read once and checked by Desktop itself (RFC 6455: `GET` over HTTP/1.1, version 13, a 16-byte key, exactly one `Origin`); its head must fit in 8 KiB and arrive within 5 seconds in all, so a trickle of bytes can't hold a connection's thread longer. tungstenite runs the WebSocket after that.
+- Frames are limited to 16 KiB.
+- Presence fields and client names are bounded and sanitized.
+- URLs must use `http` or `https`.
+- Discord application IDs are validated.
+- Only two buttons are allowed.
+- An Activity's type and status line are fixed sets of names, a party is whole numbers up to 10,000 with its size at most its maximum, and links on images are `http` or `https` like every other link.
+- Unknown message types, unknown fields in control messages, a field another message type has (even `null`), and other protocol or major versions are rejected. A Presence's own fields are the exception: ones Desktop doesn't know are skipped, so a newer extension's additions don't break an older Desktop, and every field it does know is still bounded in full.
 
-**Resource exhaustion.** Accepts are rate limited (burst of 32, 16 per second) before any parsing, at most 64 connections are open, handshakes and request heads time out after 5 seconds, and each connection may send a burst of 20 messages refilling at 5 per second before it's closed with `rate_limited`. Refused connections are drained for at most a second (256 KiB) so a `reject` isn't lost to a TCP reset.
+Malformed input never becomes an application error or crash.
 
-**Presence outliving the browser.** Desktop keeps the latest Presence per connection and drops it when that connection closes. The extension keeps its MV3 background alive only while it's sharing an Activity (see Connection Lifetime in the architecture doc), so a suspended background can't leave a stale presence behind, and a closed browser can't either.
+### Resource limits
 
-**Downgrade to an older protocol.** The version is checked in `hello`; any other version gets `unsupported_version` and a close. Protocol v6 has no optional security features to strip.
+Desktop limits:
 
-**More leaving the browser than anything needs.** Up to protocol 5 every Presence carried the address of the page it was about, which nothing on Desktop's side used; since protocol 6 it stays in the browser, and the extension builds each Presence it sends field by field (`presenceWire`), so a field it keeps for itself can't leave by accident. Desktop's schema refuses anything else.
+- 32-connection accept burst / 16 accepts per second
+- 64 simultaneous connections
+- 5-second handshake/request timeouts
+- Per-connection message rate limits
+- Bounded refused-connection draining
 
-**Information disclosure through `status`.** Only recognized extension builds can ask for it. It lists connected clients, the allowlist, refused origins, and (in debug mode only) recent events. It never includes Presence contents beyond an Activity's name.
+These limits prevent a client from consuming unbounded CPU, memory, threads, or sockets.
+
+### Presence lifetime
+
+Presence belongs to its connection and is discarded when that connection closes. A disconnected or suspended browser therefore cannot leave stale Presence behind.
+
+### Protocol versions
+
+The `hello` message contains the protocol number and the client's release version. Another protocol, another major version, or a version that isn't a release is rejected rather than silently downgraded. The versions are untrusted text like the client's name: Desktop only reads the major number from it and never stores it.
+
+### Port squatting
+
+Desktop refuses to start if port `57179` is already occupied.
+
+If Desktop is not running, a malicious local process can still receive anything the extension sends to that port: the OS-user checks screen who connects to Desktop, and a browser has no way to ask who it connected to. Same-user processes are out of scope. Another user's program on the port is the case that matters on a shared machine, and the extension can't detect it. On Linux, Desktop can: when the port is taken, it looks up the listener's owner in `/proc/net/tcp`, and if it's another user it says that program may be receiving what the browser sends, instead of the usual "close the other copy of Desktop".
+
+On Windows, a program can share a port that's in use by setting `SO_REUSEADDR` on its own socket, and the newest socket then gets the connections. This was measured rather than assumed (`desktop/src/platform/windows/port.rs`): the standard library's listener refuses a program that asks to share its exact address, and a wildcard listener on the same port doesn't get connections to `127.0.0.1`, so a plain bind is enough.
+
+### Control socket and pipe
+
+The CLI talks to the running Desktop over a Unix socket in a private directory (Linux and macOS) or a named pipe (Windows).
+
+On Linux and macOS the socket is `desktop.sock` in a directory made `0700` at every start (`$XDG_RUNTIME_DIR/parousia`, or the data directory), and the socket itself is `0600`, so no other user can open it. Requests are one 16 KiB frame within 5 seconds, at most 8 connections are served at once, and only control requests are understood. The single-instance check is a lock on `desktop.lock` beside it, held for as long as Desktop runs (the kernel releases it however the process ends). Checking the socket alone let two Desktops started together both find nothing and the second replace the first's socket (17 of 20 rounds of 8 simultaneous starts in a test); with the lock exactly one starts. A socket file nobody answers on is left from a crash and replaced; one that answers belongs to a Desktop from before the lock and is left alone.
+
+A pipe lives in a machine-wide namespace, so what keeps it private is its access list and a second check on the process behind every connection:
+
+- The pipe's security descriptor has one entry, this user, nothing inherited, and it rejects remote clients. The default would give every other account read access.
+- Desktop serves only a client process that runs as this user, and the CLI sends only to a Desktop that does. Another account that creates the name first can stop Desktop from starting (it says why), but nothing is sent to it.
+- Clients are opened anonymously (the server can't act as the caller), requests are limited to one 16 KiB frame within 5 seconds, replies are bounded the same way, and at most 8 connections are served at once. Only the control requests are understood: the session protocol never runs here.
+- The pipe is also the single-instance check: its first instance can only be created once.
 
 ## Desktop ↔ Discord
 
-Desktop shows Presence on Discord through the Discord app's local RPC: a Unix socket on Linux and macOS, a named pipe on Windows. Discord runs as the same user and is trusted to display what it's given.
+Desktop connects only to Discord's local RPC socket and uses only the fields needed for Presence.
 
-**What leaves the machine.** Whatever Desktop hands Discord is shown to the user's Discord friends: the Activity's name, details, state, images, links, and buttons, as the extension's Privacy settings allow (Share Media Details off keeps only the name, link, and images; private windows share nothing by default). Activities build their links from what they need (Jena Hub keeps only the path, so a query string or fragment, which can hold a token, never leaves the browser). Discord fetches image URLs through its own proxy, not from the user's machine.
+- RPC frames are size-limited.
+- Only required response fields are retained.
+- Discord errors are bounded before being exposed to the browser or UI.
+- Presence changes within one Activity are spaced at least 2 seconds apart for every platform (the first goes through at once, the newest of a burst follows), and the Discord adapter also keeps to Discord's update limit.
+- Connections retry with backoff and stop when there is nothing to display.
 
-**Something else poses as Discord.** Desktop looks for the socket in `$XDG_RUNTIME_DIR` (private to the user) and, failing that, in temporary directories, where `/tmp` is shared by every user. So on Linux and macOS it uses a socket only if this OS user owns it; another user's socket is skipped. A process running as the same user could still pose as Discord, like it could read Desktop's config: out of scope, as on the browser link. So is `PAROUSIA_DISCORD_IPC_DIR`, which points Desktop at one directory and can only be set by whoever starts Desktop. Windows named pipes are one namespace for all users, and checking a pipe's owner isn't implemented yet: another user could create `discord-ipc-0` before Discord starts and receive the presence (see Known Gaps).
+On Linux and macOS, `discord-ipc-N` is a socket in Discord's runtime or temporary directory, or its Flatpak or Snap package's, and some of those can be made by anyone (`/tmp/snap.discord`). Desktop tries only a socket this user owns, and once connected asks the kernel who listens on it (`SO_PEERCRED` on Linux, `getpeereid` elsewhere): a symbolic link in a directory another user controls can point at this user's socket for the first check and at their own for the connect. Before the second check, a test that swaps such a link between this user's socket and one another account runs (the system bus's) had Desktop connected to the other account's in every run; now never. On Windows, `discord-ipc-N` is a named pipe in a machine-wide namespace, so any account could create one and pose as Discord. Desktop connects only to a pipe whose server process (`GetNamedPipeServerProcessId`) runs as this user, by the user SID in its token, and opens it as an anonymous client so even a pipe that is not Discord cannot act as this user. A process Desktop cannot inspect counts as another user's. Discord quitting or restarting is noticed at once (overlapped pipe I/O: a reader waits on the pipe while the adapter writes), and every write to Discord has a deadline.
 
-**What Discord sends back.** Frames are capped at 64 KiB and read into the few fields Desktop uses (the event, an error code and message); anything else is ignored. The signed-in user, which Discord sends on connecting, isn't kept. An error message is cut to 120 characters before it appears in `status`, the tray, or the extension.
+`PAROUSIA_DISCORD_IPC_PIPE` is trusted the same way as `PAROUSIA_DISCORD_IPC_DIR`.
 
-**Flooding Discord.** Discord allows 5 activity updates per 20 seconds. Desktop coalesces faster changes and sends only the latest when the window allows, so a client changing its Presence quickly (itself limited to 5 messages a second) can't get the user rate-limited. Reconnecting backs off from 1 to 30 seconds, and nothing is tried while there's nothing to show.
+`PAROUSIA_DISCORD_IPC_DIR` is trusted as local process configuration and is therefore subject to the same same-user threat model.
 
-## Activities That Read Pages
+## Linux Desktop Integration
 
-Most Activities read only a page's URL and title. Two kinds read more, and both go through one host in the background (`browser/src/activities/host.ts`):
+### Session bus (tray and notifications)
 
-**Third-party code in pages.** A PreMiD Activity is PreMiD's code, compiled unchanged from PreMiD's `main` at build time, running as a content script with this extension's id. It runs only where the user turned it on and granted its site, and only in the active tab. Defenses: every message from a page script is parsed into strict shapes and bounded (16 KiB); a port is served only from this extension's content script, in a tab, for an Activity that's on, whose site is granted, and that matches the page the port came from; the Discord Application it picks must be one its source names; iframe data reaches only the same Activity in the same tab; the UI port answers only extension pages (a content script shares the extension's id, not its URL); and where the browser allows it, content scripts can't read or write the extension's storage (`setAccessLevel`, checked in Chromium by `activities:verify`). What it could still do on a granted site is what any content script can: read and change that page, and make requests as that page. That's the grant the user gave, shown by the browser in those words.
+The tray and notifications use the session bus (`platform/linux/tray/`). Desktop uses a bus only if the kernel says this user runs it: an address can name an abstract socket (`unix:abstract=`, common without systemd), which has no file permissions, so if the real bus is gone another user can listen on the same name and would get the tray's menu clicks to answer and its notifications to read. Messages are bounded (1 MiB, 64 levels of nesting) and parsed without panicking. A tray host restarting is believed only from the bus itself.
 
-**Settings and storage.** Where the browser allows it (Chromium), content scripts can't reach the extension's storage at all (`setAccessLevel`, checked by `activities:verify`). Firefox can't restrict it, and there a content script can read and write it: a PreMiD Activity's code could change settings, turn Activities on, or set a Default Activity whose buttons Discord shows the user's friends. So PreMiD's runtime, injected before any Activity's code, takes the storage API out of that world (`withholdStorage`); `activities:firefox` checks in a real Firefox that PreMiD's world has no storage API and that a write from it doesn't arrive (without this, it did).
+Everything on the session bus runs as this user and is out of scope. One consequence worth knowing: a Flatpak app allowed to own `org.kde.*` (many with their own tray icon are) can call Desktop's tray object, which is `org.kde.StatusNotifierItem-<pid>-1`, and so click its menu: allow an extension origin already on the refused list, switch userscripts or debug logging, or quit. With network access the same app could already reach `127.0.0.1:57179` as this user.
 
-**Reaching into the page's own world.** `getPageVariable` and `execInPage`'s declarative form run a fixed function in the page's own world with the paths an Activity names. Paths never go through `__proto__`, `constructor`, or `prototype`, so `pick` and `omit` can't write into a prototype of the page's (which a content script couldn't otherwise touch), and the function never calls anything that runs text as code (`eval`, `Function`, `setTimeout`, `setInterval`, `document.write`, and the like, by identity, however the page names them), so page reads don't become a way to run code in the page's world. A content script can still add elements to the page, as any content script can, and an inline handler on one runs where the page's Content Security Policy allows it; that's within what the site's grant already covers (see Third-party code in pages, above).
+### Text Desktop shows
 
-**What leaves the browser.** Page data kinds switched off in Settings > Privacy are never collected (native Activities, whose page data comes from Parousia's own collector) or never shown (PreMiD's, held back before the Activity leaves the background; that includes a name the Activity set from the page, such as a song's title). With Share Media Details off, an Activity's own name is shared, not one it read from the page. An Activity that reads pages doesn't run at all where its site isn't granted: nothing is injected, and nothing is shown for it there.
+Activity names (a page can pick one), client names, and Discord's error text reach the terminal (`Parousia-Desktop status`, debug output), the tray, and notifications. Control characters are removed from all of it, since in a terminal they are commands (escape sequences can retitle the window or write to the clipboard), and so are invisible direction overrides and zero-width characters. Notification bodies and the tray's tooltip are markup to the desktop shell (KDE turns `<img src>` into a fetch), so `<` and `>` in them are shown as `‹` and `›`.
 
-**Access asked for, and taken back.** Turning on an Activity that reads pages asks for exactly its own sites, from the click; declining leaves it off. "Access your data for all websites" is off by default and requested only by its own switch. The one other thing that asks for more than one Activity's sites is "Enable all" on the Activities page: it sits behind a link and a second confirmation that says how many Activities and sites are involved, applies only to what matches the search and filters, and makes one request from the confirming click, exactly the union of those Activities' own sites. The browser's prompt is all or nothing. A decline leaves those Activities off (the ones that need nothing new are still turned on), and after an answer the grants are read back, so an Activity is never marked on for a site the browser didn't grant. Taking a site back (from Settings or the browser's own settings) stops what runs there at once and makes the Activity unavailable there until access is granted again.
+## What Reaches Discord
 
-**Two implementations of one website.** When both sources have a website, only the implementation chosen runs: the other's script is never loaded or injected, even if it's marked as on. The native one is chosen until someone picks PreMiD's, so a website runs third-party code only by choice.
+Desktop sends only the Presence produced by the selected Activity and permitted by the extension's Privacy settings.
 
-**The Default Activity.** It's written by the user and shown to their Discord friends whenever no Activity is detected. Its images must be `https` links or asset names, its buttons `http(s)` links, and it's checked again by Desktop like any Presence. It's kept in the extension's storage, which PreMiD's code can't reach (above).
+With media details disabled, page-derived media information is not included. Activities are responsible for constructing their own links; for example, page query strings and fragments are not automatically forwarded.
 
-**The wrong tab.** What's shared is the active tab of the focused window. A tab activated in another window (one opening in the background, or the one next to a closed tab) doesn't change it; focusing a window does, and when the focused window closes without saying where focus went, the browser is asked.
+Discord receives whatever Presence Desktop sends and may expose it to the user's Discord friends according to Discord's own behavior.
 
-**PreMiD servers.** Parousia contacts none. Some PreMiD Activities were written to call PreMiD's image service (`pd.premid.app`), which would tell PreMiD an image address or a picture; the runtime answers those requests itself in the world PreMiD's code runs in (`answerImageService` in `browser/src/premid/page.ts`), so nothing is sent. Pictures an Activity makes inline (YouTube's thumbnail, drawn on a canvas) are replaced by the address of the picture they came from, which the page already loaded and Discord then fetches through its own proxy, so no image data leaves the browser either. An Activity can still call its own site's services, as that site's pages do, and the dashboard loads each Activity's icon from its own site with no referrer.
+## Activities and Page Access
 
-**Supply chain.** PreMiD Activities that need their own npm packages are left out rather than installed; everything else is compiled from the fetched checkout with no dependency beyond PreMiD's own helper package in the same commit. The sources follow `main`, not a reviewed commit, so a malicious or broken upstream commit reaches the next build. What limits that: the compiled scripts run only where the user turned the Activity on and granted its site, each build records the revision it used (catalog, `SOURCE.txt`, release notes), a native Activity that fails `activities:check` stops the build, a fetch that brings an unusable tree is undone, and a release is reviewed by each store before users get it.
+Activities fall into two categories:
 
-## Designs Considered and Dropped
+- **Native Activities:** use Parousia's own page-data collectors.
+- **PreMiD Activities:** third-party code compiled into the extension.
 
-Both were built and tested during development and dropped before release. Desktop still answers their `hello` with `unsupported_version`.
+PreMiD Activities only run when enabled and when their required site access has been granted.
 
-- **Pairing codes and HMAC credentials.** They defended against same-user processes, which can read any stored credential anyway. The `Origin` check covers pages and other extensions without any stored secret.
-- **A Native Messaging channel.** It identified Firefox by add-on id and kept its traffic off the network. Neither property is needed for the threats above: the `Origin` check already rejects pages and other extensions, and the loopback listener has to exist for the userscript and sandboxed browsers regardless. Leaving it out also leaves out the `nativeMessaging` permission, per-browser host manifests, and a relay process per connection.
+### Third-party Activity isolation
+
+Activity messages are strictly parsed and bounded. Activity ports are tied to the correct extension, tab, Activity, and granted site.
+
+Where supported, content scripts cannot access extension storage. Firefox cannot enforce this directly, so Parousia's PreMiD runtime removes the storage API from the world where PreMiD code executes.
+
+Activities can still do what their granted content-script access permits on the target site.
+
+### Page-world access
+
+Page-world helpers only expose explicitly requested paths and reject prototype-related paths such as:
+
+```text
+__proto__
+constructor
+prototype
+```
+
+Declarative page execution uses fixed functions rather than evaluating arbitrary code.
+
+### Data leaving the browser
+
+Privacy settings determine which page data may reach an Activity's Presence. Disabled data is not collected for native Activities or is withheld from PreMiD Activities before publication.
+
+Activities do not run on sites for which they lack permission.
+
+### Permissions
+
+Activities request only their required sites.
+
+- Site access is requested from an explicit user action.
+- **All websites** is off by default.
+- **Enable all** requires a separate confirmation and requests the union of the selected Activities' sites.
+- Removing access immediately stops the Activity on that site.
+
+When native and PreMiD implementations exist for the same site, only the selected implementation runs.
+
+### MAL-Sync
+
+With MAL-Sync turned on (off by default), Parousia asks the MAL-Sync extension, by its published id, for the shared tab's presence (`browser/src/compat/malsync.ts`), the way Discord-RPC-Extension does.
+
+- **What goes out.** A tab number. Not the page's address, title, or anything of the page. The browser delivers a reply to the extension that asked only from the extension asked, so no sender check applies, and Parousia adds no inbound surface: no `onMessageExternal` listener, no `externally_connectable` entry, no permission.
+- **What comes in is untrusted.** MAL-Sync builds its reply from a page it runs on (the title it read, the episode), and any extension that is installed under MAL-Sync's id is MAL-Sync. The reply is size-limited, parsed field by field, and bounded the way a PreMiD Activity's report is, then limited by Settings > Privacy. A reply naming a Discord Application other than the three MAL-Sync uses is turned down whole, so a reply can't make Desktop connect Discord as an arbitrary Application. A link to the site being watched is dropped, since a page's address stays in the browser.
+- **What MAL-Sync can see.** It learns that Parousia asked about a tab, which it already knows is open. It isn't told what Parousia shows.
+- **Who must be trusted.** MAL-Sync, for what it shows: its settings and its reading of the page decide the title, episode, cover, and button Parousia then publishes, so someone who turns this on accepts that. Its background answers any extension that asks, which is MAL-Sync's own choice, and is how Discord-RPC-Extension already reaches it.
+- **Waking it.** Each question wakes MAL-Sync's background if it's asleep. Asking is limited to the shared tab, four times per page where it answers nothing and every 15 seconds where it answers something, and nothing at all with the switch off.
+
+### Default Activity
+
+The user-created Default Activity is stored locally and validated like any other Presence. Images and buttons are restricted to permitted URL schemes or bundled assets.
+
+## PreMiD Supply Chain
+
+PreMiD Activities are compiled from their upstream source during the build.
+
+- Activities requiring additional npm packages are excluded.
+- The upstream revision used by a build is recorded.
+- Failed Activity validation fails the build.
+- Broken fetches are rolled back.
+- Store releases receive normal platform review.
+
+The upstream `main` branch is trusted only to the extent that the next build is reviewed before release; a malicious upstream change can therefore enter a future build.
+
+Parousia itself contacts no PreMiD servers. Known PreMiD image-service requests are handled locally.
+
+## Designs Rejected
+
+### Pairing codes / HMAC
+
+Rejected because same-user processes can access locally stored credentials. Browser `Origin` validation already protects against pages and other extensions.
+
+### Native Messaging
+
+Rejected because it provides no required security property beyond the existing origin checks and would add the `nativeMessaging` permission, browser-specific manifests, and connection relays.
 
 ## Known Gaps
 
-- Other-OS-user connections are only refused on Linux.
-- On Windows, a Discord pipe created by another OS user isn't detected, and Discord quitting is noticed only at the next update.
-- Any web page can observe whether Desktop is running (see above).
-- Firefox installs have to be allowed once, since their `moz-extension://` origin is random per install. A store build of the Chromium extension will be recognized with no setup once its id is built in.
-- Firefox doesn't let the extension restrict content scripts' access to its storage. PreMiD's runtime removes the API from the world PreMiD code runs in, which holds as long as the runtime runs first there, as it's injected to; the browser itself doesn't enforce it.
+- Other-OS-user WebSocket connections are rejected on Linux (`/proc/net/tcp`) and Windows (`GetExtendedTcpTable` and the owning process's token), not yet on macOS. On Linux, a system where `/proc/net/tcp` can't be read makes every connection's owner unknown: such a connection may publish Presence but not change settings.
+- macOS shares Linux's control socket and Discord socket code, including the kernel check on Discord's socket (`getpeereid`); it's built and linted for `aarch64-apple-darwin`, never run on a Mac.
+- Another user's program listening on `57179` before Desktop starts gets whatever the extension sends there; the extension can't tell, and Desktop can only say so when it can't start (Linux).
+- On Windows an elevated process of this same user whose token can't be read counts as another user's, so an extension in a browser running as administrator is refused.
+- The Windows checks for other OS users were run against this user's own processes and the System process; a second Windows account was not available to try them against.
+- Any web page can determine whether Desktop is listening on port `57179`.
+- Firefox extension origins must be manually allowed because they are random per installation.
+- Firefox cannot enforce content-script storage isolation at the browser level; the PreMiD runtime provides the current mitigation.
+- Same-OS-user processes are out of scope and can access local configuration and IPC.
+- MAL-Sync can't be asked only about tabs it recognizes: Parousia can't see which sites MAL-Sync runs on (including a person's own custom domains), so a tab it has nothing for is asked a few times per page, which wakes MAL-Sync's background that often. A list of its sites built from its source would cut that, and miss custom domains.
+
+### Remote PWA bridge (considered, deferred)
+
+A page on `parousia.abadima.dev/pwa/` showing the extension's popup, the way MAL-Sync opens its own site, was evaluated and not built.
+
+- **What would carry it.** Chromium: `externally_connectable` with the exact origin, which the browser enforces. Firefox has no such thing for web pages, so a content script on that origin would relay `postMessage`, which is a new always-on host permission (and an AMO review question) for a feature most people won't use. A web page can't request permissions for the extension (that needs an extension page and a click), so it couldn't widen site access by itself.
+- **What it exposes.** Any bridge worth building shows the current Activity (its details and state come from the pages you visit), and one that could change settings could also set a Default Activity (text on your Discord profile) or, through the extension's connection, Desktop's own settings. Reads alone put browsing-derived text in a remote page's JavaScript, which can send it to its server: the one thing the rest of the project guarantees never happens (a page's address stays in the browser; Desktop and Discord only get what an Activity chose to show).
+- **Who must be trusted.** Whoever controls that origin: the website repository, its deploy, GitHub Pages, the domain's DNS. Origin checks bind the bridge to the origin, not to the code served from it, and there is nothing to authenticate with: no secret survives being served by the same page that would use it. A takeover of any of those is a takeover of the bridge, silently, for everyone who turned it on.
+- **What it buys.** The extension's dashboard already opens as a full tab, offline, in the user's language and theme. A PWA adds installability and a standalone window, and on a phone it has no extension to talk to.
+- **If it's revisited.** Opt-in per session with a code shown in the extension and typed into the page (so a page can't read anything on its own), read-only, exact origin, one snapshot of what the popup shows and no history, rate limited, and a page with no third-party scripts and a strict CSP. Even so, the trust in the origin above stays.

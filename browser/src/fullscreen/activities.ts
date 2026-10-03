@@ -1,4 +1,5 @@
 import type { ActivityInfo } from "../core/activity";
+import { t, tn } from "../core/i18n";
 import {
   isActivityOn,
   loadActivityStates,
@@ -42,8 +43,7 @@ import { fromTemplate, slot, type View, type ViewContext } from "./view";
 
 const SEARCH_DELAY_MS = 120;
 const RESIZE_DELAY_MS = 150;
-const number = new Intl.NumberFormat("en");
-const count = (n: number): string => `${number.format(n)} ${n === 1 ? "Activity" : "Activities"}`;
+const count = (n: number): string => tn(n, "{n} Activity", "{n} Activities");
 
 /** Where an Activity's own page is: `#activities/<id>`. */
 export const activityHash = (id: string): string => `#activities/${encodeURIComponent(id)}`;
@@ -161,18 +161,18 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
     const pills = el("span", "card-pills");
     const on = isActivityOn(info, states);
     const status = activityStatus(info, states, grants);
-    if (status === "needs-access") pills.append(el("span", "pill pill-warn", "Needs access"));
+    if (status === "needs-access") pills.append(el("span", "pill pill-warn", t("Needs access")));
     else if (!on && refused.has(info.id)) {
-      pills.append(el("span", "pill pill-warn", "Access declined"));
+      pills.append(el("span", "pill pill-warn", t("Access declined")));
     }
     if (info.source === "premid") pills.append(el("span", "pill pill-quiet", "PreMiD"));
-    if ((info.variants?.length ?? 0) > 1) pills.append(el("span", "pill pill-quiet", "multi"));
+    if ((info.variants?.length ?? 0) > 1) pills.append(el("span", "pill pill-quiet", t("multi")));
     link.append(activityIcon(info), text, pills);
 
     const toggle = el("input", "switch");
     toggle.type = "checkbox";
     toggle.setAttribute("role", "switch");
-    toggle.setAttribute("aria-label", `Show ${info.name}`);
+    toggle.setAttribute("aria-label", t("Show {name}", { name: info.name }));
     toggle.checked = on;
     toggle.addEventListener("change", () => change(info, toggle));
 
@@ -195,7 +195,10 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
     const active = filterCount(filters);
     filterBadge.hidden = active === 0;
     filterBadge.textContent = String(active);
-    filterToggle.setAttribute("aria-label", active > 0 ? `Filter, ${active} selected` : "Filter");
+    filterToggle.setAttribute(
+      "aria-label",
+      active > 0 ? t("Filter, {n} selected", { n: active }) : t("Filter"),
+    );
   }
 
   function refilter(next: ActivityFilters): void {
@@ -262,13 +265,18 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
     void done
       .then(({ changed, declined }) => {
         for (const id of declined) refused.add(id);
-        if (declined.length === 0) return `Enabled ${count(changed)}.`;
+        if (declined.length === 0) return t("Enabled {count}.", { count: count(changed) });
         if (changed === 0) {
-          return "Nothing was enabled: your browser didn't grant access to their sites.";
+          return t("Nothing was enabled: your browser didn't grant access to their sites.");
         }
-        return `Enabled ${count(changed)}. ${count(declined.length)} stayed off because their sites weren't granted.`;
+        return tn(
+          declined.length,
+          "Enabled {count}. {n} Activity stayed off because its sites weren't granted.",
+          "Enabled {count}. {n} Activities stayed off because their sites weren't granted.",
+          { count: count(changed) },
+        );
       })
-      .catch(() => "Couldn't change the Activities. Try again.")
+      .catch(() => t("Couldn't change the Activities. Try again."))
       .then((message) => {
         bulkBusy = false;
         goto("choose", message);
@@ -280,8 +288,10 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
     bulkBusy = true;
     renderBulk();
     void disableAll(arranged, catalog, grants)
-      .then((changed) => (changed === 0 ? "Nothing was on." : `Disabled ${count(changed)}.`))
-      .catch(() => "Couldn't change the Activities. Try again.")
+      .then((changed) =>
+        changed === 0 ? t("Nothing was on.") : t("Disabled {count}.", { count: count(changed) }),
+      )
+      .catch(() => t("Couldn't change the Activities. Try again."))
       .then((message) => {
         bulkBusy = false;
         goto("choose", message);
@@ -298,28 +308,34 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
       "p",
       "bulk-scope",
       arranged.length === 0
-        ? "No Activities match, so there is nothing to change."
-        : `This applies to the ${count(arranged.length)} matching your search and filters, on every page.`,
+        ? t("No Activities match, so there is nothing to change.")
+        : t("This applies to the {count} matching your search and filters, on every page.", {
+            count: count(arranged.length),
+          }),
     );
 
     if (bulkStep === "enable") {
       const readers = plan.enable.filter((info) => missingSites(info, grants).length > 0).length;
       const sites = plan.sites.length;
       parts.push(
-        el("p", "bulk-question", `Enable ${count(plan.enable.length)}?`),
+        el("p", "bulk-question", t("Enable {count}?", { count: count(plan.enable.length) })),
         el(
           "p",
           "bulk-warning",
           sites > 0
-            ? `${count(readers)} ${readers === 1 ? "reads" : "read"} pages. Your browser will ask for access to ${sites === 1 ? "1 site" : `${number.format(sites)} sites`} in one prompt, which can be long. Anything you decline stays off.`
-            : "None of them needs access to a new site, so your browser won't ask for anything.",
+            ? `${tn(readers, "{n} Activity reads pages.", "{n} Activities read pages.")} ${tn(
+                sites,
+                "Your browser will ask for access to {n} site in one prompt, which can be long. Anything you decline stays off.",
+                "Your browser will ask for access to {n} sites in one prompt, which can be long. Anything you decline stays off.",
+              )}`
+            : t("None of them needs access to a new site, so your browser won't ask for anything."),
         ),
       );
       const actions = el("div", "bulk-actions");
-      const cancel = bulkButton("Cancel", () => goto("choose"));
+      const cancel = bulkButton(t("Cancel"), () => goto("choose"));
       actions.append(
         bulkButton(
-          `Enable ${count(plan.enable.length)}`,
+          t("Enable {count}", { count: count(plan.enable.length) }),
           runEnable,
           false,
           plan.enable.length === 0,
@@ -334,11 +350,11 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
     }
 
     if (bulkStep === "disable") {
-      const cancel = bulkButton("Cancel", () => goto("choose"));
+      const cancel = bulkButton(t("Cancel"), () => goto("choose"));
       const actions = el("div", "bulk-actions");
       actions.append(
         bulkButton(
-          `Disable ${count(plan.disable.length)}`,
+          t("Disable {count}", { count: count(plan.disable.length) }),
           runDisable,
           false,
           plan.disable.length === 0,
@@ -346,8 +362,8 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
         cancel,
       );
       bulkBody.replaceChildren(
-        el("p", "bulk-question", `Disable ${count(plan.disable.length)}?`),
-        el("p", "bulk-scope", "Sites only they used are given back to your browser."),
+        el("p", "bulk-question", t("Disable {count}?", { count: count(plan.disable.length) })),
+        el("p", "bulk-scope", t("Sites only they used are given back to your browser.")),
         actions,
       );
       if (moveFocus) cancel.focus();
@@ -357,13 +373,13 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
     const actions = el("div", "bulk-actions");
     actions.append(
       bulkButton(
-        `Enable all (${number.format(plan.enable.length)})`,
+        t("Enable all ({n})", { n: plan.enable.length }),
         () => goto("enable"),
         true,
         plan.enable.length === 0,
       ),
       bulkButton(
-        `Disable all (${number.format(plan.disable.length)})`,
+        t("Disable all ({n})", { n: plan.disable.length }),
         () => goto("disable"),
         true,
         plan.disable.length === 0,
@@ -399,7 +415,11 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
     slot(element, "summary").textContent =
       shownPage.total === 0
         ? ""
-        : `${number.format(shownPage.first)}–${number.format(shownPage.last)} of ${number.format(shownPage.total)}`;
+        : t("{first}–{last} of {total}", {
+            first: shownPage.first,
+            last: shownPage.last,
+            total: shownPage.total,
+          });
     slot(element, "no-results").hidden = shownPage.total > 0;
     list.replaceChildren(...shownPage.items.map(card));
     renderFilters();
@@ -407,12 +427,12 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
 
     pager.hidden = shownPage.pageCount <= 1;
     pager.replaceChildren(
-      pageButton("Previous", shownPage.page - 1, false, shownPage.page === 1),
+      pageButton(t("Previous"), shownPage.page - 1, false, shownPage.page === 1),
       ...pageNumbers(shownPage.page, shownPage.pageCount).map((n) => {
         if (n !== "gap") return pageButton(String(n), n, n === shownPage.page);
         return el("span", "pager-gap", "…");
       }),
-      pageButton("Next", shownPage.page + 1, false, shownPage.page === shownPage.pageCount),
+      pageButton(t("Next"), shownPage.page + 1, false, shownPage.page === shownPage.pageCount),
     );
   }
 
@@ -483,7 +503,7 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
   });
 
   return {
-    title: "Activities",
+    title: t("Activities"),
     element,
     update() {},
     mounted() {

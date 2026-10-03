@@ -13,14 +13,12 @@ import { NO_GRANTS, canRun, grantsFrom, pageGranted, type Grants } from "../core
 import { limitPageData, toActivity, type PresenceDataWire } from "../premid/presence-data";
 import {
   COLLECTOR_PATH,
-  INDEX_PATH,
   PREMID_ID_PREFIX,
   compileMatch,
-  manifestPath,
-  parseIndex,
-  parseManifest,
+  parseShard,
   registered,
   scriptPaths,
+  shardPath,
   type ActivityManifest,
 } from "./manifest";
 import {
@@ -61,9 +59,7 @@ export interface PageBrowser {
   startCollector(tabId: number, activity: string): Promise<void>;
   /** Runs `readPage` in one frame's own world. */
   readPage(tabId: number, frameId: number, spec: PageSpec): Promise<string | null>;
-  /** Which packaged file each PreMiD Activity's manifest is in, by id. */
-  loadIndex(): Promise<Record<string, string>>;
-  loadManifest(file: string): Promise<ActivityManifest | null>;
+  loadManifest(id: string): Promise<ActivityManifest | null>;
   saveState(id: string, patch: ActivityState): Promise<void>;
 }
 
@@ -114,8 +110,7 @@ export function chromePageBrowser(): PageBrowser {
       });
       return typeof result?.result === "string" ? result.result : null;
     },
-    loadIndex: async () => parseIndex(await fetchJson(INDEX_PATH)).files,
-    loadManifest: async (file) => parseManifest(await fetchJson(manifestPath(file))),
+    loadManifest: async (id) => parseShard(await fetchJson(shardPath(id)), id),
     saveState: async (id, patch) => {
       await saveActivityState(id, patch);
     },
@@ -174,7 +169,6 @@ const isPremid = (id: string): boolean => id.startsWith(PREMID_ID_PREFIX);
  * PreMiD manifests are read only once one is turned on.
  */
 export class PageHost {
-  private index: Promise<Record<string, string>> | null = null;
   private states: ActivityStates = {};
   private pageData: PageDataPreferences = DEFAULT_PREFERENCES.pageData;
   private grantsNow: Promise<Grants> | null = null;
@@ -235,10 +229,7 @@ export class PageHost {
   }
 
   private async load(id: string): Promise<ActivityManifest | null> {
-    this.index ??= this.browser.loadIndex().catch(() => ({}));
-    const file = (await this.index)[id];
-    if (!file) return null;
-    const manifest = await this.browser.loadManifest(file).catch(() => null);
+    const manifest = await this.browser.loadManifest(id).catch(() => null);
     return manifest?.info.id === id && manifest.script ? manifest : null;
   }
 
@@ -554,11 +545,14 @@ export class PageHost {
           await this.answerPage(port, tabId, 0, message.nonce, message.spec);
           return;
         case "hide": {
-          const hidden = new Set(this.states[manifest.info.id]?.hidden ?? []);
+          const before = this.states[manifest.info.id]?.hidden ?? [];
+          const hidden = new Set(before);
           for (const id of message.ids) {
             if (message.hidden) hidden.add(id);
             else hidden.delete(id);
           }
+          // A write reaches every view and re-sends every page's scripts: not for what's already so.
+          if (hidden.size === before.length && before.every((id) => hidden.has(id))) return;
           await this.browser.saveState(manifest.info.id, { hidden: [...hidden] });
           return;
         }

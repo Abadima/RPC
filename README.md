@@ -1,54 +1,101 @@
 <img src="assets/brand/parousia-banner.webp" width="1024px" height="auto" alt="Parousia">
 
-<br>
-
 <div align="center">
 
-[![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![GitHub Stars](https://img.shields.io/github/stars/Abadima/rpc?style=for-the-badge&logo=github)](https://github.com/Abadima/rpc/stargazers)
-[![License](https://img.shields.io/github/license/Abadima/rpc?style=for-the-badge&logo=github)](https://github.com/Abadima/rpc/blob/main/LICENSE)
+### **Your Rich Presence on Discord and beyond.**
+
 [![Browser CI](https://img.shields.io/github/actions/workflow/status/Abadima/rpc/browser-ci.yml?style=for-the-badge&logo=github-actions&label=Browser)](https://github.com/Abadima/rpc/actions/workflows/browser-ci.yml)
 [![Desktop CI](https://img.shields.io/github/actions/workflow/status/Abadima/rpc/desktop-ci.yml?style=for-the-badge&logo=github-actions&label=Desktop)](https://github.com/Abadima/rpc/actions/workflows/desktop-ci.yml)
 
-### Your Rich Presence on Discord and beyond.
+[![GitHub Stars](https://img.shields.io/github/stars/Abadima/rpc?style=for-the-badge&logo=github)](https://github.com/Abadima/rpc/stargazers)
+[![License](https://img.shields.io/github/license/Abadima/rpc?style=for-the-badge&logo=github)](https://github.com/Abadima/rpc/blob/main/LICENSE)
+[![GitHub Downloads](https://img.shields.io/github/downloads/Abadima/rpc/total?style=for-the-badge&logo=github)](https://github.com/Abadima/rpc/releases)
 
-**Share what you're doing online in real-time on Discord, and soon on other platforms.**
+[![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
 </div>
 
----
+## What is Parousia?
 
-## Project Status
+Parousia is an open-source Rich Presence platform that brings your browser activity to your favourite Rich Presence platform, starting with Discord.
 
-> **Early development**
+Parousia consists of a lightweight browser extension and native desktop application, with no account or sign-in required.
 
-Parousia is actively being built. APIs, architecture, package names, integrations, and other implementation details may change while the foundation is being established.
+## Features
 
----
+- **Rich Presence** for supported websites and web applications
+- **Activities** for native and PreMiD integrations
+- **Local-first architecture** with browser-to-desktop communication over loopback
+- **No account or sign-in required**
+- **No analytics or telemetry**
+- **Minimal permissions** with website access requested only when an Activity needs it
+- **Discord integration** through the official local RPC interface
+- **Cross-platform Desktop** support for Windows and Linux, with macOS planned
+- **Developer-friendly Activity API** built with TypeScript
+- **Lightweight native Desktop** application written in Rust
+
+## Get Parousia
+
+### Browser Extensions
+
+| Browser  | Status    | Install                                                                                                |
+| -------- | --------- | ------------------------------------------------------------------------------------------------------ |
+| Chromium | In review | [Chrome Web Store](https://chromewebstore.google.com/detail/parousia/achhedhokopfgfnigkfchklhbebbhebd) |
+| Firefox  | In review | [Mozilla Add-ons](https://addons.mozilla.org/en-US/firefox/addon/parousia/)                            |
+
+### Desktop & Other Downloads
+
+| Platform   | Status      | Download                                                   |
+| ---------- | ----------- | ---------------------------------------------------------- |
+| Windows    | Available   | [GitHub Releases](https://github.com/Abadima/RPC/releases) |
+| Linux      | Available   | [GitHub Releases](https://github.com/Abadima/RPC/releases) |
+| macOS      | Coming soon | —                                                          |
+| Userscript | Available   | [GitHub Releases](https://github.com/Abadima/RPC/releases) |
+|            |
+
+## Activity Ecosystem
+
+Activities are maintained separately from the core Parousia repository and use a shared Activity API.
+
+**[parousia-project/activities](https://github.com/parousia-project/activities)**
+
+**[premid/activities](https://github.com/premid/activities)**
+
+Activities are organized by website and can provide their own settings, page data requirements, site access, Discord applications, and Rich Presence details.
+
+Parousia currently includes the native Activity ecosystem alongside a large selection of compatible PreMiD Activities.
 
 ## Documentation
 
-Downloads, installation instructions, guides, compatibility information, and development resources are on the website:
+Full documentation covering installation, configuration, Activities, compatibility, privacy, security, and development is available at:
 
-**[parousia.abadima.dev](https://parousia.abadima.dev)** (source: [parousia-project/website](https://github.com/parousia-project/website))
-
-Built files for Windows and Linux, the browser extensions, and the userscript are published on the [Releases](https://github.com/Abadima/RPC/releases) page, each release with `SHA256SUMS`.
-
----
+**[parousia.abadima.dev](https://parousia.abadima.dev)** (Maintained in **[parousia-project/website](https://github.com/parousia-project/website)**)
 
 ## Roadmap
 
-Phases 1 to 7 are complete: an Activity for the page open in the browser shows up on Discord through Parousia Desktop, PreMiD's 1,400 Activities included once turned on. Native Activities live in [parousia-project/activities](https://github.com/parousia-project/activities). The release workflow is in place for the first release. See [`project/roadmap.md`](project/roadmap.md) for the full plan, covering the browser extension, the desktop app, Discord support, the Activity ecosystem, and beyond.
+See [`project/roadmap.md`](project/roadmap.md) for the current roadmap.
 
----
+## Technology
+
+- **Desktop:** Rust
+- **Browser & Activities:** TypeScript
+- **Browser:** Chromium, Firefox, and userscript builds
+- **Platforms:** Discord; Fluxer once it offers Rich Presence to other apps
+- **Architecture:** Local browser-to-desktop WebSocket with native platform adapters
 
 ## Contributing
 
-Contributions, issues, and discussions are welcome. See [`CONTRIBUTING.md`](.github/CONTRIBUTING.md) to get started, and [`SECURITY.md`](.github/SECURITY.md) to report vulnerabilities privately.
+Contributions, issues, and discussions are welcome.
 
----
+See [`CONTRIBUTING.md`](.github/CONTRIBUTING.md) to get started.
+
+Security vulnerabilities should be reported privately according to [`SECURITY.md`](.github/SECURITY.md).
 
 ## License
 
-Parousia is licensed under the [Apache License 2.0](LICENSE). The extensions also carry PreMiD's Activities under the Mozilla Public License 2.0, a font under the SIL Open Font License, and icons under CC BY 4.0; each extension build lists them in `THIRD-PARTY-NOTICES.txt`, and each release has `parousia-desktop-notices.txt` for the crates inside Desktop (one, `option-ext`, is under MPL-2.0).
+Parousia is licensed under the [Apache License 2.0](LICENSE).
+
+The repository also contains third-party components under their respective licenses, including PreMiD Activities under the Mozilla Public License 2.0, a font under the SIL Open Font License, and icons under CC BY 4.0.
+
+Each extension release includes `THIRD-PARTY-NOTICES.txt`, and Desktop releases include `parousia-desktop-notices.txt` for statically linked Rust dependencies.

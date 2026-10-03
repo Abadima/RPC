@@ -1,4 +1,5 @@
 import type { ActivityInfo } from "../core/activity";
+import { t } from "../core/i18n";
 import {
   chosenVariant,
   isActivityOn,
@@ -32,20 +33,27 @@ const SOURCES: Record<ActivityInfo["source"], string> = {
 /** The sites an Activity reads, for a sentence: "www.youtube.com and m.youtube.com". */
 function sitesText(origins: readonly string[]): string {
   const names = [...new Set(origins.map(siteName))];
-  if (names.length <= 2) return names.join(" and ");
-  return `${names.slice(0, 2).join(", ")}, and ${names.length - 2} more`;
+  const [first = "", second = ""] = names;
+  if (names.length <= 2) {
+    return names.length === 2 ? t("{first} and {second}", { first, second }) : first;
+  }
+  return t("{first}, {second}, and {n} more", { first, second, n: names.length - 2 });
 }
 
 /** What turning it on means, next to its switch. */
 function switchNote(info: ActivityInfo): string {
   if (!needsAccess(info)) {
-    return "Reads only the address and title of its pages, so it needs no site access.";
+    return t("Reads only the address and title of its pages, so it needs no site access.");
   }
-  const reads =
-    info.source === "premid"
-      ? "Its own code reads its pages"
-      : "Parousia reads what's playing on its pages";
-  return `${reads}. Turning it on asks your browser for access to ${sitesText(info.origins ?? [])}.`;
+  const sites = sitesText(info.origins ?? []);
+  return info.source === "premid"
+    ? t("Its own code reads its pages. Turning it on asks your browser for access to {sites}.", {
+        sites,
+      })
+    : t(
+        "Parousia reads what's playing on its pages. Turning it on asks your browser for access to {sites}.",
+        { sites },
+      );
 }
 
 /**
@@ -66,7 +74,7 @@ export function activityView(context: ViewContext, id: string): View {
   let refused = false;
   let stopSettings: (() => void) | null = null;
 
-  const toggle = switchRow("Show this Activity", "", (on) => change(on), "activity-on");
+  const toggle = switchRow(t("Show this Activity"), "", (on) => change(on), "activity-on");
   slot(element, "toggle").replaceChildren(group(toggle.row));
   const notice = slot(element, "notice");
   const noticeText = slot(notice, "notice-text");
@@ -109,11 +117,18 @@ export function activityView(context: ViewContext, id: string): View {
     const missing = missingSites(activity, grants);
     let text = "";
     if (refused && status === "off") {
-      text = `It stays off: your browser didn't allow access to ${sitesText(missing)}.`;
+      text = t("It stays off: your browser didn't allow access to {sites}.", {
+        sites: sitesText(missing),
+      });
     } else if (refused && status === "needs-access") {
-      text = `Your browser didn't allow access to ${sitesText(missing)}, so it still doesn't run there.`;
+      text = t("Your browser didn't allow access to {sites}, so it still doesn't run there.", {
+        sites: sitesText(missing),
+      });
     } else if (status === "needs-access") {
-      text = `It's on, but can't read ${sitesText(missing)}, so it doesn't run there. Access was declined or taken back.`;
+      text = t(
+        "It's on, but can't read {sites}, so it doesn't run there. Access was declined or taken back.",
+        { sites: sitesText(missing) },
+      );
     }
     notice.hidden = text === "";
     noticeText.textContent = text;
@@ -134,7 +149,7 @@ export function activityView(context: ViewContext, id: string): View {
     const buttons = variants.map((variant) => {
       const label =
         variant.source === "premid" && premid > 1
-          ? `PreMiD: ${variant.name}`
+          ? t("PreMiD: {name}", { name: variant.name })
           : SOURCES[variant.source];
       const button = el("button", "segment", label);
       button.type = "button";
@@ -177,8 +192,8 @@ export function activityView(context: ViewContext, id: string): View {
     const facts = slot(element, "facts");
     facts.replaceChildren();
     for (const [term, value] of [
-      ["Sites", activity.hosts.join(", ")],
-      ["From", `${SOURCES[activity.source]} Activities`],
+      [t("Sites"), activity.hosts.join(", ")],
+      [t("From"), t("{source} Activities", { source: SOURCES[activity.source] })],
     ] as const) {
       const row = el("div");
       row.append(el("dt", "", term), el("dd", "", value));
@@ -213,12 +228,14 @@ export function activityView(context: ViewContext, id: string): View {
     catalog = loaded;
     states = stored;
     grants = granted;
-    if (activity) show(activity);
+    // The manifest carries no description; the catalog does (in the view's language).
+    const description = loaded.find((info) => info.id === id)?.description;
+    if (activity) show(description === undefined ? activity : { ...activity, description });
     else slot(element, "missing").hidden = false;
   });
 
   return {
-    title: "Activity",
+    title: t("Activity"),
     element,
     update() {},
     destroy() {

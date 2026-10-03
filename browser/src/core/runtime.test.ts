@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { Activity } from "./activity";
 import { ActivityRegistry } from "./registry";
 import { PresenceRuntime } from "./runtime";
 
@@ -41,6 +42,31 @@ describe("PresenceRuntime", () => {
     });
     expect(runtime.matches(new URL("https://example.com/x"))).toBe(true);
     expect(runtime.matches(new URL("https://other.example"))).toBe(false);
+  });
+
+  test("an Activity from another extension takes a page over, and only a page", () => {
+    const registry = new ActivityRegistry();
+    registry.register({
+      info: { id: "example", name: "Example", hosts: ["example.com"], source: "parousia" },
+      matcher: (url) => url.hostname === "example.com",
+      detect: ({ url }) => ({ id: "example", name: "Example", url: url.href }),
+    });
+    let external: Activity | null = { id: "compat:other", name: "Other" };
+    const runtime = new PresenceRuntime(registry, {
+      external: () => external,
+      fallback: () => ({ id: "default", name: "Default" }),
+    });
+    const page = { url: new URL("https://example.com"), title: "" };
+
+    expect(runtime.resolve(page).activity?.id).toBe("compat:other");
+    expect(
+      runtime.resolve({ url: new URL("https://unmatched.example"), title: "" }).activity?.id,
+    ).toBe("compat:other");
+    // No page (a browser page) is only ever the fallback.
+    expect(runtime.resolve(null).activity?.id).toBe("default");
+
+    external = null;
+    expect(runtime.resolve(page).activity?.id).toBe("example");
   });
 
   test("returns a null activity when nothing matches", () => {
@@ -124,6 +150,91 @@ describe("PresenceRuntime", () => {
 
     expect(clientId("parousia.example")).toBe("1111111111111111111");
     expect(clientId("premid.example")).toBe("2222222222222222222");
+  });
+
+  describe("the large image", () => {
+    const LOGO = "https://music.youtube.com/img/favicon_32.png";
+    const COVER = "https://lh3.googleusercontent.com/cover=w544-h544";
+
+    /** A music site: the song's cover when the page gave one, nothing else. */
+    function music(source: "parousia" | "premid", icon?: string): PresenceRuntime {
+      const registry = new ActivityRegistry();
+      registry.register({
+        info: {
+          id: "music",
+          name: "Music",
+          hosts: ["music.example"],
+          source,
+          ...(icon && { icon }),
+        },
+        matcher: (url) => url.hostname === "music.example",
+        detect: ({ url, data }) => ({
+          id: "music",
+          name: "Music",
+          url: url.href,
+          ...(data?.thumbnail && { assets: { largeImage: data.thumbnail } }),
+        }),
+      });
+      return new PresenceRuntime(registry);
+    }
+    const page = (extra: object = {}) => ({
+      url: new URL("https://music.example/watch"),
+      title: "Song",
+      ...extra,
+    });
+
+    test("is the site's logo, not Discord's Application icon, when the Activity has none", () => {
+      // Paused, browsing, thumbnails switched off, or a page with no artwork: no image of its own.
+      for (const source of ["parousia", "premid"] as const) {
+        const { activity } = music(source, LOGO).resolve(page());
+        expect(activity?.assets).toEqual({ largeImage: LOGO });
+      }
+    });
+
+    test("is the Activity's own when Discord can show it", () => {
+      const { activity } = music("parousia", LOGO).resolve(page({ data: { thumbnail: COVER } }));
+      expect(activity?.assets).toEqual({ largeImage: COVER });
+    });
+
+    test("is the site's logo when the Activity's own is one Discord would drop", () => {
+      // Desktop and Discord-RPC-Extension's mapping both drop an image over 256 characters.
+      const long = `https://lh3.googleusercontent.com/${"a".repeat(300)}=w544-h544`;
+      const { activity } = music("parousia", LOGO).resolve(page({ data: { thumbnail: long } }));
+      expect(activity?.assets).toEqual({ largeImage: LOGO });
+    });
+
+    test("falls back to the tab's favicon when the Activity has no icon", () => {
+      const runtime = music("parousia");
+      const favicon = "https://music.example/static/favicon-192.png?v=9";
+      expect(runtime.resolve(page({ favicon })).activity?.assets).toEqual({
+        largeImage: "https://music.example/static/favicon-192.png",
+      });
+      // The catalog's icon is the site's logo: it comes first.
+      expect(music("parousia", LOGO).resolve(page({ favicon })).activity?.assets).toEqual({
+        largeImage: LOGO,
+      });
+    });
+
+    test("is left out, so Discord's own icon shows, only with no site image at all", () => {
+      const runtime = music("parousia");
+      expect(runtime.resolve(page()).activity?.assets).toBeUndefined();
+      // A favicon Discord can't show doesn't count.
+      expect(
+        runtime.resolve(page({ favicon: "https://music.example/favicon.ico" })).activity?.assets,
+      ).toBeUndefined();
+    });
+
+    test("isn't borrowed from a page for the Default Activity, which isn't a site's", () => {
+      const registry = new ActivityRegistry();
+      const fallback = { id: "parousia:default", name: "Away" };
+      const runtime = new PresenceRuntime(registry, { fallback: () => fallback });
+      const { activity } = runtime.resolve({
+        url: new URL("https://unmatched.example"),
+        title: "",
+        favicon: "https://unmatched.example/favicon.png",
+      });
+      expect(activity).toEqual(fallback);
+    });
   });
 
   test("an Activity that throws shows nothing, and doesn't stop detection", () => {

@@ -15,8 +15,10 @@ function assetsEqual(a: ActivityAssets | undefined, b: ActivityAssets | undefine
   return (
     a.largeImage === b.largeImage &&
     a.largeText === b.largeText &&
+    a.largeUrl === b.largeUrl &&
     a.smallImage === b.smallImage &&
-    a.smallText === b.smallText
+    a.smallText === b.smallText &&
+    a.smallUrl === b.smallUrl
   );
 }
 
@@ -48,6 +50,10 @@ function activityEquals(a: Activity | null, b: Activity | null): boolean {
     a.detailsUrl === b.detailsUrl &&
     a.stateUrl === b.stateUrl &&
     a.discordClientId === b.discordClientId &&
+    a.type === b.type &&
+    a.statusDisplayType === b.statusDisplayType &&
+    a.party?.size === b.party?.size &&
+    a.party?.max === b.party?.max &&
     assetsEqual(a.assets, b.assets) &&
     timestampsEqual(a.timestamps, b.timestamps) &&
     buttonsEqual(a.buttons, b.buttons)

@@ -1,5 +1,6 @@
-// A stand-in for the Discord app's local RPC socket, for the end-to-end
-// checks: Parousia Desktop is pointed at it (PAROUSIA_DISCORD_IPC_DIR), so a
+// A stand-in for the Discord app's local RPC socket (a named pipe on
+// Windows), for the end-to-end checks: Parousia Desktop is pointed at it
+// (PAROUSIA_DISCORD_IPC_DIR, or PAROUSIA_DISCORD_IPC_PIPE on Windows), so a
 // test run never shows anything on someone's real Discord. It speaks
 // Discord's framing (an 8-byte header: opcode and length, little-endian,
 // then JSON), answers the handshake with READY and every SET_ACTIVITY with
@@ -8,7 +9,7 @@
 import { createServer } from "node:net";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
-import { waitUntil } from "./lib.mjs";
+import { waitUntil, windows } from "./lib.mjs";
 
 const OP_HANDSHAKE = 0;
 const OP_FRAME = 1;
@@ -21,18 +22,22 @@ function frame(op, body) {
   return Buffer.concat([header, json]);
 }
 
-export async function startFakeDiscord(dir) {
-  const path = join(dir, "discord-ipc-0");
-  await rm(path, { force: true });
+/** `where` is a directory, or on Windows the pipe name up to its number (`ws.discordDir`). */
+export async function startFakeDiscord(where) {
+  const path = windows ? `${where}0` : join(where, "discord-ipc-0");
+  if (!windows) await rm(path, { force: true });
   const handshakes = [];
   /** Every SET_ACTIVITY's activity, in order: `null` clears. */
   const activities = [];
+  /** The same, with the Application each came from: `{ clientId, activity }`. */
+  const calls = [];
   const sockets = new Set();
 
-  const server = createServer((socket) => {
+  const connection = (socket) => {
     sockets.add(socket);
     socket.on("close", () => sockets.delete(socket));
     socket.on("error", () => {});
+    let clientId = null;
     let buffer = Buffer.alloc(0);
     socket.on("data", (chunk) => {
       buffer = Buffer.concat([buffer, chunk]);
@@ -43,10 +48,22 @@ export async function startFakeDiscord(dir) {
         const body = JSON.parse(buffer.subarray(8, 8 + length).toString());
         buffer = buffer.subarray(8 + length);
         if (op === OP_HANDSHAKE) {
+          clientId = body.client_id;
           handshakes.push(body.client_id);
-          socket.write(frame(OP_FRAME, { cmd: "DISPATCH", evt: "READY", data: { v: 1 } }));
+          // A user too, as the real one sends: Discord-RPC-Extension's app shows nothing without one.
+          socket.write(
+            frame(OP_FRAME, {
+              cmd: "DISPATCH",
+              evt: "READY",
+              data: {
+                v: 1,
+                user: { id: "1", username: "tester", discriminator: "0", avatar: null },
+              },
+            }),
+          );
         } else if (op === OP_FRAME && body.cmd === "SET_ACTIVITY") {
           activities.push(body.args?.activity ?? null);
+          calls.push({ clientId, activity: body.args?.activity ?? null });
           socket.write(
             frame(OP_FRAME, {
               cmd: "SET_ACTIVITY",
@@ -58,12 +75,14 @@ export async function startFakeDiscord(dir) {
         }
       }
     });
-  });
+  };
+  let server = createServer(connection);
   await new Promise((resolve) => server.listen(path, resolve));
 
   return {
     handshakes,
     activities,
+    calls,
     /** Waits until what's shown passes `check`, and returns it. */
     waitFor(check, description, timeoutMs = 30_000) {
       return waitUntil(
@@ -73,9 +92,19 @@ export async function startFakeDiscord(dir) {
         timeoutMs,
       );
     },
-    async stop() {
+    /** Discord quitting: every connection ends and the socket or pipe goes away. */
+    async quit() {
       for (const socket of sockets) socket.destroy();
       await new Promise((resolve) => server.close(resolve));
+    },
+    /** Discord starting again, where it was; what was recorded stays. */
+    async reopen() {
+      if (!windows) await rm(path, { force: true });
+      server = createServer(connection);
+      await new Promise((resolve) => server.listen(path, resolve));
+    },
+    async stop() {
+      return this.quit();
     },
   };
 }

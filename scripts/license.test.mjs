@@ -36,7 +36,7 @@ describe("Apache License 2.0, project-wide", () => {
 
   test("the extension's About page names it", () => {
     const about = read("browser/src/shared/settings-view.ts");
-    assert.match(about, /fact\("License", "Apache License 2\.0"\)/);
+    assert.match(about, /fact\(t\("License"\), "Apache License 2\.0"\)/);
   });
 
   test("the README and CONTRIBUTING name it", () => {

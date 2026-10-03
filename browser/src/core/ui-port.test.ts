@@ -24,6 +24,15 @@ describe("ui-port messages", () => {
   });
 
   test("events are validated before a UI trusts them", () => {
+    expect(
+      parseUiEvent({
+        type: "state",
+        state: { status: "connected", desktopVersion: "1.0.0", update: "desktop", extra: 1 },
+      }),
+    ).toEqual({
+      type: "state",
+      state: { status: "connected", desktopVersion: "1.0.0", update: "desktop" },
+    });
     expect(parseUiEvent({ type: "state", state: { status: "not_allowed" } })).toEqual({
       type: "state",
       state: { status: "not_allowed" },
@@ -55,6 +64,9 @@ describe("ui-port messages", () => {
       { type: "activity", activity: { id: "a", name: "A", configurable: "yes" } },
       { type: "state", state: { status: "pairing_required" } },
       { type: "state", state: null },
+      { type: "state", state: { status: "connected", update: "both" } },
+      { type: "state", state: { status: "connected", desktopVersion: 1 } },
+      { type: "state", state: { status: "connected", desktopVersion: "1".repeat(33) } },
       { type: "discord", state: { status: "joined", version: null } },
       { type: "discord", state: { status: "connected", version: "x".repeat(33) } },
       { type: "report", report: { version: 1 } },

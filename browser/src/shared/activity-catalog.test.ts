@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import type { ActivityManifest } from "../activities/manifest";
 import type { ActivityInfo } from "../core/activity";
 import type { ActivityStates } from "../core/activity-state";
 import { NO_GRANTS, type Grants } from "../core/site-access";
@@ -41,34 +40,26 @@ const music: ActivityInfo = {
 const catalog = [native, premid, music];
 
 const files: Record<string, unknown> = {
-  "activities/hosts.json": {
-    hosts: {
-      "video.example": ["native/video"],
-      "www.video.example": ["premid/video"],
-      "music.example": ["premid/music"],
+  "activities/hosts.txt":
+    "music.example\tpremid:Music\nvideo.example\tvideo\nwww.video.example\tpremid:Video",
+  "activities/manifests/v.json": {
+    video: {
+      info: native,
+      match: { patterns: ["https://*.video.example/watch*"] },
+    },
+    "premid:Video": {
+      info: premid,
+      match: { regExp: "^https://www[.]video[.]example/watch" },
+      script: { file: "video", clientIds: ["503557087041683458"] },
     },
   },
-  "activities/index.json": {
-    files: {
-      video: "native/video",
-      "premid:Video": "premid/video",
-      "premid:Music": "premid/music",
+  "activities/manifests/m.json": {
+    "premid:Music": {
+      info: music,
+      match: { regExp: "^https://music[.]example/" },
+      script: { file: "music", clientIds: ["503557087041683458"] },
     },
   },
-  "activities/native/video.json": {
-    info: native,
-    match: { patterns: ["https://*.video.example/watch*"] },
-  } satisfies ActivityManifest,
-  "activities/premid/video.json": {
-    info: premid,
-    match: { regExp: "^https://www[.]video[.]example/watch" },
-    script: { file: "video", clientIds: ["503557087041683458"] },
-  } satisfies ActivityManifest,
-  "activities/premid/music.json": {
-    info: music,
-    match: { regExp: "^https://music[.]example/" },
-    script: { file: "music", clientIds: ["503557087041683458"] },
-  } satisfies ActivityManifest,
 };
 
 interface Browser {
@@ -118,9 +109,10 @@ beforeEach(() => {
   globalThis.fetch = (async (input: string | URL | Request) => {
     const path = String(input).replace("chrome-extension://self/", "");
     const body = files[path];
-    return new Response(body === undefined ? "missing" : JSON.stringify(body), {
-      status: body === undefined ? 404 : 200,
-    });
+    return new Response(
+      body === undefined ? "missing" : typeof body === "string" ? body : JSON.stringify(body),
+      { status: body === undefined ? 404 : 200 },
+    );
   }) as typeof fetch;
 });
 

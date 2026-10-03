@@ -1,4 +1,5 @@
 import type { Activity, ActivityAssets, ActivityButton } from "./activity";
+import { t } from "./i18n";
 import type { PreferenceArea } from "./preferences";
 
 /**
@@ -115,30 +116,32 @@ export function defaultActivityProblems(
   activity: DefaultActivity,
 ): Partial<Record<DefaultActivityField, string>> {
   const problems: Partial<Record<DefaultActivityField, string>> = {};
-  if (activity.name.trim().length < 2) problems.name = "Give it a name of at least 2 characters.";
+  if (activity.name.trim().length < 2)
+    problems.name = t("Give it a name of at least 2 characters.");
   for (const field of TEXT_FIELDS) {
     const value = activity[field].trim();
     if (field !== "name" && value.length === 1) {
-      problems[field] = "Discord leaves out lines under 2 characters.";
+      problems[field] = t("Discord leaves out lines under 2 characters.");
     }
   }
   for (const field of IMAGE_FIELDS) {
     const value = activity[field].trim();
     if (value && !isImage(value)) {
-      problems[field] =
-        "Use an https image link, or an asset name from your own Discord Application.";
+      problems[field] = t(
+        "Use an https image link, or an asset name from your own Discord Application.",
+      );
     }
   }
   for (const button of activity.buttons) {
     const label = button.label.trim();
     const url = button.url.trim();
     if (!label && !url) continue;
-    if (!label || !url) problems.buttons = "A button needs both a label and a link.";
+    if (!label || !url) problems.buttons = t("A button needs both a label and a link.");
     else if (!isWebUrl(url, ["https:", "http:"]))
-      problems.buttons = "Button links start with https:// or http://.";
+      problems.buttons = t("Button links start with https:// or http://.");
   }
   if (activity.discordClientId && !/^\d{17,20}$/.test(activity.discordClientId)) {
-    problems.discordClientId = "A Discord Application ID is 17 to 20 digits.";
+    problems.discordClientId = t("A Discord Application ID is 17 to 20 digits.");
   }
   return problems;
 }

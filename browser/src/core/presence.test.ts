@@ -35,6 +35,32 @@ describe("presenceEquals", () => {
     expect(presenceEquals(a, b)).toBe(true);
   });
 
+  test("the type, status line, party, and image links count", () => {
+    const base = activity({
+      type: "watching",
+      statusDisplayType: "state",
+      party: { size: 1, max: 4 },
+      assets: { largeImage: "a", largeUrl: "https://example.com/a" },
+    });
+    const same = activity({
+      type: "watching",
+      statusDisplayType: "state",
+      party: { size: 1, max: 4 },
+      assets: { largeImage: "a", largeUrl: "https://example.com/a" },
+    });
+    expect(presenceEquals(createPresence(base), createPresence(same))).toBe(true);
+    for (const changed of [
+      { ...same, type: "listening" as const },
+      { ...same, statusDisplayType: "details" as const },
+      { ...same, party: { size: 2, max: 4 } },
+      { ...same, party: undefined },
+      { ...same, assets: { largeImage: "a", largeUrl: "https://example.com/b" } },
+      { ...same, assets: { largeImage: "a", smallUrl: "https://example.com/a" } },
+    ]) {
+      expect(presenceEquals(createPresence(base), createPresence(changed))).toBe(false);
+    }
+  });
+
   test("differing nested assets are not equal", () => {
     const a = createPresence(activity({ assets: { largeImage: "cover.png" } }));
     const b = createPresence(activity({ assets: { largeImage: "other.png" } }));

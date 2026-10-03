@@ -5,12 +5,14 @@ on:
     branches: ["main", "pre-2.0"]
     paths:
       - "browser/**"
+      - "assets/brand/**"
       - "adapters/discord/**"
       - ".github/workflows/browser-ci.yml"
   pull_request:
     branches: ["main", "pre-2.0"]
     paths:
       - "browser/**"
+      - "assets/brand/**"
       - "adapters/discord/**"
       - ".github/workflows/browser-ci.yml"
 
