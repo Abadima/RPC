@@ -47,23 +47,25 @@ const decode = (text: string): string =>
 
 const words = (text: string): string => text.replaceAll(/\s+/g, " ").trim();
 
-/** Fixed text in a page: each run of text between tags, and the attributes a language may translate. */
+/** What isn't a page's own text: comments, script and style blocks, and tags, found in one pass. */
+const MARKUP = /<!--[\s\S]*?-->|<(?:script|style)\b[\s\S]*?<\/(?:script|style)>|<[^>]*>/g;
+const LABELLED = /\s(?:aria-label|title|placeholder)="([^"]*)"/g;
+
+/**
+ * Fixed text in a page: each run of text between tags, and the attributes a
+ * language may translate. The page is split at its markup, never rewritten,
+ * so nothing is left behind that could form markup again.
+ */
 export function pageStrings(html: string): string[] {
-  let stripped = html;
-  let previous: string;
-  do {
-    previous = stripped;
-    stripped = stripped
-      .replaceAll(/<!--[\s\S]*?-->/g, "")
-      .replaceAll(/<(script|style)[\s\S]*?<\/\1>/g, "");
-  } while (stripped !== previous);
   const found: string[] = [];
-  for (const segment of stripped.split(/<[^>]*>/)) {
+  for (const segment of html.split(MARKUP)) {
     const text = words(decode(segment));
     if (/\p{L}/u.test(text)) found.push(text);
   }
-  for (const match of stripped.matchAll(/\s(?:aria-label|title|placeholder)="([^"]*)"/g)) {
-    found.push(words(decode(match[1] ?? "")));
+  for (const [markup] of html.matchAll(MARKUP)) {
+    // Comments, scripts, and styles hold no text a person reads.
+    if (markup.startsWith("<!--") || /^<(?:script|style)\b/.test(markup)) continue;
+    for (const label of markup.matchAll(LABELLED)) found.push(words(decode(label[1] ?? "")));
   }
   return found;
 }

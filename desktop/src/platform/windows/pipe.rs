@@ -553,8 +553,10 @@ mod tests {
             assert_eq!(size.AceCount, 1, "one entry, so no one else can open it");
             let mut ace: *mut c_void = null_mut();
             assert_ne!(GetAce(acl, 0, &mut ace), 0);
-            assert!(!ace.is_null(), "GetAce returned success but no ACE pointer");
-            let ace = &*(ace as *const ACCESS_ALLOWED_ACE);
+            let ace = ace
+                .cast::<ACCESS_ALLOWED_ACE>()
+                .as_ref()
+                .expect("GetAce succeeded but gave no ACE");
             let sid = (&ace.SidStart as *const u32).cast_mut().cast::<c_void>();
             assert_ne!(EqualSid(sid, this_user().unwrap().as_ptr()), 0);
             LocalFree(descriptor);
