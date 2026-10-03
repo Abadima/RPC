@@ -71,9 +71,12 @@ fn a_wildcard_listener_on_the_port_doesnt_get_loopback_connections() {
     let port = desktop.local_addr().unwrap().port();
     // Whether Windows lets it bind at all, loopback traffic goes to the more specific socket.
     let squatter = bind_sharing(Ipv4Addr::UNSPECIFIED, port);
-    let mut client = TcpStream::connect(("127.0.0.1", port)).unwrap();
+let mut client = TcpStream::connect(("127.0.0.1", port)).unwrap();
     client.write_all(b"x").unwrap();
-    let (mut accepted, _) = desktop.accept().unwrap();
+    desktop.set_nonblocking(true).unwrap();
+    let (mut accepted, _) = desktop
+        .accept()
+        .expect("the loopback-specific listener did not receive the connection");
     let mut byte = [0u8; 1];
     accepted.read_exact(&mut byte).unwrap();
     assert_eq!(&byte, b"x");
