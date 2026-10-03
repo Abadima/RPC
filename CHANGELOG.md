@@ -14,7 +14,7 @@ This release carries the browser extension and userscript **1.1.0** and Parousia
 
 - **Expanded Activity Info:** PreMiD and native activities now send activity types (_Listening to, Watching, Competing in_), status lines, party sizes ("2 of 5"), and image links to Discord.
 
-* **Version Update Notices:** Extension and Desktop minor/patch versions remain compatible. Update notices only appear when an update is actually needed. The extension checks GitHub's latest release at most once per day to determine whether a newer Desktop version is available. The request is unauthenticated, sends no user or page data, and failed checks show nothing. Both notices include a "Not now" option.
+- **Version Update Notices:** Extension and Desktop minor/patch versions remain compatible. Update notices only appear when an update is actually needed. The extension checks GitHub's latest release at most once per day to determine whether a newer Desktop version is available. The request is unauthenticated, sends no user or page data, and failed checks show nothing. Both notices include a "Not now" option.
 
 ### ⚡ Performance & Usability Improvements
 

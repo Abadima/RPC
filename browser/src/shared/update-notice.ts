@@ -1,6 +1,8 @@
 import type { ConnectionState } from "../core/desktop-connection";
 import { t } from "../core/i18n";
 import type { PreferenceArea } from "../core/preferences";
+import { isNewerRelease } from "../core/version";
+import { latestDesktopVersion } from "./latest-desktop";
 import { DESKTOP_DOWNLOAD } from "./links";
 
 /**
@@ -8,6 +10,12 @@ import { DESKTOP_DOWNLOAD } from "./links";
  * aren't the same release (core/version.ts): which side is behind, and a
  * choice to ignore it. Dismissing is remembered for that pair of versions, so
  * the next release of either side asks again.
+ *
+ * Desktop and the extension version on their own, so an extension newer than
+ * Desktop is not news by itself: a release pairs a new extension with the
+ * Desktop that was current when it shipped. "Update Desktop" is said only when
+ * GitHub lists a newer Desktop than the connected one (`latestDesktop`); with
+ * no answer, nothing is said.
  */
 export interface UpdateNotice {
   /** The pair of versions it's about, to remember a dismissal by. */
@@ -24,28 +32,31 @@ const STORAGE_KEY = "dismissedUpdate";
 export function updateNotice(
   state: ConnectionState,
   extensionVersion: string,
+  latestDesktop?: string | null,
 ): UpdateNotice | null {
   if (state.status !== "connected" || !state.update || !state.desktopVersion) return null;
-  const key = `${state.update}:${extensionVersion}:${state.desktopVersion}`;
-  return state.update === "desktop"
-    ? {
-        key,
-        title: t("A newer Parousia Desktop is available"),
-        detail: t(
-          "This extension is newer than Parousia Desktop {version}. They still work together; update Desktop to get everything the extension offers.",
-          { version: state.desktopVersion },
-        ),
-        href: DESKTOP_DOWNLOAD,
-        action: t("Update Parousia Desktop"),
-      }
-    : {
-        key,
-        title: t("A newer Parousia extension is available"),
-        detail: t(
-          "Parousia Desktop {version} is newer than this extension. They still work together; update the extension from your browser's extension page.",
-          { version: state.desktopVersion },
-        ),
-      };
+  const pair = `${state.update}:${extensionVersion}:${state.desktopVersion}`;
+  if (state.update === "desktop") {
+    if (!latestDesktop || !isNewerRelease(latestDesktop, state.desktopVersion)) return null;
+    return {
+      key: `${pair}:${latestDesktop}`,
+      title: t("A newer Parousia Desktop is available"),
+      detail: t(
+        "This extension is newer than Parousia Desktop {version}. They still work together; update Desktop to get everything the extension offers.",
+        { version: state.desktopVersion },
+      ),
+      href: DESKTOP_DOWNLOAD,
+      action: t("Update Parousia Desktop"),
+    };
+  }
+  return {
+    key: pair,
+    title: t("A newer Parousia extension is available"),
+    detail: t(
+      "Parousia Desktop {version} is newer than this extension. They still work together; update the extension from your browser's extension page.",
+      { version: state.desktopVersion },
+    ),
+  };
 }
 
 export async function loadDismissedUpdate(
@@ -110,15 +121,21 @@ export function renderUpdateNotice(
  * dismissed before has been read (so a dismissed notice never flashes).
  * Call the returned function with every connection state.
  */
-export function updateBanner(banner: HTMLElement): (state: ConnectionState) => void {
+export function updateBanner(
+  banner: HTMLElement,
+  lookUp: () => Promise<string | null> = () => latestDesktopVersion(),
+): (state: ConnectionState) => void {
   let state: ConnectionState = { status: "idle" };
   let dismissed: string | null = null;
   let loaded = false;
+  /** `undefined` until GitHub has been asked (only when a newer extension would say "update Desktop"). */
+  let latest: string | null | undefined;
+  let asked = false;
   const show = (): void => {
     if (!loaded) return;
     renderUpdateNotice(
       banner,
-      updateNotice(state, chrome.runtime.getManifest().version),
+      updateNotice(state, chrome.runtime.getManifest().version, latest),
       dismissed,
       (key) => {
         dismissed = key;
@@ -126,6 +143,16 @@ export function updateBanner(banner: HTMLElement): (state: ConnectionState) => v
         show();
       },
     );
+  };
+  const ask = (): void => {
+    if (asked || state.status !== "connected" || state.update !== "desktop") return;
+    asked = true;
+    lookUp()
+      .catch(() => null)
+      .then((version) => {
+        latest = version;
+        show();
+      });
   };
   loadDismissedUpdate()
     .catch(() => null)
@@ -136,6 +163,7 @@ export function updateBanner(banner: HTMLElement): (state: ConnectionState) => v
     });
   return (next) => {
     state = next;
+    ask();
     show();
   };
 }

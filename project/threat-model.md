@@ -168,6 +168,10 @@ Privacy settings determine which page data may reach an Activity's Presence. Dis
 
 Activities do not run on sites for which they lack permission.
 
+### The update check
+
+The extension makes one request to anyone but the computer it runs on: `GET https://api.github.com/repos/Abadima/RPC/releases/latest`, from a popup or dashboard that is about to say "update Desktop". It is the only address besides Desktop and Discord-RPC-Extension's app that the extension's Content Security Policy allows. It carries no cookies, credentials, referrer, or identifier, and nothing about the user's browsing; GitHub sees an IP address and the browser's user agent, as for any request. The response is untrusted: it is size-limited, parsed as JSON, and only a `x.y.z` number inside the exact `<!-- parousia-desktop: … -->` comment is read from it. A forged answer can show or hide an "update Desktop" notice, and nothing else; the link it offers is a fixed address. It is made at most once a day, and only when a connected Desktop and the extension differ in minor or patch version.
+
 ### Permissions
 
 Activities request only their required sites.

@@ -31,3 +31,15 @@ export function compareVersions(extension: string, desktop: string): UpdateNotic
   }
   return "none";
 }
+
+/** Whether `candidate` is a later release than `than`, by their numbers; false if either isn't a release. */
+export function isNewerRelease(candidate: string, than: string): boolean {
+  const a = parseRelease(candidate);
+  const b = parseRelease(than);
+  if (!a || !b) return false;
+  for (let i = 0; i < 3; i++) {
+    const difference = (a[i] ?? 0) - (b[i] ?? 0);
+    if (difference !== 0) return difference > 0;
+  }
+  return false;
+}

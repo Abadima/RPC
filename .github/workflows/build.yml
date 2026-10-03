@@ -18,12 +18,15 @@ on:
   workflow_call:
     inputs:
       version:
-        description: "The version being released (1.2.3 or 1.2.3-rc.1). Empty reads desktop/Cargo.toml."
+        description: "The release (1.2.3 or 1.2.3-rc.1), which is the extension's version. Empty reads the Chromium manifest."
         type: string
         default: ""
     outputs:
       version:
         value: ${{ jobs.check.outputs.version }}
+      desktop:
+        description: "Parousia Desktop's own version (desktop/Cargo.toml), which is not the release's."
+        value: ${{ jobs.check.outputs.desktop }}
       prerelease:
         value: ${{ jobs.check.outputs.prerelease }}
       sources:
@@ -40,6 +43,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       version: ${{ steps.version.outputs.version }}
+      desktop: ${{ steps.version.outputs.desktop }}
       prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
       - name: Checkout
@@ -56,10 +60,13 @@ jobs:
         run: |
           version="$REQUESTED"
           if [ -z "$version" ]; then
-            version="$(sed -n 's/^version = "\(.*\)"$/\1/p' desktop/Cargo.toml | head -n 1)"
+            version="$(jq -r .version browser/manifests/chromium.json)"
           fi
           node scripts/release-check.mjs "$version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          # Desktop versions on its own; its binaries report this, not the release.
+          desktop="$(sed -n 's/^version = "\(.*\)"$/\1/p' desktop/Cargo.toml | head -n 1)"
+          echo "desktop=$desktop" >> "$GITHUB_OUTPUT"
           case "$version" in
             *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
             *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
@@ -82,7 +89,7 @@ jobs:
             target: aarch64-unknown-linux-musl
     env:
       ASSET: parousia-desktop-linux-${{ matrix.arch }}
-      VERSION: ${{ needs.check.outputs.version }}
+      VERSION: ${{ needs.check.outputs.desktop }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -176,7 +183,7 @@ jobs:
             runs: false
     env:
       ASSET: parousia-desktop-windows-${{ matrix.arch }}.exe
-      VERSION: ${{ needs.check.outputs.version }}
+      VERSION: ${{ needs.check.outputs.desktop }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7

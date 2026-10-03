@@ -154,35 +154,63 @@ try {
   assert(report.clients.length === 2, `two clients (${report.clients.length})`);
   log("two browsers connected at once, sharing the one allowed build's origin");
 
-  // --- Versions: another minor keeps working and says who's behind; another major doesn't ---
+  // --- Versions: another minor keeps working; "update Desktop" is only said when GitHub lists a newer one ---
   // Copies of the build with another version, each its own extension (and origin).
   // Desktop and the extension version on their own, so each case is Desktop's
-  // own version, a minor above it, and the next major.
+  // own version, a minor above it, and the next major. GitHub is answered here
+  // (the run has no network), with the release notes the workflow writes.
   const [major, minor, patch] = (
     await readFile(join(browserDir, "..", "desktop", "Cargo.toml"), "utf8")
   )
     .match(/^version = "(\d+)\.(\d+)\.(\d+)/m)
     .slice(1)
     .map(Number);
+  const desktopVersion = `${major}.${minor}.${patch}`;
+  const releaseNotes = (version) =>
+    JSON.stringify({
+      tag_name: "v9.9.9",
+      body: `Notes\n\n<!-- parousia-desktop: ${version} -->\n`,
+    });
   const notice = (page) =>
     page.$eval("#update-notice", (el) => (el.hidden ? null : el.textContent));
-  for (const [version, expectation] of [
-    [`${major}.${minor}.${patch}`, "level"],
-    [`${major}.${minor + 1}.0`, /A newer Parousia Desktop is available/],
-    [`${major + 1}.0.0`, null],
+  const github = {
+    // The release that carries this very Desktop: a newer extension is not news.
+    current: (route) => route.fulfill({ status: 200, body: releaseNotes(desktopVersion) }),
+    newer: (route) =>
+      route.fulfill({ status: 200, body: releaseNotes(`${major}.${minor}.${patch + 1}`) }),
+    unreachable: (route) => route.abort(),
+    nothing: (route) => route.fulfill({ status: 200, body: JSON.stringify({ body: "no marker" }) }),
+  };
+  for (const [version, expectation, answer] of [
+    [desktopVersion, "level", "current"],
+    [`${major}.${minor + 1}.0`, "quiet", "current"],
+    [`${major}.${minor + 1}.0`, "quiet", "unreachable"],
+    [`${major}.${minor + 1}.0`, "quiet", "nothing"],
+    [`${major}.${minor + 1}.0`, /A newer Parousia Desktop is available/, "newer"],
+    [`${major + 1}.0.0`, null, "current"],
   ]) {
-    const dir = join(ws.dir, `extension-${version}`);
+    const label = `${version} with GitHub ${answer}`;
+    const dir = join(ws.dir, `extension-${version}-${answer}`);
     await cp(extensionDir, dir, { recursive: true });
     const manifestPath = join(dir, "manifest.json");
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
     await writeFile(manifestPath, JSON.stringify({ ...manifest, version }));
-    const other = await launch(join(ws.dir, `profile-${version}`), dir);
+    const other = await launch(join(ws.dir, `profile-${version}-${answer}`), dir);
+    const asked = [];
+    await other.context.route("https://api.github.com/**", (route) => {
+      asked.push(route.request());
+      return github[answer](route);
+    });
     await control(ws, "allow", other.origin);
     let page = await openPopup(other);
-    if (expectation === "level") {
+    if (expectation === "level" || expectation === "quiet") {
       await popup.waitForStatus(page, /^Connected to Parousia Desktop/);
-      await sleep(300);
-      assert((await notice(page)) === null, "the same version shows no update notice");
+      if (expectation === "quiet") {
+        await waitUntil(async () => asked.length > 0, `${label}: the lookup`);
+      }
+      await sleep(500);
+      assert((await notice(page)) === null, `${label}: no update notice`);
+      if (expectation === "level") assert(asked.length === 0, `${label}: GitHub is not asked`);
     } else if (expectation) {
       await popup.waitForStatus(page, /^Connected to Parousia Desktop/);
       await waitUntil(async () => (await notice(page)) !== null, "the update notice");
@@ -191,22 +219,34 @@ try {
         (await page.textContent("#update-notice a")) === "Update Parousia Desktop",
         "with the download",
       );
+      const request = asked[0];
+      assert(
+        request?.url() === "https://api.github.com/repos/Abadima/RPC/releases/latest",
+        `asked ${request?.url()}`,
+      );
+      const headers = await request.allHeaders();
+      assert(
+        !headers.cookie && !headers.authorization,
+        "the request carries no cookie or credentials",
+      );
       await page.click("#update-notice button");
       assert((await notice(page)) === null, "Not now hides it");
       page = await reopen(other, page);
       await popup.waitForStatus(page, /^Connected to Parousia Desktop/);
       await sleep(300);
       assert((await notice(page)) === null, "and it stays hidden when the popup opens again");
+      assert(asked.length === 1, `the answer is remembered (${asked.length} requests)`);
     } else {
       await popup.waitForStatus(page, /^Parousia Desktop version mismatch$/);
       assert(/Versions don't match/.test(await popup.help(page)), "another major is refused");
       assert((await notice(page)) === null, "with no update notice");
+      assert(asked.length === 0, "and GitHub is not asked");
     }
     await other.context.close();
   }
   await waitUntil(async () => (await status(ws)).clients.length === 2, "the extra browsers to go");
   log(
-    "versions: a newer extension still connects and offers the Desktop download once ('Not now' is remembered); another major version is refused as a mismatch",
+    "versions: a newer extension connects quietly unless GitHub lists a newer Desktop (current, unreachable, or unreadable answers say nothing; the answer is remembered; no cookies sent); another major version is refused as a mismatch",
   );
 
   // --- Discord: a detected Activity, through Desktop ---

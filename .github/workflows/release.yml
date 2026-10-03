@@ -47,7 +47,7 @@ jobs:
             fi
             version="${REF_NAME#v}"
           else
-            version="$(sed -n 's/^version = "\(.*\)"$/\1/p' desktop/Cargo.toml | head -n 1)"
+            version="$(jq -r .version browser/manifests/chromium.json)"
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
@@ -80,6 +80,7 @@ jobs:
       GH_REPO: ${{ github.repository }}
       TAG: ${{ github.ref_name }}
       VERSION: ${{ needs.verify.outputs.version }}
+      DESKTOP: ${{ needs.build.outputs.desktop }}
       PRERELEASE: ${{ needs.build.outputs.prerelease }}
       SOURCES: ${{ needs.build.outputs.sources }}
     steps:
@@ -122,6 +123,9 @@ jobs:
           EOF
           sed -i "s|<owner>/<repo>|$GH_REPO|" notes.md
           printf '\nActivities built from: %s\n' "$SOURCES" >> notes.md
+          # Read by the extension to tell whether a newer Desktop exists (shared/latest-desktop.ts).
+          # Hidden from the page; keep the exact form.
+          printf '\n<!-- parousia-desktop: %s -->\n' "$DESKTOP" >> notes.md
           flags=(--latest)
           if [ "$PRERELEASE" = true ]; then flags=(--prerelease); fi
           gh release create "$TAG" release/* --verify-tag --title "Parousia $TAG" --notes-file notes.md "${flags[@]}"

@@ -48,38 +48,34 @@ describe("parseVersion", () => {
 });
 
 describe("checkRelease", () => {
-  test("passes when Desktop carries the tag's version and the extension agrees with itself", () => {
-    project();
+  test("passes when both manifests and package.json carry the tag's version", () => {
+    project({ cargo: "0.1.0" });
     assert.deepEqual(checkRelease("v0.3.0", root), []);
   });
 
-  test("the extension has a version of its own: Desktop is the tag", () => {
+  test("Desktop has a version of its own: any release number will do", () => {
     project({ cargo: "1.0.1", chromium: "1.1.0" });
-    assert.deepEqual(checkRelease("v1.0.1", root), []);
+    assert.deepEqual(checkRelease("v1.1.0", root), []);
   });
 
-  test("a pre-release tag matches Desktop in full", () => {
-    project({ cargo: "0.3.0-rc.1", chromium: "0.4.0" });
+  test("a pre-release tag matches the extension by number only", () => {
+    project({ chromium: "0.3.0" });
     assert.deepEqual(checkRelease("v0.3.0-rc.1", root), []);
   });
 
-  test("Desktop must carry the tag's version", () => {
-    project({ cargo: "1.0.0" });
-    const problems = checkRelease("v1.0.1", root);
-    assert.equal(problems.length, 1);
-    assert.match(problems[0], /desktop\/Cargo\.toml.*1\.0\.0.*1\.0\.1/);
-  });
-
-  test("both manifests and package.json carry one extension version", () => {
-    project({ chromium: "1.1.0", firefox: "1.0.0", pkg: "1.0.5" });
+  test("names every extension file that disagrees with the tag", () => {
+    project({ chromium: "0.4.0", firefox: "0.2.0", pkg: "0.1.0" });
     const problems = checkRelease("v0.3.0", root).join("\n");
-    assert.match(problems, /firefox\.json.*1\.0\.0.*1\.1\.0/);
-    assert.match(problems, /package\.json.*1\.0\.5.*1\.1\.0/);
+    assert.match(problems, /chromium\.json.*0\.4\.0/);
+    assert.match(problems, /firefox\.json.*0\.2\.0/);
+    assert.match(problems, /package\.json.*0\.1\.0/);
   });
 
-  test("an extension version is numbers only, since the stores take nothing else", () => {
-    project({ chromium: "1.1.0-beta.1" });
-    assert.match(checkRelease("v0.3.0", root).join("\n"), /1\.1\.0-beta\.1/);
+  test("Desktop's version has to be a release number", () => {
+    project({ cargo: "latest" });
+    const problems = checkRelease("v0.3.0", root);
+    assert.equal(problems.length, 1);
+    assert.match(problems[0], /desktop\/Cargo\.toml.*latest/);
   });
 
   test("a version that is not semver is reported once", () => {

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // Checks that a release agrees with the files that carry a version, so a tag
-// never publishes artifacts that report another one. The tag is Parousia
-// Desktop's version (Desktop's Cargo.toml, with a pre-release suffix such as
-// `1.2.3-rc.1` where there is one). The extension versions on its own and
-// carries numbers only (`1.2.3`), because the stores take nothing else: both
-// manifests and browser/package.json must say the same one, whatever the tag.
+// never publishes artifacts that report another one. The tag is the release,
+// and the release is the extension's version: both manifests and
+// browser/package.json carry its numbers (`1.2.3`; a pre-release suffix such
+// as `1.2.3-rc.1` lives in the tag alone, because the stores take nothing
+// else). Parousia Desktop versions on its own (desktop/Cargo.toml), so it only
+// has to be a release number; the workflows read it from there.
 //
 //   node scripts/release-check.mjs v1.2.3
 import { readFileSync } from "node:fs";
@@ -34,18 +35,17 @@ export function checkRelease(input, root) {
 
   const problems = [];
   const cargo = packageVersion(readFileSync(join(root, "desktop", "Cargo.toml"), "utf8"));
-  if (cargo !== parsed.version) {
-    problems.push(`desktop/Cargo.toml has version ${cargo}, the release is ${parsed.version}`);
+  if (!cargo || !parseVersion(cargo)) {
+    problems.push(`desktop/Cargo.toml has version ${cargo}, which isn't a release number`);
   }
-
-  const manifests = MANIFESTS.map((target) => {
-    const path = join("browser", "manifests", `${target}.json`);
-    return { path, version: JSON.parse(readFileSync(join(root, path), "utf8")).version };
-  });
-  const extension = manifests[0].version;
-  for (const { path, version } of manifests) {
-    if (parseVersion(version)?.prerelease !== false) {
-      problems.push(`${path} has version ${version}, which isn't MAJOR.MINOR.PATCH (the stores take no suffix)`);
+  const files = [
+    ...MANIFESTS.map((target) => join("browser", "manifests", `${target}.json`)),
+    join("browser", "package.json"),
+  ];
+  for (const path of files) {
+    const { version } = JSON.parse(readFileSync(join(root, path), "utf8"));
+    if (version !== parsed.core) {
+      problems.push(`${path} has version ${version}, the release needs ${parsed.core}`);
     }
     if (version !== extension) {
       problems.push(`${path} has version ${version}, ${manifests[0].path} has ${extension}`);
@@ -64,5 +64,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const problems = checkRelease(input, root);
   for (const problem of problems) console.error(`release-check: ${problem}`);
   if (problems.length > 0) process.exit(1);
-  console.log(`release-check: ${input} matches Desktop, and the extension's manifests agree`);
+  console.log(`release-check: ${input} matches the extension's manifests and package.json`);
 }

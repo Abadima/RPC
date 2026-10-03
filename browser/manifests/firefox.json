@@ -26,7 +26,7 @@
   "optional_permissions": ["scripting"],
   "optional_host_permissions": ["*://*/*"],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' ws://127.0.0.1:57179 ws://127.0.0.1:6969"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' ws://127.0.0.1:57179 ws://127.0.0.1:6969 https://api.github.com"
   },
   "browser_specific_settings": {
     "gecko": {
