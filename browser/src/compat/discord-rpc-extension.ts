@@ -1,4 +1,5 @@
 import type { Activity } from "../core/activity";
+import { onFirefox } from "./browser-family";
 
 /**
  * Discord-RPC-Extension compatibility (github.com/lolamtisch/Discord-RPC-Extension):
@@ -101,7 +102,7 @@ const time = (value: number | undefined): number | undefined =>
 
 /**
  * Parousia's Activity as a Discord activity. The same rules as Desktop's
- * `desktop/src/discord/activity.rs`, and both are tested against the cases in
+ * `desktop/src/adapters/discord/activity.rs`, and both are tested against the cases in
  * `adapters/discord/activity-mapping.json`. Discord turns down a whole
  * activity over one field it doesn't accept, so a field it can't take is
  * left out instead:
@@ -113,6 +114,9 @@ const time = (value: number | undefined): number | undefined =>
  * - Buttons: the first 2 with a label, cut to 32 like text; URL `http(s)`, at most 512.
  * - Times: whole milliseconds from 1 through 2147483647000, the most the RPC
  *   library behind Discord-RPC-Extension's app accepts.
+ *
+ * The type, status line, party, and image links aren't sent: that library's
+ * version isn't known to take them (Desktop's adapter does).
  */
 export function toDiscordPresence(activity: Activity): DiscordRpcExtensionPresence {
   const buttons = (activity.buttons ?? [])
@@ -154,12 +158,7 @@ export function toDiscordRpcExtensionResponse(
 }
 
 function currentExtensionId(): string {
-  // The same feature-detection Discord-RPC-Extension's own integration
-  // examples use: Firefox exposes a promise-based `browser` global
-  // alongside `chrome`; Chrome only ever has `chrome`.
-  return "browser" in globalThis
-    ? DISCORD_RPC_EXTENSION_IDS.firefox
-    : DISCORD_RPC_EXTENSION_IDS.chrome;
+  return onFirefox() ? DISCORD_RPC_EXTENSION_IDS.firefox : DISCORD_RPC_EXTENSION_IDS.chrome;
 }
 
 /**

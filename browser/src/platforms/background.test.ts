@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from "bun:test";
 import type { ConnectionState, DesktopLink } from "../core/desktop-connection";
-import type { DesktopReport, DesktopSetting } from "../core/desktop-protocol";
+import { presenceWire, type DesktopReport, type DesktopSetting } from "../core/desktop-protocol";
 import type { PlatformId } from "../core/preferences";
 import type { Presence } from "../core/presence";
 import { REPORT } from "../core/test-desktop";
@@ -48,7 +48,6 @@ const quietPages: PageBrowser = {
   inject: async () => {},
   startCollector: async () => {},
   readPage: async () => null,
-  loadIndex: async () => ({}),
   loadManifest: async () => null,
   saveState: async () => {},
 };
@@ -144,14 +143,16 @@ interface FakeUiPort {
 interface FakeTab {
   /** Unset for a browser page the extension can't see. */
   url?: string;
+  incognito?: boolean;
   title?: string;
   /** Sound is playing in it. */
   audible?: boolean;
+  favIconUrl?: string;
 }
 
 type UpdatedListener = (
   tabId: number,
-  change: { url?: string; title?: string; audible?: boolean },
+  change: { url?: string; title?: string; audible?: boolean; favIconUrl?: string },
   tab: FakeTab,
 ) => void;
 
@@ -160,7 +161,10 @@ function installChromeMock(tab: FakeTab = { url: "https://example.com" }): {
   savePreferences: (value: unknown) => void;
   saveDefault: (value: unknown) => void;
   tabLookups: () => number;
-  update: (change: { url?: string; title?: string; audible?: boolean }, next?: FakeTab) => void;
+  update: (
+    change: { url?: string; title?: string; audible?: boolean; favIconUrl?: string },
+    next?: FakeTab,
+  ) => void;
   /** Opens a tab in `windowId`, where it becomes that window's active tab. */
   activate: (tabId: number, tab: FakeTab, windowId: number) => void;
   focus: (windowId: number) => void;
@@ -278,6 +282,51 @@ describe("startBackground", () => {
     // example.com isn't a site any Activity looks at: the only thing to report is "nothing".
     expect(link.sent).toHaveLength(1);
     expect(link.sent[0]?.activity).toBeNull();
+  });
+
+  test("an Activity with no image of its own shows the tab's favicon, once the tab reports one", async () => {
+    const chromeMock = installChromeMock({
+      url: "https://arcade.example/chess",
+      title: "Chess - Arcade",
+    });
+    const link = fakeLink();
+    start(link, fakeBridge());
+    await tick();
+    expect(link.sent.at(-1)?.activity?.assets).toBeUndefined();
+
+    // Tabs report the favicon after the page: it's news only on a page an Activity looks at.
+    chromeMock.update(
+      { favIconUrl: "https://arcade.example/icons/favicon-192.png?v=4" },
+      {
+        url: "https://arcade.example/chess",
+        title: "Chess - Arcade",
+        favIconUrl: "https://arcade.example/icons/favicon-192.png?v=4",
+      },
+    );
+    await tick();
+    expect(link.sent.at(-1)?.activity?.assets).toEqual({
+      largeImage: "https://arcade.example/icons/favicon-192.png",
+    });
+  });
+
+  test("a favicon on a page no Activity looks at changes nothing", async () => {
+    const chromeMock = installChromeMock({ url: "https://example.com", title: "Example" });
+    const link = fakeLink();
+    start(link, fakeBridge());
+    await tick();
+    const before = link.sent.length;
+    const lookups = chromeMock.tabLookups();
+    chromeMock.update(
+      { favIconUrl: "https://example.com/favicon.png" },
+      {
+        url: "https://example.com",
+        title: "Example",
+        favIconUrl: "https://example.com/favicon.png",
+      },
+    );
+    await tick();
+    expect(chromeMock.tabLookups()).toBe(lookups);
+    expect(link.sent).toHaveLength(before);
   });
 
   test("an open UI holds the connection and gets every state change", () => {
@@ -529,6 +578,9 @@ describe("startBackground", () => {
     const link = fakeLink();
     start(link, fakeBridge());
     await tick();
+    // Without an Idle Timeout (the default keeps presence a minute), leaving the browser clears it at once.
+    chromeMock.savePreferences({ idleTimeoutMinutes: 0 });
+    await tick();
     expect(link.sent.at(-1)?.activity).toBeNull();
 
     // A tab opening in the background in another window changes nothing.
@@ -572,6 +624,9 @@ describe("startBackground", () => {
     await tick();
     expect(link.sent.at(-1)?.activity?.details).toBe("Playing Chess");
 
+    // Without an Idle Timeout, which is what this is about: the default keeps presence a minute.
+    chromeMock.savePreferences({ idleTimeoutMinutes: 0 });
+    await tick();
     chromeMock.focus(-1);
     await tick();
     expect(link.sent.at(-1)?.activity).toBeNull();
@@ -593,6 +648,31 @@ describe("startBackground", () => {
     chromeMock.focus(1);
     await tick();
     expect(link.sent.at(-1)?.activity?.details).toBe("Playing Go");
+  });
+
+  test("by default presence outlasts leaving the browser for a minute, so looking at Discord doesn't make it vanish", async () => {
+    const chromeMock = installChromeMock({
+      url: "https://arcade.example/chess",
+      title: "Chess - Arcade",
+    });
+    const link = fakeLink();
+    start(link, fakeBridge());
+    await tick();
+    jest.useFakeTimers();
+    try {
+      chromeMock.focus(-1);
+      await settle();
+      expect(link.sent.at(-1)?.activity?.details).toBe("Playing Chess");
+
+      jest.advanceTimersByTime(59_000);
+      await settle();
+      expect(link.sent.at(-1)?.activity?.details).toBe("Playing Chess");
+      jest.advanceTimersByTime(2000);
+      await settle();
+      expect(link.sent.at(-1)?.activity).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test("with an Idle Timeout, what's shared keeps following the tab until the timeout runs out, and stays cleared until focus returns", async () => {
@@ -639,24 +719,183 @@ describe("startBackground", () => {
   });
 });
 
+/** What MAL-Sync answers on an episode it recognized (compat/malsync.ts). */
+const MALSYNC_REPLY = {
+  clientId: "606504719212478504",
+  presence: {
+    details: "Sousou no Frieren",
+    state: "Episode 3/28",
+    largeImageKey: "https://cdn.myanimelist.net/images/anime/1015/138006.jpg",
+    smallImageKey: "play",
+    smallImageText: "Playing",
+    startTimestamp: 1_700_000_000_000,
+    buttons: [{ label: "View Anime", url: "https://myanimelist.net/anime/52991" }],
+    type: 3,
+    instance: true,
+  },
+};
+
+describe("MAL-Sync", () => {
+  const startWithMalSync = (link: DesktopLink, reply: unknown = MALSYNC_REPLY) => {
+    const asked: number[] = [];
+    const bridge = fakeBridge();
+    startBackground("test", {
+      link,
+      bridge,
+      registry: arcade(),
+      pages: quietPages,
+      askMalSync: async (tabId) => {
+        asked.push(tabId);
+        return reply;
+      },
+    });
+    return { asked, bridge };
+  };
+  const ARCADE = { url: "https://arcade.example/chess", title: "Chess - Arcade" };
+
+  test("is never asked while it's off, which is how it starts", async () => {
+    installChromeMock(ARCADE);
+    const link = fakeLink();
+    const { asked } = startWithMalSync(link);
+    await tick();
+    expect(asked).toEqual([]);
+    expect(link.sent.at(-1)?.activity?.id).toBe("arcade");
+  });
+
+  test("when it's on, what it shows takes the shared tab over, and nothing of the page's address goes with it", async () => {
+    const chromeMock = installChromeMock(ARCADE);
+    const link = fakeLink();
+    const { asked } = startWithMalSync(link);
+    await tick();
+    await tick();
+    chromeMock.savePreferences({ malSync: true });
+    await tick();
+    await tick();
+
+    expect(asked).toEqual([1]);
+    const sent = link.sent.at(-1)?.activity;
+    expect(sent).toMatchObject({
+      id: "compat:malsync",
+      name: "MAL-Sync",
+      details: "Sousou no Frieren",
+      state: "Episode 3/28",
+      type: "watching",
+      discordClientId: "606504719212478504",
+    });
+    expect(
+      JSON.stringify(presenceWire(link.sent.at(-1) ?? { activity: null, updatedAt: 0 })),
+    ).not.toContain("arcade.example");
+
+    // Turned off again: the site's own Activity is back.
+    await tick();
+    chromeMock.savePreferences({ malSync: false });
+    await tick();
+    expect(link.sent.at(-1)?.activity?.id).toBe("arcade");
+  });
+
+  test("a page it has nothing for keeps the site's own Activity", async () => {
+    const chromeMock = installChromeMock(ARCADE);
+    const link = fakeLink();
+    const { asked } = startWithMalSync(link, {});
+    await tick();
+    chromeMock.savePreferences({ malSync: true });
+    await tick();
+    await tick();
+    expect(asked).toEqual([1]);
+    expect(link.sent.at(-1)?.activity?.id).toBe("arcade");
+  });
+
+  test("shows through Parousia Desktop, and the other app's link still steps aside for it", async () => {
+    const chromeMock = installChromeMock(ARCADE);
+    const link = fakeLink();
+    const { bridge } = startWithMalSync(link);
+    await tick();
+    chromeMock.savePreferences({ malSync: true });
+    link.setState({ status: "connected" } as ConnectionState);
+    await tick();
+    await tick();
+    expect(link.sent.at(-1)?.activity?.id).toBe("compat:malsync");
+    expect(bridge.yielding.at(-1)).toBe(true);
+  });
+
+  test("a private tab that's paused, and a browser page, are never asked about", async () => {
+    const chromeMock = installChromeMock({ ...ARCADE, incognito: true });
+    const link = fakeLink();
+    const { asked } = startWithMalSync(link);
+    await tick();
+    chromeMock.savePreferences({ malSync: true });
+    await tick();
+    await tick();
+    expect(asked).toEqual([]);
+    expect(link.sent.at(-1)?.activity).toBeNull();
+
+    chromeMock.update({ url: "about:blank" }, { title: "New Tab" });
+    await tick();
+    expect(asked).toEqual([]);
+  });
+
+  test("Settings > Privacy limits it like any Activity that reads what's playing", async () => {
+    const chromeMock = installChromeMock(ARCADE);
+    const link = fakeLink();
+    startWithMalSync(link);
+    await tick();
+    chromeMock.savePreferences({ malSync: true, pageData: { thumbnails: false } });
+    await tick();
+    await tick();
+    let sent = link.sent.at(-1)?.activity;
+    expect(sent?.details).toBe("Sousou no Frieren");
+    expect(sent?.assets?.largeImage).toBeUndefined();
+    expect(sent?.assets?.smallImage).toBe("play");
+
+    await tick();
+    chromeMock.savePreferences({ malSync: true, pageData: { media: false } });
+    await tick();
+    sent = link.sent.at(-1)?.activity;
+    expect(sent?.details).toBeUndefined();
+    expect(sent?.buttons).toBeUndefined();
+    expect(sent?.name).toBe("MAL-Sync");
+  });
+
+  test("without media details only its name is shared, never the series it put there", async () => {
+    const chromeMock = installChromeMock(ARCADE);
+    const link = fakeLink();
+    startWithMalSync(link, {
+      ...MALSYNC_REPLY,
+      presence: { ...MALSYNC_REPLY.presence, name: "Sousou no Frieren", details: undefined },
+    });
+    await tick();
+    chromeMock.savePreferences({ malSync: true, shareMediaDetails: false });
+    await tick();
+    await tick();
+    const sent = link.sent.at(-1)?.activity;
+    expect(sent?.name).toBe("MAL-Sync");
+    expect(sent?.state).toBeUndefined();
+    expect(sent?.buttons).toBeUndefined();
+    // The cover is the series: a picture that says what's being watched.
+    expect(sent?.assets?.largeImage).toBeUndefined();
+    expect(sent?.assets?.smallImage).toBe("play");
+  });
+});
+
 describe("backgroundKeepalive", () => {
   const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
   test("pings only while switched on, with one timer however often it's switched", async () => {
     let pings = 0;
-    const keepAlive = backgroundKeepalive(() => pings++, 5);
-    await wait(20);
+    // Windows timers tick about every 15 ms, so a 5 ms interval is no faster than 15.
+    const keepAlive = backgroundKeepalive(() => pings++, 25);
+    await wait(60);
     expect(pings).toBe(0);
 
     keepAlive(true);
     keepAlive(true);
-    await wait(28);
+    await wait(140);
     const whileOn = pings;
     expect(whileOn).toBeGreaterThanOrEqual(3);
     expect(whileOn).toBeLessThanOrEqual(6);
 
     keepAlive(false);
-    await wait(20);
+    await wait(60);
     expect(pings).toBe(whileOn);
   });
 

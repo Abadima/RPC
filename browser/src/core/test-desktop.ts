@@ -28,6 +28,8 @@ export const REPORT: DesktopReport = {
 
 export class FakeDesktop {
   protocolVersion = PROTOCOL_VERSION;
+  /** What `welcome` says Desktop's release is. */
+  version = "1.0.0";
   /** Answer `hello` with this reject instead of `welcome`. */
   rejectHello: RejectReason | null = null;
   /** Answer `set` with `not_permitted`. */
@@ -88,7 +90,11 @@ export class FakeServerConnection implements DesktopChannel {
           this.reply({ type: "reject", reason: this.desktop.rejectHello });
           this.end();
         } else {
-          this.reply({ type: "welcome", protocolVersion: this.desktop.protocolVersion });
+          this.reply({
+            type: "welcome",
+            protocolVersion: this.desktop.protocolVersion,
+            version: this.desktop.version,
+          });
         }
         return;
       case "ping":

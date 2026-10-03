@@ -1,4 +1,6 @@
-/** Just enough of an Activity to display; deliberately independent of `core/`. */
+import { t } from "../core/i18n";
+
+/** Just enough of an Activity to display; deliberately independent of `core/` data. */
 export interface PresenceActivity {
   name: string;
   details?: string;
@@ -51,8 +53,8 @@ function renderEmpty(root: HTMLElement, options: PresenceViewOptions): void {
   const wrapper = element("div", "presence-empty");
   wrapper.append(
     element("div", "presence-empty-visual"),
-    element("p", "presence-empty-title", "No activity detected"),
-    element("p", "presence-empty-subtitle", "Browse a supported site and it shows up here."),
+    element("p", "presence-empty-title", t("No activity detected")),
+    element("p", "presence-empty-subtitle", t("Browse a supported site and it shows up here.")),
   );
   wrapper.firstElementChild?.append(...iconFor(options, "empty"));
   root.append(wrapper);
@@ -64,7 +66,7 @@ function renderActivity(
   options: PresenceViewOptions,
 ): void {
   const card = element("article", "presence-card");
-  card.setAttribute("aria-label", `Sharing ${activity.name}`);
+  card.setAttribute("aria-label", t("Sharing {name}", { name: activity.name }));
 
   const top = element("div", "presence-top");
   const monogram = element("span", "presence-monogram", activity.name.trim().charAt(0));
@@ -72,7 +74,7 @@ function renderActivity(
   const source = element("div", "presence-source");
   source.append(
     element("p", "presence-name", activity.name),
-    element("p", "presence-kind", "Sharing now"),
+    element("p", "presence-kind", t("Sharing now")),
   );
   const live = element("span", "presence-live");
   live.setAttribute("aria-hidden", "true");
@@ -94,7 +96,9 @@ function renderActivity(
       time.textContent = formatElapsed(Date.now() - startedAt);
     };
     tick();
-    footer.append(...iconFor(options, "elapsed"), time, " elapsed");
+    // Where the clock goes in "2:03 elapsed" depends on the language.
+    const [before = "", after = ""] = t("{time} elapsed").split("{time}");
+    footer.append(...iconFor(options, "elapsed"), before, time, after);
     card.append(footer);
     clocks.set(root, setInterval(tick, 1000));
   }

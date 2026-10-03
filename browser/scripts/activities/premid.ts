@@ -1,14 +1,23 @@
 import { existsSync } from "node:fs";
 import { join, relative } from "node:path";
 import { PAGE_DATA_KINDS, type ActivitySetting, type SettingValue } from "../../src/core/activity";
+import { LANGUAGES, type Language } from "../../src/core/i18n";
 import {
   BRIDGE_KEY,
+  descriptionsPath,
   premidId,
   type ActivityManifest,
   type PageScript,
 } from "../../src/activities/manifest";
 import { activityId, type WebsiteFolder } from "./discover";
-import { CLIENT_ID, checkSetting, keywordsFrom, manifestFrom } from "./metadata";
+import {
+  CLIENT_ID,
+  LIMITS,
+  checkSetting,
+  hostOrigin,
+  keywordsFrom,
+  manifestFrom,
+} from "./metadata";
 
 /**
  * The adapter for PreMiD's Activities (github.com/PreMiD/Activities), read the
@@ -34,6 +43,8 @@ export interface PremidFound {
   dir: string;
   /** Its own English strings (`<service>.json`), by key, for `getStrings`. */
   strings: Record<string, string>;
+  /** Its description in each language Parousia's views have besides English, where PreMiD's metadata.json has one. */
+  descriptions: Partial<Record<Language, string>>;
 }
 
 type Json = Record<string, unknown>;
@@ -151,6 +162,40 @@ async function readJson(path: string): Promise<unknown> {
   }
 }
 
+/**
+ * The description's translations PreMiD's metadata.json carries, in the
+ * languages the extension's views are in. They're the only translated text in
+ * PreMiD's Activities repository: a service's own strings (`<service>.json`)
+ * are translated on PreMiD's Crowdin and served by its API, which Parousia
+ * never calls.
+ */
+export function readDescriptions(description: unknown): Partial<Record<Language, string>> {
+  const found: Partial<Record<Language, string>> = {};
+  if (!isObject(description)) return found;
+  for (const language of LANGUAGES) {
+    const text = description[language];
+    if (language !== "en" && isString(text) && text.trim()) {
+      found[language] = text.trim().slice(0, LIMITS.description);
+    }
+  }
+  return found;
+}
+
+/** `activities/descriptions/<language>.json` for each language some Activity has a description in. */
+export function descriptionFiles(activities: readonly PremidFound[]): Map<string, string> {
+  const byLanguage = new Map<Language, Record<string, string>>();
+  for (const { manifest, descriptions } of activities) {
+    for (const [language, text] of Object.entries(descriptions) as Array<[Language, string]>) {
+      const texts = byLanguage.get(language) ?? {};
+      texts[manifest.info.id] = text;
+      byLanguage.set(language, texts);
+    }
+  }
+  return new Map(
+    [...byLanguage].map(([language, texts]) => [descriptionsPath(language), JSON.stringify(texts)]),
+  );
+}
+
 /** English messages from a PreMiD strings file (`general.json`, `<service>.json`). */
 export async function readStrings(path: string): Promise<Record<string, string>> {
   const value = existsSync(path) ? await readJson(path) : null;
@@ -184,6 +229,46 @@ function testRegExp(source: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+/** A subdomain no real site has, to ask a regular expression whether it takes any. */
+const PROBE = "parousia-probe";
+const PROBE_PATHS = ["/", "/a", "/a/b"];
+
+/**
+ * The sites to ask access for, from what the Activity's `regExp` really
+ * matches. An Activity runs where its `regExp` matches, but `url` only names
+ * a site (`archlinux.org`), and a grant for that host alone doesn't cover
+ * `wiki.archlinux.org`, which the same `regExp` takes: the Activity matched
+ * there and was then unavailable for want of access. So for each `url` host,
+ * the regular expression is asked about a made-up subdomain (every
+ * subdomain: `*://*.host/*`, which includes the host), and about `www.`
+ * (which `url: "duolingo.com"` with a `(www|preview)[.]duolingo` regExp
+ * needs). It's asked with a few paths, since most regExps take any; one that
+ * only takes a particular path is asked nothing it can't answer, and keeps
+ * the host as named.
+ */
+export function originsFor(hosts: readonly string[], regExp: string): string[] {
+  const pattern = new RegExp(regExp);
+  const takes = (host: string): boolean =>
+    PROBE_PATHS.some((path) => pattern.test(`https://${host}${path}`));
+  const origins: string[] = [];
+  for (const host of hosts) {
+    // An address has no subdomains, and nothing to be asked about.
+    if (/^(\d{1,3}\.){3}\d{1,3}$|^localhost$/.test(host)) {
+      origins.push(hostOrigin(host));
+      continue;
+    }
+    if (takes(`${PROBE}.${host}`)) {
+      origins.push(`*://*.${host}/*`);
+      continue;
+    }
+    const own = takes(host);
+    const www = !host.startsWith("www.") && takes(`www.${host}`);
+    if (own || !www) origins.push(hostOrigin(host));
+    if (www) origins.push(hostOrigin(`www.${host}`));
+  }
+  return [...new Set(origins)];
 }
 
 /** One metadata.json and its folder, as a PreMiD Activity for the extension, or why it's left out. */
@@ -258,6 +343,7 @@ async function readActivity(
     settings,
     // Its code reads the page directly, so it may take any of them; each can be switched off.
     data: [...PAGE_DATA_KINDS],
+    origins: originsFor(hosts, pattern),
   });
 
   const script: PageScript = { file: "", clientIds };
@@ -268,8 +354,17 @@ async function readActivity(
     manifest: { info, match, script },
     dir: folder,
     strings: await readStrings(join(folder, `${service}.json`)),
+    descriptions: readDescriptions(description),
   };
 }
+
+/**
+ * Services whose scripts assign page text to `innerHTML`, which add-on
+ * reviews flag and which Parousia won't ship. Left out at build time, by the
+ * name in their metadata.json; a native replacement, where one is practical
+ * (it never builds markup from page text), lives in the activities repository.
+ */
+export const UNSAFE_MARKUP: ReadonlySet<string> = new Set(["VLC", "TLX Toki", "Weverse"]);
 
 /** Services PreMiD lists in its `dmca.json`, which stay out. */
 export async function readDmca(root: string): Promise<Set<string>> {
@@ -290,7 +385,8 @@ export async function adaptPremid(
   let dir = folder.dir;
   if (!existsSync(join(dir, "metadata.json"))) {
     const versions = [...new Bun.Glob("v*/metadata.json").scanSync({ cwd: dir })]
-      .map((file) => file.split("/")[0] ?? "")
+      // Bun's glob gives `v1\metadata.json` on Windows.
+      .map((file) => file.split(/[\\/]/)[0] ?? "")
       .filter((version) => /^v\d+$/.test(version))
       .sort();
     const version = versions.includes("v1") ? "v1" : versions[0];
@@ -301,6 +397,12 @@ export async function adaptPremid(
   const service = isObject(metadata) && isString(metadata.service) ? metadata.service : folder.name;
   if (!isObject(metadata)) return { service, reason: "metadata.json isn't valid JSON" };
   if (blocked.has(service)) return { service, reason: "it's on PreMiD's DMCA list" };
+  if (UNSAFE_MARKUP.has(service)) {
+    return {
+      service,
+      reason: "its script assigns page text to innerHTML, which Parousia won't ship",
+    };
+  }
   const result = await readActivity(dir, activityId(folder.name), metadata);
   return isString(result) ? { service, reason: result } : result;
 }
@@ -333,11 +435,11 @@ export function wrapScript(
   frame: boolean,
 ): string {
   const bind = frame ? "bindFrame" : "bind";
+  const given = Object.keys(strings).length > 0 ? `,${JSON.stringify(strings)}` : "";
   return [
-    `(()=>{const b=globalThis[${JSON.stringify(BRIDGE_KEY)}]?.${bind}(${JSON.stringify(id)},${JSON.stringify(strings)});if(!b)return;`,
-    "((Presence,iFrame,Slideshow,SlideshowSlide,MIN_SLIDE_TIME)=>{",
+    `globalThis.${BRIDGE_KEY}?.${bind}(${JSON.stringify(id)},(Presence,iFrame,Slideshow,SlideshowSlide,MIN_SLIDE_TIME)=>{`,
     code,
-    "})(b.Presence,b.iFrame,b.Slideshow,b.SlideshowSlide,b.MIN_SLIDE_TIME)})();",
+    `}${given});`,
     "",
   ].join("\n");
 }

@@ -2,6 +2,7 @@ import { faClock } from "@fortawesome/free-solid-svg-icons/faClock";
 import { faMoon } from "@fortawesome/free-solid-svg-icons/faMoon";
 import type { PresenceSnapshot, PresenceViewOptions } from "./presence-view";
 import type { ConnectionState } from "../core/desktop-connection";
+import { t } from "../core/i18n";
 import type { BridgeState, UiActivity } from "../core/ui-port";
 import { connectionBadge, connectionHelp, type ConnectionHelp } from "./connection-status";
 import { icon } from "./icons";
@@ -75,14 +76,15 @@ export function renderOffline(
   download.hidden = state.status === "not_allowed";
   download.href = DESKTOP_DOWNLOAD;
   label.textContent =
-    state.status === "incompatible" ? "Update Parousia Desktop" : "Get Parousia Desktop";
+    state.status === "incompatible" ? t("Update Parousia Desktop") : t("Get Parousia Desktop");
   retry.disabled = checking;
-  retry.textContent = checking ? "Checking…" : "Retry Connection";
+  retry.textContent = checking ? t("Checking…") : t("Retry Connection");
 }
 
 /** Under the not-found screen: Discord can still work without Desktop when Discord-RPC-Extension's app is running. */
 export function renderDiscordAside(aside: HTMLElement, discord: BridgeState): void {
   aside.hidden = discord.status !== "connected";
-  aside.textContent =
-    "Discord-RPC-Extension is running, so Discord can still show your activity without Parousia Desktop.";
+  aside.textContent = t(
+    "Discord-RPC-Extension is running, so Discord can still show your activity without Parousia Desktop.",
+  );
 }

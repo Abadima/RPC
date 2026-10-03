@@ -6,7 +6,7 @@ import type {
   SettingValue,
 } from "../core/activity";
 import { matchPatterns } from "../core/match-pattern";
-import type { PageMedia, RegisteredActivity, SettingValues } from "../core/registry";
+import type { PageImage, PageMedia, RegisteredActivity, SettingValues } from "../core/registry";
 
 /**
  * One Activity, from either source, as the build normalized it
@@ -50,6 +50,8 @@ export interface NativePage {
   readonly media?: PageMedia;
   /** With `thumbnails` granted: an image of what's shown, when the page has one. */
   readonly thumbnail?: string;
+  /** With `thumbnails` granted: the page's loaded `https` images (a few, in page order), for a cover or an avatar its address names. */
+  readonly images?: readonly PageImage[];
 }
 
 /** What a native Activity's `activity.ts` exports as its default. */
@@ -87,6 +89,7 @@ export function registered(manifest: ActivityManifest, module?: NativeModule): R
             granted: page.granted ?? [],
             ...(page.data?.media && { media: page.data.media }),
             ...(page.data?.thumbnail && { thumbnail: page.data.thumbnail }),
+            ...(page.data?.images && { images: page.data.images }),
           },
           settings,
         );
@@ -110,24 +113,47 @@ export function registered(manifest: ActivityManifest, module?: NativeModule): R
  */
 export const CATALOG_PATH = "activities/catalog.json";
 /**
- * Which file each Activity's manifest is in, by id (`premid/<name>`,
- * `native/<id>`), so the background reads only the PreMiD ones that are on,
- * and a page reads only the one it shows.
+ * Which Activities cover each site, by host name, for the popup to find the
+ * one for a tab: a line per host (`host`, then the ids, tab-separated). It's
+ * searched as text rather than parsed, since reading one host shouldn't cost
+ * an object for every site.
  */
-export const INDEX_PATH = "activities/index.json";
-/** Which Activities cover each site (their manifests' files), by host name, for the popup to find the one for a tab. */
-export const HOSTS_PATH = "activities/hosts.json";
+export const HOSTS_PATH = "activities/hosts.txt";
 /** Parousia's page-data collector, for native Activities that take page data. */
 export const COLLECTOR_PATH = "activities/collector.js";
 /** PreMiD's API in the page, injected before each PreMiD Activity's script. */
 export const PREMID_RUNTIME_PATH = "activities/premid/runtime.js";
-export const manifestPath = (file: string): string => `activities/${file}.json`;
-export const premidFile = (name: string): string => `premid/${name}`;
-export const nativeFile = (id: string): string => `native/${id}`;
+/** PreMiD Activities' descriptions in one language (`{ [id]: text }`), for the languages PreMiD's own metadata has them in. */
+export const descriptionsPath = (language: string): string =>
+  `activities/descriptions/${language}.json`;
+
+/**
+ * Manifests are packaged a file per first letter of the Activity's name
+ * (`activities/manifests/<letter>.json`, `{ [id]: manifest }`): few files
+ * instead of one for each of 1,400, and a manifest is found from its id
+ * alone, with no index to keep in memory.
+ */
+export function manifestShard(id: string): string {
+  const name = id.startsWith(PREMID_ID_PREFIX) ? id.slice(PREMID_ID_PREFIX.length) : id;
+  const first = name.normalize("NFKD").charAt(0).toLowerCase();
+  return /^[a-z0-9]$/.test(first) ? first : "_";
+}
+export const shardFile = (letter: string): string => `activities/manifests/${letter}.json`;
+export const shardPath = (id: string): string => shardFile(manifestShard(id));
 
 /** An Activity as the catalog lists it: everything but what only its own page needs. */
 export function catalogEntry(info: ActivityInfo): ActivityInfo {
   const { settings: _settings, data: _data, discordClientId: _discordClientId, ...entry } = info;
+  return entry;
+}
+
+/**
+ * An Activity as its manifest carries it: without the description and
+ * keywords the catalog already lists, which only the dashboard's search and
+ * cards use (it joins them back on from the catalog).
+ */
+export function manifestInfo(info: ActivityInfo): ActivityInfo {
+  const { description: _description, keywords: _keywords, ...entry } = info;
   return entry;
 }
 
@@ -143,7 +169,7 @@ export function scriptPaths(script: PageScript): { page: string[]; frame: string
  * content-script world (pages can't see it), for each wrapped PreMiD
  * Activity script to `bind` to.
  */
-export const BRIDGE_KEY = "__parousiaPreMiD";
+export const BRIDGE_KEY = "__pmd";
 
 /** Every PreMiD Activity's id is its service name under this prefix: `premid:YouTube`. */
 export const PREMID_ID_PREFIX = "premid:";
@@ -153,15 +179,6 @@ export interface Catalog {
   /** The revision of each source the build used (its `main` when fetched), for debugging, not a pin. */
   sources: Record<string, string>;
   activities: ActivityInfo[];
-}
-
-export interface CatalogIndex {
-  files: Record<string, string>;
-}
-
-export interface HostIndex {
-  /** Host name (`www.youtube.com`, or `example.com` for a pattern's every subdomain) to manifest files. */
-  hosts: Record<string, string[]>;
 }
 
 // Reading packaged files back: they're this build's own output, but the
@@ -191,27 +208,27 @@ export function parseCatalog(value: unknown): Catalog {
   return { sources, activities };
 }
 
-const FILE = /^(premid|native)\/[a-z0-9-]+$/;
-const isFile = (value: unknown): value is string => typeof value === "string" && FILE.test(value);
-
-export function parseIndex(value: unknown): CatalogIndex {
-  const files: Record<string, string> = {};
-  if (isObject(value) && isObject(value.files)) {
-    for (const [id, file] of Object.entries(value.files)) {
-      if (isFile(file)) files[id] = file;
-    }
-  }
-  return { files };
+/** The host index as a build writes it: `hosts` is host name (`www.youtube.com`, or `example.com` for a pattern's every subdomain) to the ids of the Activities for it. */
+export function formatHosts(hosts: ReadonlyMap<string, readonly string[]>): string {
+  return [...hosts]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([host, ids]) => [host, ...ids].join("\t"))
+    .join("\n");
 }
 
-export function parseHosts(value: unknown): HostIndex {
-  const hosts: Record<string, string[]> = {};
-  if (isObject(value) && isObject(value.hosts)) {
-    for (const [host, files] of Object.entries(value.hosts)) {
-      if (Array.isArray(files)) hosts[host] = files.filter(isFile);
+/** The ids of the Activities for `hostname`, from its own line and each domain above it, in that order. */
+export function hostIds(text: string, hostname: string): string[] {
+  const ids = new Set<string>();
+  const lines = `\n${text}\n`;
+  for (const key of hostKeys(hostname)) {
+    const at = lines.indexOf(`\n${key}\t`);
+    if (at < 0) continue;
+    const start = at + key.length + 2;
+    for (const id of lines.slice(start, lines.indexOf("\n", start)).split("\t")) {
+      if (id) ids.add(id);
     }
   }
-  return { hosts };
+  return [...ids];
 }
 
 /** The keys of a host index that can cover `hostname`: itself, then each parent domain. */
@@ -248,6 +265,11 @@ function parseScript(value: unknown): PageScript | null {
     script.fixed = fixed;
   }
   return script;
+}
+
+/** One Activity's manifest from its shard (`shardPath`), or `null`. */
+export function parseShard(value: unknown, id: string): ActivityManifest | null {
+  return isObject(value) ? parseManifest(value[id]) : null;
 }
 
 export function parseManifest(value: unknown): ActivityManifest | null {

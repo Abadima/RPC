@@ -102,6 +102,30 @@ describe("PreMiD page messages", () => {
     expect(parseToPage({ type: "page-result", nonce: -1, value: 1 })).toBeNull();
   });
 
+  test("page images are bounded: https only, a short list, short text", () => {
+    const parsed = parsePageData({
+      images: [
+        { src: "https://img.example/a.jpg", alt: "  A cover  " },
+        { src: "http://img.example/b.jpg" },
+        { src: `https://img.example/${"x".repeat(400)}.jpg` },
+        { src: "https://img.example/c.jpg", alt: "y".repeat(500) },
+        "https://img.example/d.jpg",
+        null,
+      ],
+    });
+    expect(parsed).toEqual({
+      images: [
+        { src: "https://img.example/a.jpg", alt: "A cover" },
+        { src: "https://img.example/c.jpg", alt: "y".repeat(64) },
+      ],
+    });
+    const many = Array.from({ length: 80 }, (_, index) => ({
+      src: `https://img.example/${index}`,
+    }));
+    expect(parsePageData({ images: many })?.images).toHaveLength(24);
+    expect(parsePageData({ images: "https://img.example/a.jpg" })).toEqual({});
+  });
+
   test("the collector's messages are bounded the same way", () => {
     expect(parseCollectorMessage({ type: "hello", activity: "tunes" })).toEqual({
       type: "hello",
@@ -118,6 +142,12 @@ describe("PreMiD page messages", () => {
       parsePageData({ media: { playing: true, start: 1_700_000_000_000, end: 1_700_000_200_000 } }),
     ).toEqual({
       media: { playing: true, start: 1_700_000_000_000, end: 1_700_000_200_000 },
+    });
+    expect(parsePageData({ media: { kind: "video", title: "x" } })).toEqual({
+      media: { kind: "video", title: "x" },
+    });
+    expect(parsePageData({ media: { kind: "iframe", title: "x" } })).toEqual({
+      media: { title: "x" },
     });
     expect(parseToCollector({ type: "collect", kinds: ["media", "cookies"] })).toEqual({
       type: "collect",

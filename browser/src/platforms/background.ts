@@ -1,6 +1,7 @@
 import { PAROUSIA_DISCORD_CLIENT_ID } from "../compat/discord-rpc-extension";
 import { DiscordRpcServerLink } from "../compat/discord-rpc-server";
-import type { Activity } from "../core/activity";
+import { MALSYNC_NAME, MalSyncSource } from "../compat/malsync";
+import { PAGE_DATA_KINDS, type Activity } from "../core/activity";
 import {
   loadActivityStates,
   settingValues,
@@ -44,6 +45,7 @@ import {
 } from "../core/ui-port";
 import { PageHost, chromePageBrowser, type PageBrowser } from "../activities/host";
 import type { ActivityManifest } from "../activities/manifest";
+import { limitPageData } from "../premid/presence-data";
 
 export interface Background {
   /** The Activity currently detected on the active tab, if any. */
@@ -52,7 +54,11 @@ export interface Background {
 }
 
 export function createDesktopConnection(): DesktopConnection {
-  return new DesktopConnection({ channel: webSocketChannel(), clientName: describeClient() });
+  return new DesktopConnection({
+    channel: webSocketChannel(),
+    clientName: describeClient(),
+    version: chrome.runtime.getManifest().version,
+  });
 }
 
 export const KEEPALIVE_MS = 20_000;
@@ -206,6 +212,8 @@ export interface BackgroundOptions {
   bridge?: DiscordBridge;
   /** How Activities reach pages; by default, the extension's own APIs. */
   pages?: PageBrowser;
+  /** Asks the MAL-Sync extension for a tab's presence; by default through the browser (see compat/malsync.ts). */
+  askMalSync?: (tabId: number) => Promise<unknown>;
 }
 
 /**
@@ -240,10 +248,23 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
       if (tabId === activeTabId) void refresh();
     },
   );
+  const malSync = new MalSyncSource({
+    ...(options.askMalSync && { ask: options.askMalSync }),
+    onChange: () => void refresh(),
+  });
   const runtime = new PresenceRuntime(registry, {
     usable: (info, url) => pages.usable(info, url),
     settings: (info) => settingValues(info, states),
     fallback: () => defaultActivityToShow(defaultActivity, defaultSince ?? Date.now()),
+    // What MAL-Sync shows is a page's own reading, so Settings > Privacy limits it like a PreMiD
+    // Activity's. Its cover is the series itself: without media details it isn't a picture to share.
+    external: () => {
+      const shown = malSync.current();
+      const allowed = preferences.shareMediaDetails
+        ? PAGE_DATA_KINDS.filter((kind) => preferences.pageData[kind])
+        : [];
+      return shown && limitPageData(shown, allowed, { name: MALSYNC_NAME });
+    },
   });
   const keepAlive = backgroundKeepalive();
 
@@ -326,6 +347,7 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
   async function refresh(): Promise<void> {
     if (activeTabId === null) {
       stopIdleTimer();
+      malSync.watch(null);
       controller.clear();
       return;
     }
@@ -333,7 +355,10 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
       const tabId = activeTabId;
       const tab = await chrome.tabs.get(tabId);
       if (tabId !== activeTabId) return;
-      if (!sharingWhileAway(tab)) return;
+      if (!sharingWhileAway(tab)) {
+        malSync.watch(null);
+        return;
+      }
       const share = (activity: Activity | null): Activity | null =>
         applyPreferences(
           activity,
@@ -343,16 +368,30 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
         );
       if (!tab.url) {
         // A page the extension can't see (a browser page): only the Default Activity, if one is set up.
+        malSync.watch(null);
         controller.update(null, share);
         return;
       }
       const url = new URL(tab.url);
+      // A private tab that's paused is never asked about, so MAL-Sync isn't woken for it either.
+      const asked =
+        /^https?:$/.test(url.protocol) && !(tab.incognito && preferences.incognito === "pause");
+      malSync.watch(asked ? { id: tabId, url } : null);
       // Site access, the page data it's granted, and what the page gave, for an Activity that reads pages.
       const page = await pages.page(tabId, url);
       if (tabId !== activeTabId) return;
-      controller.update({ url, title: tab.title ?? "", ...page }, share);
+      controller.update(
+        {
+          url,
+          title: tab.title ?? "",
+          ...(tab.favIconUrl && { favicon: tab.favIconUrl }),
+          ...page,
+        },
+        share,
+      );
     } catch {
       // Tab vanished between the event firing and this lookup running.
+      malSync.watch(null);
       controller.clear();
     }
   }
@@ -362,6 +401,7 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
     pages.setPageData(next.pageData);
     link.setPlatforms(enabledPlatforms(next));
     bridge.setEnabled(next.platforms.discord && next.discordRpcExtension);
+    malSync.setEnabled(next.malSync);
     void refresh();
   };
   watchPreferences(usePreferences);
@@ -400,16 +440,19 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
   // Chromium throws "This event does not support filters" for a filter
   // argument on tabs.onUpdated (unlike some other tabs events), so unrelated
   // updates (favicon, audible, pinned, ...) are discarded here instead of at
-  // the browser level. A title matters only on a page an Activity looks at:
-  // single-page sites often set it a moment after the URL. A finished load
+  // the browser level. A title (or favicon) matters only on a page an Activity
+  // looks at: single-page sites often set it a moment after the URL. A finished load
   // matters only while an Activity that reads pages is on: the new document
   // needs its script again.
   chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     const loaded = changeInfo.status === "complete" && pages.active;
     if (loaded) pages.loaded(tabId);
     if (tabId !== activeTabId) return;
+    // The favicon is the last image an Activity without one falls back on, and tabs report it after the page.
     const titleMatters =
-      changeInfo.title !== undefined && tab.url !== undefined && runtime.matches(new URL(tab.url));
+      (changeInfo.title !== undefined || changeInfo.favIconUrl !== undefined) &&
+      tab.url !== undefined &&
+      runtime.matches(new URL(tab.url));
     // Sound starting or stopping decides whether a tab is shared while the browser is out of focus.
     if (
       changeInfo.url !== undefined ||
@@ -425,6 +468,7 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
     pages.forget(tabId);
     if (tabId === activeTabId) {
       activeTabId = null;
+      malSync.watch(null);
       controller.clear();
     }
   });

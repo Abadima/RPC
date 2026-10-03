@@ -4,20 +4,25 @@ import {
   CATALOG_PATH,
   COLLECTOR_PATH,
   HOSTS_PATH,
-  INDEX_PATH,
   PREMID_RUNTIME_PATH,
   catalogEntry,
-  manifestPath,
-  nativeFile,
-  premidFile,
+  formatHosts,
+  manifestInfo,
+  manifestShard,
+  shardFile,
+  type ActivityManifest,
   type Catalog,
-  type CatalogIndex,
-  type HostIndex,
 } from "../../src/activities/manifest";
 import type { NativeFound } from "./native";
 import { discover, linkVariants } from "./pipeline";
 import { activitiesPlugin } from "./plugin";
-import { compilePremid, readStrings, type Exclusion, type PremidFound } from "./premid";
+import {
+  compilePremid,
+  descriptionFiles,
+  readStrings,
+  type Exclusion,
+  type PremidFound,
+} from "./premid";
 import { BROWSER_DIR, refreshSources, resolveSources } from "./sources";
 
 export interface ActivitiesBuild {
@@ -94,6 +99,7 @@ export async function buildActivities(): Promise<ActivitiesBuild> {
     premid = compiled.activities;
     excluded.push(...discovery.excluded, ...compiled.excluded);
     for (const [name, script] of compiled.scripts) files.set(`activities/premid/${name}`, script);
+    for (const [path, texts] of descriptionFiles(premid)) files.set(path, texts);
     const general = await readStrings(join(source.dir, "websites", "general.json"));
     files.set(
       PREMID_RUNTIME_PATH,
@@ -120,30 +126,29 @@ export async function buildActivities(): Promise<ActivitiesBuild> {
     summary.push(`${shared} ${shared === 1 ? "website is" : "websites are"} in both sources`);
   }
 
-  // One catalog, one index, one host index: native Activities first (they
-  // win where both cover a site, and are the default choice), then PreMiD's.
+  // One catalog, one host index, and the manifests in shards (see
+  // `manifestShard`): native Activities first (they win where both cover a
+  // site, and are the default choice), then PreMiD's.
   const manifests = [
-    ...native.map((entry) => ({
-      manifest: entry.manifest,
-      file: nativeFile(entry.manifest.info.id),
-    })),
-    ...premid.map((entry) => ({
-      manifest: entry.manifest,
-      file: premidFile(entry.manifest.script.file),
-    })),
+    ...native.map((entry) => entry.manifest),
+    ...premid.map((entry) => entry.manifest),
   ];
-  const index: CatalogIndex = { files: {} };
-  const hosts: HostIndex = { hosts: {} };
-  for (const { manifest, file } of manifests) {
+  const hosts = new Map<string, string[]>();
+  const shards = new Map<string, Record<string, ActivityManifest>>();
+  for (const manifest of manifests) {
     const { info } = manifest;
+    if (/[\t\n]/.test(info.id)) throw new Error(`${info.id}: an id can't hold a tab or a newline`);
     catalog.activities.push(catalogEntry(info));
-    index.files[info.id] = file;
-    files.set(manifestPath(file), JSON.stringify(manifest));
-    for (const host of info.hosts) hosts.hosts[host] = [...(hosts.hosts[host] ?? []), file];
+    const shard = shards.get(manifestShard(info.id)) ?? {};
+    shard[info.id] = { ...manifest, info: manifestInfo(info) };
+    shards.set(manifestShard(info.id), shard);
+    for (const host of info.hosts) hosts.set(host, [...(hosts.get(host) ?? []), info.id]);
+  }
+  for (const [letter, shard] of shards) {
+    files.set(shardFile(letter), JSON.stringify(shard));
   }
   files.set(CATALOG_PATH, JSON.stringify(catalog));
-  files.set(INDEX_PATH, JSON.stringify(index));
-  files.set(HOSTS_PATH, JSON.stringify(hosts));
+  files.set(HOSTS_PATH, formatHosts(hosts));
   files.set(COLLECTOR_PATH, await bundleScript("activities/collector-entry.ts"));
 
   return {

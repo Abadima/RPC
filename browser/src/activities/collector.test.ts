@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { collect, unchanged } from "./collector";
+import { collect, loadedImages, unchanged } from "./collector";
 
 /** Enough of a document: its media elements, and an og:image. */
 function page(
@@ -41,6 +41,20 @@ describe("the page-data collector", () => {
     expect(data).toEqual({
       media: { title: "Song", artist: "Artist", playing: true, start: 1_699_999_958_000 },
     });
+  });
+
+  test("says whether the element it read is a video or an audio", () => {
+    const element = (localName: string) => ({
+      localName,
+      paused: false,
+      currentTime: 1,
+      duration: 10,
+    });
+    const kind = (localName: string) =>
+      collect(["media"], page([element(localName) as never]), {}, 0).media?.kind;
+    expect(kind("video")).toBe("video");
+    expect(kind("audio")).toBe("audio");
+    expect(kind("div")).toBeUndefined();
   });
 
   test("gives a playing item's clock as timestamps, rounded to the second", () => {
@@ -119,6 +133,50 @@ describe("the page-data collector", () => {
       thumbnail: "https://site.example/og.png",
     });
     expect(collect(["thumbnails"], page([], "javascript:alert(1)"), {})).toEqual({});
+  });
+
+  test("lists the page's loaded https images, in page order, with their alt text", () => {
+    const img = (src: string, alt: string, side = 230, complete = true) => ({
+      currentSrc: src,
+      src,
+      alt,
+      complete,
+      naturalWidth: side,
+      naturalHeight: side,
+    });
+    const doc = {
+      querySelectorAll: () => [
+        img("https://site.example/logo.png", "", 20), // an icon
+        img("https://site.example/cover-large.jpg", "  Show cover  "),
+        img("https://site.example/cover-large.jpg", "again"), // repeated
+        img("http://site.example/insecure.jpg", "no"),
+        img("https://site.example/loading.jpg", "not yet", 230, false),
+        img("https://site.example/avatar.png", "Abadima", 100),
+        { src: "", currentSrc: "", alt: "", complete: true, naturalWidth: 200, naturalHeight: 200 },
+        img(`https://site.example/${"x".repeat(400)}.jpg`, "too long"),
+      ],
+    } as unknown as Pick<Document, "querySelectorAll">;
+    expect(loadedImages(doc)).toEqual([
+      { src: "https://site.example/cover-large.jpg", alt: "Show cover" },
+      { src: "https://site.example/avatar.png", alt: "Abadima" },
+    ]);
+    expect(collect(["thumbnails"], { ...doc, querySelector: () => null }, {}).images?.length).toBe(
+      2,
+    );
+    expect(collect(["media"], { ...doc, querySelector: () => null }, {}).images).toBeUndefined();
+  });
+
+  test("keeps at most a message's worth of images", () => {
+    const many = Array.from({ length: 100 }, (_, index) => ({
+      currentSrc: `https://site.example/${index}.jpg`,
+      src: "",
+      alt: "",
+      complete: true,
+      naturalWidth: 100,
+      naturalHeight: 100,
+    }));
+    const doc = { querySelectorAll: () => many } as unknown as Pick<Document, "querySelectorAll">;
+    expect(loadedImages(doc)).toHaveLength(24);
   });
 
   test("reads nothing it isn't allowed", () => {

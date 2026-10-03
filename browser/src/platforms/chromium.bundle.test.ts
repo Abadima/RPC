@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { fileURLToPath } from "node:url";
 import { activitiesPlugin } from "../../scripts/activities/plugin";
 
 /**
@@ -11,7 +12,7 @@ import { activitiesPlugin } from "../../scripts/activities/plugin";
 describe("chromium bundle", () => {
   test("runs once bundled, stays idle, then tries Desktop's WebSocket when a UI opens", async () => {
     const result = await Bun.build({
-      entrypoints: [new URL("./chromium.ts", import.meta.url).pathname],
+      entrypoints: [fileURLToPath(new URL("./chromium.ts", import.meta.url))],
       target: "browser",
       format: "esm",
       minify: true,
@@ -40,6 +41,7 @@ describe("chromium bundle", () => {
         id: "self",
         lastError: undefined,
         getURL: (path: string) => `chrome-extension://self/${path}`,
+        getManifest: () => ({ version: "1.0.0" }),
         onConnect: {
           addListener: (listener: (port: unknown) => void) => connectListeners.push(listener),
         },

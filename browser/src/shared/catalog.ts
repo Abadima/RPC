@@ -3,6 +3,9 @@ import type { ActivityInfo } from "../core/activity";
 /** Activities per page: enough to scan, few enough to render instantly at any catalog size. */
 export const PAGE_SIZE = 24;
 
+/** One collator for every comparison: `localeCompare` with a locale builds a new one each time, about 30 times slower over a catalog. */
+const collator = new Intl.Collator("en", { numeric: true });
+
 const fold = (text: string): string =>
   text.normalize("NFKD").replaceAll(/\p{M}/gu, "").toLowerCase();
 
@@ -27,7 +30,7 @@ export function indexActivities(activities: readonly ActivityInfo[]): IndexedAct
         ].join(" "),
       ),
     }))
-    .sort((a, b) => a.info.name.localeCompare(b.info.name, "en", { numeric: true }));
+    .sort((a, b) => collator.compare(a.info.name, b.info.name));
 }
 
 /** Every word of `query` has to appear somewhere in the name, description, sites, or keywords. */

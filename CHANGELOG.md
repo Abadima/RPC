@@ -1,37 +1,106 @@
 # VERSION 1
 
+## [V1.0.1](https://github.com/Abadima/RPC/releases/tag/v1.0.1) - V1 FIRST STABLE RELEASE
+
+Parousia Desktop **1.0.1**, and the browser extension and userscript **1.1.0**. This is the first stable release; it carries everything since the first public beta.
+
+### ✨ New Features
+
+- **MAL-Sync Support:** Enable under `Settings > Platforms`. Automatically detects recognized anime/manga tabs, requesting tab presence to display title, episode, cover, and progress in Discord via Parousia Desktop.
+
+- **Multilingual UI:** Dashboard and popup now support English, German, French, Japanese, Romanian, Russian, Swedish, and Simplified Chinese (`Settings > General`). Set to **Automatic** by default to follow your browser.
+
+- **PreMiD Translated Descriptions:** Activity descriptions now display in your chosen language if PreMiD provides a localized listing.
+
+- **Expanded Activity Info:** PreMiD and native activities now send activity types (_Listening to, Watching, Competing in_), status lines, party sizes ("2 of 5"), and image links to Discord.
+
+- **Version Update Notices:** Extension and Desktop apps with minor/patch version mismatches will continue working together, but will display an update notice with a "Not now" option.
+
+### ⚡ Performance & Usability Improvements
+
+- **Smart Presence Throttling:** Rapid changes (e.g., scrubbing through videos) are rate-limited to update at most once every 2 seconds. Activity switching and clearing still happen instantly.
+
+- **Improved Image Fallbacks:** When a site lacks a custom image, Parousia uses the site logo or tab favicon before defaulting to the Parousia logo. An image that isn't a real `https` address (such as a bare `https://`) counts as no image, so the fallback applies to it too.
+
+- **YouTube Thumbnail Control:** Added a simplified "Show video thumbnail" toggle. When disabled, the YouTube logo is used instead.
+
+- **Extended Site Matching:** PreMiD activities now cover subdomains automatically (e.g., Arch Linux activity now covers `wiki.archlinux.org` and `bbs.archlinux.org`).
+
+- **Expanded Native Support:** Native activity support added for **Emby, HBO Max, iFixit, Netflix, U-NEXT, and YouTube**. Emby covers are hidden locally to protect privacy.
+
+- **Dashboard Optimization:** Faster search indexing and dynamic UI adjustments on the dashboard.
+
+### 🛡️ Security & Desktop Improvements
+
+- **Linux Native Security:** Hardened Discord socket and D-Bus ownership checks against cross-user hijacking, added atomic single-instance locking, and hardened port ownership handling.
+
+- **Output Sanitization:** Terminal control characters and raw markup are stripped from Desktop output, tray tooltips, and notifications.
+
+- **WebSocket Hardening:** Desktop now validates the WebSocket upgrade itself before handing the connection to the WebSocket implementation, while rejecting malformed or ambiguous requests.
+
+- **Desktop Optimization:** Reduced the Linux release binary by approximately 13%, reduced runtime memory usage, and improved presence message parsing performance by approximately 28%.
+
+- **Browser Optimization:** Reduced browser bundle sizes and popup/dashboard memory usage through smaller wrappers, optimized assets, and reduced duplicated runtime data.
+
+- **Windows First-Class Support:**
+  - Fully functional CLI tools (`status`, `set`, `allow`, `disallow`, `debug`) via secure named pipes.
+  - Instant detection of Discord starting or closing.
+  - Added "Start at login" toggle in Tray Settings.
+  - Multi-user safety checks prevent unauthorized connections and conflicting local instances.
+
+### ⚠️ Changes & Deprecations
+
+- **Firefox Add-ons:** Parousia is now on [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/parousia/). Desktop still asks you to allow a Firefox install once, since Firefox gives every install its own identity. The Chrome Web Store listing is in review; until it is up, the Chromium extension loads from `parousia-chromium.zip`.
+
+- **Separate Versions:** Parousia Desktop and the extension now have their own version numbers (Desktop **1.0.1**, extension and userscript **1.1.0**). A release is tagged with Desktop's, and the extension's manifests, `package.json`, and the userscript all carry the extension's.
+
+- **Cross-Version Compatibility:** Extension and Desktop remain connected across different minor/patch/beta versions; only major version differences force a disconnection.
+
+- **Removed Activities:** _VLC_, _TLX Toki_, and _Weverse_ PreMiD activities were removed due to extension safety compliance (`innerHTML` restrictions).
+
 ## [V1.0.0-beta.1](https://github.com/Abadima/RPC/releases/tag/v1.0.0-beta.1) - V1 FIRST PUBLIC BETA
 
-### ✅ Additions
+### ✨ New Features
 
-- **Parousia Desktop**, a small native app for Windows (x86_64, ARM64) and Linux (x86_64, ARM64). It shows what you're doing in the browser on Discord through Discord's local RPC, with no async runtime, no output until you turn debug logging on, and nothing running while there's nothing to show. The Linux builds are static (musl); the Windows builds need only Windows' own DLLs.
-- **Browser extensions** for Chromium (Chrome, Edge, and other Chromium browsers) and Firefox, plus a **userscript** for Violentmonkey, Tampermonkey, and ScriptCat. All of them send your current Activity to Parousia Desktop over one loopback WebSocket (`127.0.0.1:57179`), only while something needs it.
-- **Activities**, one per website, each deciding what to show for the page you have open. Native Activities come from [parousia-project/activities](https://github.com/parousia-project/activities), starting with Jena Hub. PreMiD's Activities (about 1,400) run unchanged on Parousia's own implementation of PreMiD's `Presence` and `iFrame` API, each as its own Discord Application. A website that both sources cover is listed once, and the native one runs until you pick PreMiD's.
-- **Site access you control.** An Activity that reads pages is off until you turn it on, which asks your browser for its sites in the same click. "Access your data for all websites" is off by default and only requested by its own switch. What Activities may read from pages (what's playing, thumbnails, creator icons) is one choice in Settings > Privacy.
-- **Default Activity**, a presence you write yourself, shared wherever no Activity is detected.
-- **Dashboard and popup** with paged, searchable Activities (enabled first, filters, enable or disable all), a page per Activity, three themes (Atelier, Botanique, Monolith) checked against WCAG 2.2 AA, and a layout that works from 360 to 2560 pixels wide.
-- **Discord-RPC-Extension support**: its app is used directly while Parousia Desktop isn't connected.
-- **Recognized builds only.** Desktop accepts connections only from Parousia's own extension builds (exact `chrome-extension://` and `moz-extension://` origins) and lists anything else for you to allow or refuse. Userscripts are off until you allow them.
-- **Release builds** with `SHA256SUMS` and a build provenance attestation for every file, from the tag workflow (`v*`), plus a pre-release of `main` (`dev-<commit>`) on each push that changes what ships.
+- **Parousia Desktop Client:** Lightweight, native application for Windows (x86_64, ARM64) and Linux (x86_64, ARM64) that connects browser activity directly to Discord's local RPC.
 
-### ⭐ Improvements
+- **Browser Extension & Userscript Support:** Available for Chromium browsers, Firefox, and userscript managers (Violentmonkey, Tampermonkey, ScriptCat) via local WebSocket connections (`127.0.0.1:57179`).
 
-- The extension asks for `tabs` and `storage` only. Everything else (`scripting` and site access) is optional and asked for when you turn an Activity on.
-- A page's address never leaves your browser: Parousia Desktop receives the name, details, state, images, buttons, and timestamps an Activity produced, not the URL.
-- The extension only connects while an Activity is being reported or the popup or dashboard is open, and lets go 30 seconds later.
-- Parousia Desktop idles at about 3 MB with no wakeups, and its release binary is about 1 MB.
-- Activity sources follow each repository's `main` branch at build time, record the revision they used in the build, and keep the last good copy when a fetch fails.
-- PreMiD Activities no longer call PreMiD's image service: Parousia answers those requests inside the extension, so nothing is sent to PreMiD.
-- Native Activities for Claude, Google Play, the Los Angeles Times, The New York Times, and YouTube Music. Claude's chat titles and news headlines stay off your profile unless you turn them on.
-- What's playing comes from the page's Media Session (title, artist, album, artwork, and whether it's playing) through one shared reader, for any native Activity that asks for it. It runs only in a tab where one does, and a song playing through sends nothing until it's paused or seeked. YouTube Music uses it first, and falls back to the address and tab title where a page sets no session. PreMiD's YouTube Music still works, but reads the player bar's markup, which YouTube changes.
-- A PreMiD Activity that stops updating while its page is shown no longer leaves its last status up: after 30 seconds (6 after the page's address changes) it's dropped, so "Browsing home" doesn't sit under a song that's playing.
-- An Activity you turn off and on again, or whose site you take back and allow again, works in tabs that were already open instead of staying dead until a reload.
-- Away from the browser, presence keeps following the active tab, and sound playing in it keeps it shared past the Idle Timeout. Looking at Discord or opening the popup no longer clears your music.
-- Desktop's release includes `parousia-desktop-notices.txt`, the licenses of the crates inside it.
+- **Comprehensive Activity Library:** Supports both native activities and over 1,400 PreMiD activities running natively without requiring third-party servers.
 
-### 🔀 Changes
+- **Granular Privacy & Site Controls:**
+  - Site reading permissions are opt-in per site with optional global access.
+  - Specific page metadata toggles under `Settings > Privacy`.
+  - Page URLs are processed locally and are never sent to Parousia servers.
 
-- Parousia replaces the Node.js Discord RPC bot this repository used to hold. That bot's last state is on the `v1.0` branch.
-- The project is licensed under the Apache License 2.0 (it was MIT).
-- Safari is not supported.
-- Stores: the Chrome Web Store and AMO. There is no Edge Add-ons listing.
+- **Customizable Default Activity:** Set a custom presence to display whenever no specific activity is detected.
+
+- **Dashboard & Popup Management:** Searchable activity hub with theme choices (Atelier, Botanique, Monolith) meeting WCAG 2.2 AA accessibility standards.
+
+- **Discord-RPC-Extension Integration:** Works directly with Discord-RPC-Extension when Parousia Desktop is offline.
+
+- **Strict Extension Security:** Desktop restricts WebSocket connections exclusively to recognized Parousia builds and requires manual approval for userscripts or external sources.
+
+### ⚡ Performance & Usability Improvements
+
+- **Resource Efficient:** Parousia Desktop idles at approximately 3 MB RAM, and extensions automatically disconnect WebSocket sessions after 30 seconds of inactivity.
+
+- **Expanded Native Support:** Dedicated native presence integration for **Claude, Google Play, LA Times, NY Times, and YouTube Music**, with optional chat/article title hiding for privacy.
+
+- **Universal Media Session Reader:** Automatically reads playback details (track, artist, album, artwork) from browser Media Sessions for native activities like YouTube Music.
+
+- **Automatic Stale Activity Cleanup:** Drops inactive PreMiD activities automatically after 30 seconds (or 6 seconds post-navigation) to prevent frozen statuses.
+
+- **Dynamic Permission Updates:** Toggling activities or site permissions updates open tabs immediately without requiring a page reload.
+
+- **Background Playback Preservation:** Keeps active presences alive during background playback or media streaming past idle timeouts without being cleared by popup interactions.
+
+- **Local PreMiD Assets:** PreMiD image requests are handled locally by the extension rather than routing through PreMiD's image servers.
+
+### ⚠️ Changes & Deprecations
+
+- **Architecture Overhaul:** Replaces the legacy Node.js Discord RPC bot (archived on the `v1.0` branch).
+
+- **License Change:** Project re-licensed under the **Apache License 2.0** (formerly MIT).
+
+- **Browser & Store Availability:** Supported on Chrome Web Store and AMO (Firefox). **Safari and Edge Add-ons Store are not supported.**

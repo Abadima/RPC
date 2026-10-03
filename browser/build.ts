@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { buildActivities } from "./scripts/activities/build";
 import { loadDevKey } from "./scripts/dev-key";
+import { iconsPlugin } from "./scripts/icons";
+import { packLocale } from "./scripts/locales";
 import { userscriptHeader, type HeaderSource } from "./scripts/userscript-header";
 import { writeZip } from "./scripts/zip";
 
@@ -38,7 +40,10 @@ async function writeManifest(target: string, targetDir: string, dev: boolean): P
 /** `PAROUSIA_BUILD_DIR` builds somewhere else, for checks that need a build of their own. */
 const outDir = process.env.PAROUSIA_BUILD_DIR ?? "dist";
 const extensionTargets = ["chromium", "firefox"] as const;
-const iconSizes = [16, 32, 48, 128] as const;
+/** The one logo, shared with the repository's brand assets. */
+const logo = join("..", "assets", "brand", "parousia-rounded.svg");
+/** Chromium shows only raster manifest icons (an SVG or WebP one falls back to the puzzle piece); `icons/` holds the PNGs. */
+const chromiumIconSizes = [16, 32, 48, 128] as const;
 const popupFonts = ["poppins-400.woff2", "poppins-600.woff2", "OFL.txt"] as const;
 
 /** Resolves `parousia:activities` (the native Activities); set once per build. */
@@ -47,7 +52,11 @@ let plugins: Bun.BunPlugin[] = [];
 async function bundle(
   entrypoint: string,
   targetDir: string,
-  { format = "esm", naming }: { format?: "esm" | "iife"; naming?: string } = {},
+  {
+    format = "esm",
+    naming,
+    define,
+  }: { format?: "esm" | "iife"; naming?: string; define?: Record<string, string> } = {},
 ): Promise<void> {
   const result = await Bun.build({
     entrypoints: [entrypoint],
@@ -55,6 +64,7 @@ async function bundle(
     target: "browser",
     format,
     ...(naming && { naming }),
+    ...(define && { define }),
     minify: true,
     plugins,
   });
@@ -114,25 +124,42 @@ async function writeFullscreen(targetDir: string): Promise<void> {
   await writeCss(join("src", "fullscreen", "fullscreen.css"), targetDir);
 }
 
+/** The popup and dashboard's translations (src/core/i18n.ts): one file per language, fetched when it's the chosen one. */
+async function writeLocales(targetDir: string): Promise<void> {
+  const localesDir = join(targetDir, "locales");
+  await mkdir(localesDir, { recursive: true });
+  for await (const file of new Bun.Glob("*.json").scan({ cwd: join("src", "locales") })) {
+    const source = await Bun.file(join("src", "locales", file)).text();
+    await Bun.write(join(localesDir, file), packLocale(source));
+  }
+}
+
 /** The project's license and what else an extension carries, inside the package itself. */
 async function writeLegal(targetDir: string): Promise<void> {
   await copyFile(join("..", "LICENSE"), join(targetDir, "LICENSE"));
   await copyFile("THIRD-PARTY-NOTICES.txt", join(targetDir, "THIRD-PARTY-NOTICES.txt"));
 }
 
-async function writeIcons(targetDir: string): Promise<void> {
+async function writeIcons(
+  target: (typeof extensionTargets)[number],
+  targetDir: string,
+): Promise<void> {
   const iconsDir = join(targetDir, "icons");
   await mkdir(iconsDir, { recursive: true });
-  for (const size of iconSizes) {
+  // The popup, the dashboard, and Firefox's manifest use the vector logo.
+  await copyFile(logo, join(iconsDir, "parousia.svg"));
+  if (target !== "chromium") return;
+  for (const size of chromiumIconSizes) {
     const name = `icon-${size}.png`;
     await copyFile(join("icons", name), join(iconsDir, name));
   }
 }
 
 async function writeUserscript(targetDir: string): Promise<void> {
-  await bundle(join("src", "userscript", "index.ts"), targetDir);
-
   const manifest = (await Bun.file(join("manifests", "chromium.json")).json()) as ExtensionManifest;
+  await bundle(join("src", "userscript", "index.ts"), targetDir, {
+    define: { USERSCRIPT_VERSION: JSON.stringify(manifest.version) },
+  });
   const header = userscriptHeader(manifest);
 
   const bundlePath = join(targetDir, "index.js");
@@ -149,18 +176,19 @@ async function build(dev: boolean): Promise<void> {
   // Native Activities are bundled in; PreMiD's are packaged files (see scripts/activities/).
   const activities = await buildActivities();
   for (const line of activities.summary) console.log(`[build] ${line}`);
-  plugins = [activities.plugin];
+  plugins = [activities.plugin, iconsPlugin];
 
   for (const target of extensionTargets) {
     const targetDir = join(outDir, target);
     await mkdir(targetDir, { recursive: true });
     await bundle(join("src", "platforms", `${target}.ts`), targetDir);
-    await writeIcons(targetDir);
+    await writeIcons(target, targetDir);
     await writeLegal(targetDir);
     await writeFonts(targetDir);
     await writeTheme(targetDir);
     await writePopup(targetDir);
     await writeFullscreen(targetDir);
+    await writeLocales(targetDir);
     await activities.writeTo(targetDir);
     await writeManifest(target, targetDir, dev);
 

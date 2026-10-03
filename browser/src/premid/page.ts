@@ -292,8 +292,9 @@ function execSpec(channel: Channel, answers: Answers, spec: unknown): Promise<un
 
 const TEXT_FIELDS = ["name", "details", "state", "largeImageText", "smallImageText"] as const;
 const IMAGE_FIELDS = ["largeImageKey", "smallImageKey"] as const;
-const LINK_FIELDS = ["detailsUrl", "stateUrl"] as const;
+const LINK_FIELDS = ["detailsUrl", "stateUrl", "largeImageUrl", "smallImageUrl"] as const;
 const TIME_FIELDS = ["startTimestamp", "endTimestamp"] as const;
+const NUMBER_FIELDS = ["type", "statusDisplayType"] as const;
 
 function textOf(value: unknown): string | undefined {
   if (typeof value === "string") return value;
@@ -354,6 +355,18 @@ export function serializePresenceData(data: Data): PresenceDataWire {
   for (const field of TIME_FIELDS) {
     const value = timeOf(data[field]);
     if (value !== undefined) wire[field] = value;
+  }
+  for (const field of NUMBER_FIELDS) {
+    const value = data[field];
+    if (typeof value === "number" && Number.isFinite(value)) wire[field] = value;
+  }
+  const party = data.party;
+  if (
+    isObject(party) &&
+    typeof party.partySize === "number" &&
+    typeof party.maxPartySize === "number"
+  ) {
+    wire.party = { partySize: party.partySize, maxPartySize: party.maxPartySize };
   }
   if (Array.isArray(data.buttons)) {
     const buttons: Array<{ label: string; url: string }> = [];
@@ -513,6 +526,8 @@ export function createApi(
     /** What the background has, as JSON; `null` once it has to be sent again. */
     private sent: string | null = null;
     private settings: Record<string, SettingValue> | null = null;
+    /** Which settings it has hidden (`true`) or shown, as the background was last told. */
+    private readonly hiding = new Map<string, boolean>();
     private readonly settingsWaiting: Array<() => void> = [];
     /** When, and on which page address, the Activity last called `setActivity` or `clearActivity`. */
     private updatedAt = Date.now();
@@ -526,6 +541,7 @@ export function createApi(
         (message) => this.receive(message),
         () => {
           this.sent = null;
+          this.hiding.clear();
         },
       );
       channels.push(this.channel);
@@ -653,10 +669,14 @@ export function createApi(
     }
 
     private toggleSettings(ids: unknown, hidden: boolean): void {
+      // Some Activities do this on every update, once a second: only a change is news.
       const list = (Array.isArray(ids) ? ids : [ids]).filter(
-        (id): id is string => typeof id === "string",
+        (id): id is string => typeof id === "string" && this.hiding.get(id) !== hidden,
       );
-      if (list.length > 0) this.channel.post({ type: "hide", ids: list.slice(0, 64), hidden });
+      if (list.length === 0) return;
+      const changed = list.slice(0, 64);
+      for (const id of changed) this.hiding.set(id, hidden);
+      this.channel.post({ type: "hide", ids: changed, hidden });
     }
 
     async getStrings(keys: unknown): Promise<Record<string, string>> {
@@ -772,11 +792,39 @@ export function createApi(
   return { Presence, iFrame, Slideshow, SlideshowSlide, MIN_SLIDE_TIME };
 }
 
+/**
+ * The API as the arguments a wrapped script is called with, in the order of
+ * its parameters (`wrapScript`): the wrapper only names them, since it's
+ * repeated in every one of the 1,500 packaged scripts.
+ */
+export type PremidArgs = readonly [
+  PremidApi["Presence"],
+  PremidApi["iFrame"],
+  PremidApi["Slideshow"],
+  PremidApi["SlideshowSlide"],
+  PremidApi["MIN_SLIDE_TIME"],
+];
+
+const argsOf = (api: PremidApi): PremidArgs => [
+  api.Presence,
+  api.iFrame,
+  api.Slideshow,
+  api.SlideshowSlide,
+  api.MIN_SLIDE_TIME,
+];
+
+/** An Activity's script, wrapped: called with the API it's bound to. */
+export type PremidScript = (...api: PremidArgs) => void;
+
 export interface PremidBridge {
-  /** The API for an Activity's page script, or `null` if it already runs in this document. */
-  bind(activity: string, strings: Readonly<Record<string, string>>): PremidApi | null;
+  /** Runs an Activity's page script with its API, unless it already runs in this document. `strings` may be left out when there are none. */
+  bind(activity: string, script: PremidScript, strings?: Readonly<Record<string, string>>): void;
   /** The same for its iframe script, only ever inside an iframe. */
-  bindFrame(activity: string, strings: Readonly<Record<string, string>>): PremidApi | null;
+  bindFrame(
+    activity: string,
+    script: PremidScript,
+    strings?: Readonly<Record<string, string>>,
+  ): void;
 }
 
 /** Sets up the bridge each wrapped Activity script calls, once per document (and world). */
@@ -804,13 +852,13 @@ export function installBridge(scope: object = globalThis): void {
   };
   const topFrame = window.top === window;
   const bridge: PremidBridge = {
-    bind: (activity, strings) => {
+    bind: (activity, script, strings = {}) => {
       const channels = topFrame ? claim(`page:${activity}`) : null;
-      return channels && createApi(activity, strings, channels);
+      if (channels) script(...argsOf(createApi(activity, strings, channels)));
     },
-    bindFrame: (activity, strings) => {
+    bindFrame: (activity, script, strings = {}) => {
       const channels = topFrame ? null : claim(`frame:${activity}`);
-      return channels && createApi(activity, strings, channels);
+      if (channels) script(...argsOf(createApi(activity, strings, channels)));
     },
   };
   Reflect.set(scope, BRIDGE_KEY, bridge);

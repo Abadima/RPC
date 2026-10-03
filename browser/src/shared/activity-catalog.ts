@@ -1,17 +1,16 @@
 import {
   CATALOG_PATH,
   HOSTS_PATH,
-  INDEX_PATH,
+  descriptionsPath,
   compileMatch,
-  hostKeys,
-  manifestPath,
+  hostIds,
   parseCatalog,
-  parseHosts,
-  parseIndex,
-  parseManifest,
+  parseShard,
+  shardPath,
   type ActivityManifest,
 } from "../activities/manifest";
 import type { ActivityInfo } from "../core/activity";
+import { currentLanguage } from "../core/i18n";
 import {
   chosenVariant,
   isActivityOn,
@@ -39,23 +38,62 @@ async function fetchJson(path: string): Promise<unknown> {
   }
 }
 
+let descriptions: { language: string; texts: Promise<Record<string, string>> } | null = null;
+
+/** PreMiD Activities' descriptions in the view's language, where PreMiD's metadata has them; none for English. */
+function translatedDescriptions(): Promise<Record<string, string>> {
+  const language = currentLanguage();
+  if (descriptions?.language !== language) {
+    descriptions = {
+      language,
+      texts:
+        language === "en"
+          ? Promise.resolve({})
+          : fetchJson(descriptionsPath(language)).then((value) => {
+              const texts: Record<string, string> = {};
+              if (typeof value === "object" && value !== null) {
+                for (const [id, text] of Object.entries(value)) {
+                  if (typeof text === "string") texts[id] = text;
+                }
+              }
+              return texts;
+            }),
+    };
+  }
+  return descriptions.texts;
+}
+
+/** `info` with its description in the view's language, when there is one. */
+function withDescription(info: ActivityInfo, texts: Record<string, string>): ActivityInfo {
+  const description = texts[info.id];
+  return description === undefined ? info : { ...info, description };
+}
+
 /** Every Activity this build includes, native and PreMiD's, as the catalog lists them. */
 export async function loadCatalog(): Promise<ActivityInfo[]> {
-  return parseCatalog(await fetchJson(CATALOG_PATH)).activities;
+  const { activities } = parseCatalog(await fetchJson(CATALOG_PATH));
+  const texts = await translatedDescriptions();
+  return activities.map((info) => withDescription(info, texts));
 }
 
-let index: Promise<Record<string, string>> | null = null;
-
-async function loadManifest(file: string): Promise<ActivityManifest | null> {
-  return parseManifest(await fetchJson(manifestPath(file)));
+async function loadManifest(id: string): Promise<ActivityManifest | null> {
+  return parseShard(await fetchJson(shardPath(id)), id);
 }
 
-/** One Activity's full entry (its settings too), from its own manifest. */
+/** One Activity's entry with its settings, from its own manifest (so without a description: the catalog has that). */
 export async function loadActivityInfo(id: string): Promise<ActivityInfo | null> {
-  index ??= fetchJson(INDEX_PATH).then((value) => parseIndex(value).files);
-  const file = (await index)[id];
-  const manifest = file ? await loadManifest(file) : null;
+  const manifest = await loadManifest(id);
   return manifest?.info.id === id ? manifest.info : null;
+}
+
+/** Plain text, which the host index is searched as: it's never parsed, so it costs one string, not an object per site. */
+async function fetchText(path: string): Promise<string> {
+  try {
+    const response = await fetch(chrome.runtime.getURL(path));
+    return response.ok ? await response.text() : "";
+  } catch {
+    return "";
+  }
 }
 
 /**
@@ -65,10 +103,8 @@ export async function loadActivityInfo(id: string): Promise<ActivityInfo | null>
  */
 export async function findActivity(url: URL, states: ActivityStates): Promise<ActivityInfo | null> {
   if (url.protocol !== "https:" && url.protocol !== "http:") return null;
-  const hosts = parseHosts(await fetchJson(HOSTS_PATH)).hosts;
-  const files = [...new Set(hostKeys(url.hostname).flatMap((key) => hosts[key] ?? []))];
-  for (const file of files) {
-    const manifest = await loadManifest(file);
+  for (const id of hostIds(await fetchText(HOSTS_PATH), url.hostname)) {
+    const manifest = await loadManifest(id);
     if (!manifest) continue;
     let matches = false;
     try {

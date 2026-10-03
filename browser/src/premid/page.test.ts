@@ -10,6 +10,7 @@ import {
   runUpdates,
   serializePresenceData,
   withholdStorage,
+  type PremidArgs,
   type PremidBridge,
 } from "./page";
 
@@ -84,6 +85,24 @@ describe("what an Activity shows reaches the background", () => {
     expect(serializePresenceData({ largeImageKey: "blob:https://x/1234" })).toEqual({});
     expect(serializePresenceData({ largeImageKey: " DATA:image/png;base64,AA" })).toEqual({});
     expect(serializePresenceData({ largeImageKey: `https://x/${"a".repeat(3000)}` })).toEqual({});
+  });
+
+  test("the type, status line, party, and image links go as the Activity set them", () => {
+    expect(
+      serializePresenceData({
+        type: 3,
+        statusDisplayType: 1,
+        largeImageUrl: "https://example.com/a",
+        smallImageUrl: 7,
+        party: { partySize: 1, maxPartySize: 4, partyId: "x" },
+      }),
+    ).toEqual({
+      type: 3,
+      statusDisplayType: 1,
+      largeImageUrl: "https://example.com/a",
+      party: { partySize: 1, maxPartySize: 4 },
+    });
+    expect(serializePresenceData({ type: "3", party: { partySize: "1" } })).toEqual({});
   });
 
   test("one too big even without its images is held back rather than sent", () => {
@@ -207,7 +226,7 @@ describe("an Activity in a page", () => {
 
   /** A page with the runtime installed, and the messages it sends and receives through its ports. */
   function page() {
-    const posted: Array<{ type: string; data?: unknown }> = [];
+    const posted: Array<{ type: string; data?: unknown; ids?: string[]; hidden?: boolean }> = [];
     const receivers: Array<(message: unknown) => void> = [];
     const window = { top: undefined as unknown, addEventListener: () => {} };
     window.top = window;
@@ -223,7 +242,7 @@ describe("an Activity in a page", () => {
     scope.chrome = {
       runtime: {
         connect: () => ({
-          postMessage: (message: { type: string; data?: unknown }) => posted.push(message),
+          postMessage: (message: (typeof posted)[number]) => posted.push(message),
           onMessage: {
             addListener: (listener: (message: unknown) => void) => receivers.push(listener),
           },
@@ -238,6 +257,7 @@ describe("an Activity in a page", () => {
     return {
       bridge,
       location,
+      posted,
       reports: () => posted.filter((message) => message.type === "activity"),
       stop: () => receivers.forEach((receive) => receive({ type: "stop" })),
     };
@@ -245,11 +265,21 @@ describe("an Activity in a page", () => {
 
   const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 1100));
 
+  /** The API `bind` runs a script with, or `null` when it doesn't run it. */
+  function bound(bridge: PremidBridge, activity: string): PremidArgs | null {
+    let api: PremidArgs | null = null;
+    bridge.bind(activity, (...args) => {
+      api = args;
+    });
+    return api;
+  }
+
   test("that stops reporting while its page is shown has its last report dropped, and is shown again when it resumes", async () => {
     const { bridge, location, reports, stop } = page();
-    const api = bridge.bind("premid:Music", {});
+    const api = bound(bridge, "premid:Music");
     if (!api) throw new Error("the Activity wasn't bound");
-    const presence = new api.Presence({ clientId: "1" }) as {
+    const [Presence] = api;
+    const presence = new Presence({ clientId: "1" }) as {
       on: (event: string, listener: () => void) => void;
       setActivity: (data: object) => void;
     };
@@ -282,20 +312,45 @@ describe("an Activity in a page", () => {
     stop();
   }, 15_000);
 
+  test("tells the background of a setting it hides or shows once, however often it asks", () => {
+    const { bridge, posted, stop } = page();
+    const api = bound(bridge, "premid:Music");
+    if (!api) throw new Error("the Activity wasn't bound");
+    const [Presence] = api;
+    const presence = new Presence({ clientId: "1" }) as {
+      hideSetting: (ids: unknown) => Promise<void>;
+      showSetting: (ids: unknown) => Promise<void>;
+    };
+    const hides = () => posted.filter((message) => message.type === "hide");
+    // Some Activities do this on every update, once a second.
+    for (let n = 0; n < 5; n++) void presence.hideSetting("listeners");
+    expect(hides()).toEqual([{ type: "hide", ids: ["listeners"], hidden: true }]);
+    void presence.hideSetting(["listeners", "cover"]);
+    expect(hides().at(-1)).toEqual({ type: "hide", ids: ["cover"], hidden: true });
+    void presence.showSetting("listeners");
+    void presence.showSetting("listeners");
+    expect(hides().at(-1)).toEqual({ type: "hide", ids: ["listeners"], hidden: false });
+    expect(hides()).toHaveLength(3);
+    void presence.hideSetting(["cover", 7]);
+    void presence.hideSetting([]);
+    expect(hides()).toHaveLength(3);
+    stop();
+  });
+
   test("is bound once per document, and again once the background has stopped it", () => {
     const { bridge, stop } = page();
-    const first = bridge.bind("premid:Music", {});
+    const first = bound(bridge, "premid:Music");
     expect(first).not.toBeNull();
     // Nothing opened yet, so nothing to tell it apart from one still starting.
-    expect(bridge.bind("premid:Music", {})).toBeNull();
+    expect(bound(bridge, "premid:Music")).toBeNull();
     if (!first) return;
-    new first.Presence({ clientId: "1" });
-    expect(bridge.bind("premid:Music", {})).toBeNull();
+    new first[0]({ clientId: "1" });
+    expect(bound(bridge, "premid:Music")).toBeNull();
     stop();
-    const again = bridge.bind("premid:Music", {});
+    const again = bound(bridge, "premid:Music");
     expect(again).not.toBeNull();
-    expect(bridge.bind("premid:Music", {})).toBeNull();
-    if (again) new again.Presence({ clientId: "1" });
+    expect(bound(bridge, "premid:Music")).toBeNull();
+    if (again) new again[0]({ clientId: "1" });
     stop();
   });
 });

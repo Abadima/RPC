@@ -13,7 +13,7 @@
     <div class="workspace">
       <aside class="sidebar">
         <a class="brand" href="#overview">
-          <img class="mark" src="icons/icon-32.png" width="22" height="22" alt="Parousia" />
+          <img class="mark" src="icons/parousia.svg" width="22" height="22" alt="Parousia" />
           <span class="wordmark" aria-hidden="true">PAROUSIA</span>
         </a>
         <nav class="nav" aria-label="Dashboard">
@@ -65,6 +65,13 @@
           <button class="link-button" type="button" data-retry>Retry Connection</button>
           <p class="offline-aside" data-slot="discord-aside" hidden></p>
         </section>
+
+        <div class="banner" data-slot="update" data-tone="warn" role="status" hidden>
+          <div class="banner-main">
+            <span class="banner-icon"><span data-icon="alert"></span></span>
+            <div class="banner-text" data-help></div>
+          </div>
+        </div>
 
         <div class="overview-grid" data-slot="online">
           <div class="stack">

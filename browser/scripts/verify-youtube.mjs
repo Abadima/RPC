@@ -26,6 +26,7 @@ import {
   startDesktop,
   waitUntil,
   workspace,
+  readManifest,
 } from "./e2e/lib.mjs";
 
 const log = logger("youtube");
@@ -49,12 +50,11 @@ try {
     env: { ...process.env, PAROUSIA_BUILD_DIR: join(ws.dir, "dist") },
   });
   await cp(join(ws.dir, "dist", "chromium"), extensionDir, { recursive: true });
-  const read = async (path) => JSON.parse(await readFile(join(extensionDir, path), "utf8"));
-  const index = await read("activities/index.json");
-  assert(index.files[YOUTUBE] && index.files[MUSIC], "YouTube's Activities are packaged");
   const origins = [];
   for (const id of [YOUTUBE, MUSIC]) {
-    origins.push(...(await read(`activities/${index.files[id]}.json`)).info.origins);
+    const manifest = await readManifest(extensionDir, id);
+    assert(manifest, `${id} is packaged`);
+    origins.push(...manifest.info.origins);
   }
   const manifestPath = join(extensionDir, "manifest.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
@@ -83,10 +83,15 @@ try {
   const extension = `chrome-extension://${new URL(worker.url()).host}`;
   await worker.evaluate(QUIET_DISCORD);
   await control(ws, "allow", extension);
+  // Native Activities for the same websites exist too, and run unless PreMiD's is chosen.
   await worker.evaluate(
     (ids) =>
       chrome.storage.local.set({
-        activities: Object.fromEntries(ids.map((id) => [id, { on: true }])),
+        activities: {
+          ...Object.fromEntries(ids.map((id) => [id, { on: true }])),
+          youtube: { use: ids[0] },
+          "youtube-music": { use: ids[1] },
+        },
       }),
     [YOUTUBE, MUSIC],
   );

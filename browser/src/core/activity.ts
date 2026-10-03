@@ -1,8 +1,24 @@
 export interface ActivityAssets {
   largeImage?: string;
   largeText?: string;
+  /** Where clicking the large image goes; `http(s)` only. */
+  largeUrl?: string;
   smallImage?: string;
   smallText?: string;
+  /** Where clicking the small image goes; `http(s)` only. */
+  smallUrl?: string;
+}
+
+/** The verb Discord puts before the name: "Playing", "Listening to", "Watching", "Competing in". */
+export type ActivityType = "playing" | "listening" | "watching" | "competing";
+
+/** Which line Discord shows in the member list's status text. */
+export type StatusDisplayType = "name" | "state" | "details";
+
+/** A group the Activity belongs to, as "size of max". */
+export interface ActivityParty {
+  size: number;
+  max: number;
 }
 
 export interface ActivityTimestamps {
@@ -93,6 +109,11 @@ export interface Activity {
   stateUrl?: string;
   /** At most two. Discord shows them to others, not to you. */
   buttons?: ActivityButton[];
+  /** Left out: "playing". */
+  type?: ActivityType;
+  statusDisplayType?: StatusDisplayType;
+  /** Shown only on a "playing" Activity. */
+  party?: ActivityParty;
   /**
    * Stamped by the runtime from `ActivityInfo`. Only a PreMiD Activity's own
    * script picks its own, and only among the Applications its source names.

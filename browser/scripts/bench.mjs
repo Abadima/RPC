@@ -36,7 +36,7 @@ process.env.PAROUSIA_DESKTOP_BIN ??= join(release, "Parousia-Desktop");
 
 const { startFakeDiscord } = await import("./e2e/fake-discord.mjs");
 const { connectRaw } = await import("./e2e/raw-ws.mjs");
-const { browserDir, control, desktopBinary, sleep, track, waitUntil, workspace } =
+const { browserDir, control, desktopBinary, readManifest, sleep, track, waitUntil, workspace } =
   await import("./e2e/lib.mjs");
 
 const run = promisify(execFile);
@@ -183,7 +183,7 @@ async function sizes(dist) {
     "popup.js",
     "fullscreen.js",
     "activities/catalog.json",
-    "activities/index.json",
+    "activities/hosts.txt",
     "activities/collector.js",
     "activities/premid/runtime.js",
   ]) {
@@ -206,7 +206,12 @@ async function health() {
 
 async function hello(client) {
   client.sendText(
-    JSON.stringify({ type: "hello", protocolVersion: PROTOCOL, name: "Bench on Linux" }),
+    JSON.stringify({
+      type: "hello",
+      protocolVersion: PROTOCOL,
+      version: "1.0.0",
+      name: "Bench on Linux",
+    }),
   );
   const reply = await client.next();
   if (reply?.type !== "welcome") throw new Error(`Desktop answered ${JSON.stringify(reply)}`);
@@ -220,7 +225,6 @@ const PROTOCOL = Number(
 
 function presence(details) {
   const activity = { id: "bench", name: "Bench", details, state: "Measuring" };
-  if (PROTOCOL < 6) activity.url = "https://example.com/";
   return JSON.stringify({ type: "presence", presence: { activity, updatedAt: Date.now() } });
 }
 
@@ -339,16 +343,7 @@ async function benchExtension(dist) {
   try {
     await waitUntil(health, "Desktop to answer", 10_000);
     await cp(join(dist, "chromium"), extensionDir, { recursive: true });
-    const index = JSON.parse(
-      await readFile(join(extensionDir, "activities", "index.json"), "utf8"),
-    );
-    // Manifests are named in the index (`premid/<name>`; builds before that named the file alone).
-    const file = index.files[GUIDE].includes("/")
-      ? index.files[GUIDE]
-      : `premid/${index.files[GUIDE]}`;
-    const guide = JSON.parse(
-      await readFile(join(extensionDir, "activities", `${file}.json`), "utf8"),
-    );
+    const guide = await readManifest(extensionDir, GUIDE);
     const manifestPath = join(extensionDir, "manifest.json");
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
     manifest.permissions = [...manifest.permissions, "scripting"];

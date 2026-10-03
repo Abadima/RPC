@@ -6,8 +6,11 @@ import {
   compileMatch,
   hostKeys,
   parseCatalog,
-  parseHosts,
-  parseIndex,
+  formatHosts,
+  hostIds,
+  manifestInfo,
+  manifestShard,
+  parseShard,
   parseManifest,
   registered,
   type ActivityManifest,
@@ -86,6 +89,40 @@ describe("one manifest for both sources", () => {
     });
   });
 
+  test("a native Activity with no cover shows its site's logo, the way a PreMiD one does", () => {
+    // Paused, browsing, or a page without artwork: `detect` sends no image, and
+    // Discord would show Parousia's own logo for it.
+    const logo = "https://cdn.example/tunes.png";
+    const registry = new ActivityRegistry();
+    registry.register(
+      registered(
+        { ...native, info: { ...native.info, icon: logo } },
+        {
+          detect: (page) => ({
+            id: "tunes",
+            name: "Tunes",
+            url: page.url.href,
+            ...(page.thumbnail && { assets: { largeImage: page.thumbnail } }),
+          }),
+        },
+      ),
+    );
+    const runtime = new PresenceRuntime(registry);
+    const url = new URL("https://tunes.example/song/1");
+    const shown = (page: object) =>
+      runtime.resolve({ url, title: "", ...page }).activity?.assets?.largeImage;
+    expect(shown({})).toBe(logo);
+    expect(
+      shown({ granted: ["thumbnails"], data: { thumbnail: "https://cdn.example/c.jpg" } }),
+    ).toBe("https://cdn.example/c.jpg");
+    expect(
+      shown({
+        granted: ["thumbnails"],
+        data: { thumbnail: `https://cdn.example/${"c".repeat(300)}` },
+      }),
+    ).toBe(logo);
+  });
+
   test("a PreMiD Activity shows its own report, and nothing else", () => {
     const activity = registered(premid);
     const url = new URL("https://tunes.example/song/1?session=secret");
@@ -110,16 +147,6 @@ describe("one manifest for both sources", () => {
       sources: { premid: "abc" },
       activities: [native.info],
     });
-    expect(
-      parseIndex({
-        files: { a: "premid/a-b", b: "native/b", c: "../secret", d: "premid/A", e: 1 },
-      }),
-    ).toEqual({ files: { a: "premid/a-b", b: "native/b" } });
-    expect(
-      parseHosts({
-        hosts: { "a.example": ["premid/a", "/etc/passwd", 3], "b.example": "premid/b" },
-      }),
-    ).toEqual({ hosts: { "a.example": ["premid/a"] } });
   });
 
   test("an index of sites finds a page's host, and each domain above it, never a top-level domain alone", () => {
@@ -131,6 +158,50 @@ describe("one manifest for both sources", () => {
       "co.uk",
     ]);
     expect(hostKeys("localhost")).toEqual(["localhost"]);
+  });
+
+  test("a manifest is found by its id alone, in the file for its name's first letter", () => {
+    expect(manifestShard("premid:YouTube")).toBe("y");
+    expect(manifestShard("youtube-music")).toBe("y");
+    expect(manifestShard("premid:3D Tunes")).toBe("3");
+    expect(manifestShard("premid:Émile")).toBe("e");
+    expect(manifestShard("premid:Ютюб")).toBe("_");
+    expect(manifestShard("premid:")).toBe("_");
+    const shard = { "premid:Tunes": premid, tunes: native };
+    expect(parseShard(shard, "tunes")).toEqual(native);
+    expect(parseShard(shard, "premid:Tunes")).toEqual(premid);
+    expect(parseShard(shard, "premid:Other")).toBeNull();
+    expect(parseShard({ tunes: { info: 1 } }, "tunes")).toBeNull();
+    expect(parseShard(null, "tunes")).toBeNull();
+    expect(parseShard([], "0")).toBeNull();
+  });
+
+  test("a manifest leaves out the words the catalog already carries", () => {
+    expect(manifestInfo({ ...native.info, description: "A site.", keywords: ["music"] })).toEqual(
+      native.info,
+    );
+  });
+
+  test("the host index is searched as text: a host's own line, then each domain above it", () => {
+    const text = formatHosts(
+      new Map([
+        ["www.video.example", ["premid:Video"]],
+        ["video.example", ["video", "premid:Video"]],
+        ["music.example", ["premid:Music"]],
+        ["example", ["premid:Wrong"]],
+      ]),
+    );
+    expect(text).toBe(
+      "example\tpremid:Wrong\nmusic.example\tpremid:Music\nvideo.example\tvideo\tpremid:Video\nwww.video.example\tpremid:Video",
+    );
+    expect(hostIds(text, "www.video.example")).toEqual(["premid:Video", "video"]);
+    expect(hostIds(text, "a.b.music.example")).toEqual(["premid:Music"]);
+    expect(hostIds(text, "video.example")).toEqual(["video", "premid:Video"]);
+    // A name's own line is exact: a longer name that ends the same isn't it.
+    expect(hostIds(text, "example")).toEqual(["premid:Wrong"]);
+    expect(hostIds(text, "other.example")).toEqual([]);
+    expect(hostIds(text, "evilvideo.example")).toEqual([]);
+    expect(hostIds("", "video.example")).toEqual([]);
   });
 
   test("the catalog lists an Activity without what only its own page needs", () => {

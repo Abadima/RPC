@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { isDesktopReport, parseServerMessage } from "./desktop-protocol";
+import { createPresence } from "./presence";
+import { isDesktopReport, parseServerMessage, presenceWire } from "./desktop-protocol";
 import { REPORT } from "./test-desktop";
 
 describe("parseServerMessage", () => {
   test("accepts exactly the messages Desktop sends", () => {
-    expect(parseServerMessage({ type: "welcome", protocolVersion: 5 })).toEqual({
+    expect(parseServerMessage({ type: "welcome", protocolVersion: 1, version: "1.0.0" })).toEqual({
       type: "welcome",
-      protocolVersion: 5,
+      protocolVersion: 1,
+      version: "1.0.0",
     });
     expect(parseServerMessage({ type: "reject", reason: "origin_not_allowed" })).toEqual({
       type: "reject",
@@ -24,7 +26,10 @@ describe("parseServerMessage", () => {
       null,
       "welcome",
       [],
-      { type: "welcome", protocolVersion: "3" },
+      { type: "welcome", protocolVersion: "3", version: "1.0.0" },
+      { type: "welcome", protocolVersion: 1 },
+      { type: "welcome", protocolVersion: 1, version: 1 },
+      { type: "welcome", protocolVersion: 1, version: "1.0.0-" + "x".repeat(40) },
       { type: "reject", reason: "because" },
       { type: "challenge", nonce: "x" },
       { type: "status", status: { ...REPORT, clients: [{ id: 1 }] } },
@@ -54,5 +59,37 @@ describe("parseServerMessage", () => {
     ]) {
       expect(isDesktopReport(broken)).toBe(false);
     }
+  });
+});
+
+describe("presenceWire", () => {
+  test("carries the type, status line, party, and image links, and never the page's address", () => {
+    const wire = presenceWire(
+      createPresence({
+        id: "premid:Example",
+        name: "Example",
+        url: "https://example.com/watch",
+        type: "watching",
+        statusDisplayType: "details",
+        party: { size: 1, max: 2 },
+        assets: {
+          largeImage: "a",
+          largeUrl: "https://example.com/a",
+          smallUrl: "https://example.com/b",
+        },
+      }),
+    );
+    expect(wire.activity).toEqual({
+      id: "premid:Example",
+      name: "Example",
+      type: "watching",
+      statusDisplayType: "details",
+      party: { size: 1, max: 2 },
+      assets: {
+        largeImage: "a",
+        largeUrl: "https://example.com/a",
+        smallUrl: "https://example.com/b",
+      },
+    });
   });
 });

@@ -12,7 +12,7 @@
     <div class="app">
       <header class="header">
         <span class="brand" id="home-title">
-          <img class="mark" src="icons/icon-32.png" width="18" height="18" alt="Parousia" />
+          <img class="mark" src="icons/parousia.svg" width="18" height="18" alt="Parousia" />
           <span class="wordmark" aria-hidden="true">PAROUSIA</span>
         </span>
         <div class="header-nav" id="settings-title" hidden>
@@ -49,6 +49,13 @@
       </header>
 
       <main class="body" id="home-view">
+        <div class="banner" id="update-notice" data-tone="warn" role="status" hidden>
+          <div class="banner-main">
+            <span class="banner-icon"><span data-icon="alert"></span></span>
+            <div class="banner-text" data-help></div>
+          </div>
+        </div>
+
         <section class="section" id="activity-view" aria-labelledby="activity-label" hidden>
           <div class="section-head">
             <h2 class="section-label" id="activity-label">Current activity</h2>

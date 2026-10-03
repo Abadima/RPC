@@ -257,8 +257,6 @@ jobs:
     defaults:
       run:
         working-directory: browser
-    env:
-      VERSION: ${{ needs.check.outputs.version }}
     outputs:
       sources: ${{ steps.sources.outputs.sources }}
     steps:
@@ -310,14 +308,16 @@ jobs:
           cp dist/userscript/parousia.user.js dist/userscript/parousia.user.js.gz ../out/
 
       # What is inside the files has to be the release, and the gzip has to be
-      # the userscript exactly.
+      # the userscript exactly. The extension has a version of its own (the
+      # manifests', which release-check keeps in step with each other); only
+      # Desktop carries the tag's.
       - name: Check the packages
         run: |
-          core="${VERSION%%-*}"
+          extension="$(jq -r .version manifests/chromium.json)"
           for browser in chromium firefox; do
-            [ "$(unzip -p "../out/parousia-$browser.zip" manifest.json | jq -r .version)" = "$core" ]
+            [ "$(unzip -p "../out/parousia-$browser.zip" manifest.json | jq -r .version)" = "$extension" ]
           done
-          grep -qx "// @version      $core" ../out/parousia.user.js
+          grep -qx "// @version      $extension" ../out/parousia.user.js
           gzip -dc ../out/parousia.user.js.gz | cmp - ../out/parousia.user.js
 
       - name: Upload

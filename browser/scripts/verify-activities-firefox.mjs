@@ -168,7 +168,7 @@ try {
             wrote = "refused: " + error.message;
           }
           return {
-            runtime: typeof globalThis.__parousiaPreMiD,
+            runtime: typeof globalThis.__pmd,
             browser: typeof browser.storage,
             chrome: typeof chrome.storage,
             wrote,

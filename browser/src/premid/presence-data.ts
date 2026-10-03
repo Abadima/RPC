@@ -2,10 +2,13 @@ import type {
   Activity,
   ActivityAssets,
   ActivityButton,
+  ActivityInfo,
+  ActivityParty,
   ActivityTimestamps,
+  ActivityType,
   PageDataKind,
+  StatusDisplayType,
 } from "../core/activity";
-import type { ActivityManifest } from "../activities/manifest";
 
 /**
  * PreMiD's `PresenceData` as the page runtime sends it (src/premid/page.ts):
@@ -13,9 +16,9 @@ import type { ActivityManifest } from "../activities/manifest";
  * numbers. Untrusted: a page script can send anything, so it's parsed field
  * by field and bounded again in `toActivity`.
  *
- * Left out for now: `type` (Listening, Watching), `statusDisplayType`,
- * `party`, and links on the images, which Parousia's Activity doesn't carry
- * yet, and Blob images, which PreMiD uploads to its own image host.
+ * Left out: Blob images with no known address, which PreMiD uploads to its
+ * own image host, and the Streaming type, which Discord only takes with a
+ * stream address.
  */
 export interface PresenceDataWire {
   name?: string;
@@ -29,7 +32,14 @@ export interface PresenceDataWire {
   smallImageText?: string;
   detailsUrl?: string;
   stateUrl?: string;
+  largeImageUrl?: string;
+  smallImageUrl?: string;
   buttons?: Array<{ label: string; url: string }>;
+  /** PreMiD's `ActivityType`: 0 Playing, 2 Listening, 3 Watching, 5 Competing. */
+  type?: number;
+  /** PreMiD's `StatusDisplayType`: 0 Name, 1 State, 2 Details. */
+  statusDisplayType?: number;
+  party?: { partySize: number; maxPartySize: number };
 }
 
 const TEXT_FIELDS = [
@@ -42,6 +52,8 @@ const TEXT_FIELDS = [
   "smallImageText",
   "detailsUrl",
   "stateUrl",
+  "largeImageUrl",
+  "smallImageUrl",
 ] as const;
 
 /** Longest text kept from a page; Discord shows 128, Desktop takes 512. */
@@ -61,9 +73,17 @@ export function parsePresenceData(value: unknown): PresenceDataWire | null {
     const text = value[field];
     if (typeof text === "string") data[field] = text;
   }
-  for (const field of ["startTimestamp", "endTimestamp"] as const) {
-    const time = value[field];
-    if (typeof time === "number" && Number.isFinite(time)) data[field] = time;
+  for (const field of ["startTimestamp", "endTimestamp", "type", "statusDisplayType"] as const) {
+    const number = value[field];
+    if (typeof number === "number" && Number.isFinite(number)) data[field] = number;
+  }
+  const party = value.party;
+  if (
+    isObject(party) &&
+    typeof party.partySize === "number" &&
+    typeof party.maxPartySize === "number"
+  ) {
+    data.party = { partySize: party.partySize, maxPartySize: party.maxPartySize };
   }
   if (Array.isArray(value.buttons)) {
     data.buttons = value.buttons
@@ -97,13 +117,36 @@ function time(value: number | undefined): number | undefined {
   return Math.round(ms / 1000) * 1000;
 }
 
+/** PreMiD's `ActivityType` numbers, as Discord takes them; Streaming (1) has none. */
+const ACTIVITY_TYPES: Readonly<Record<number, ActivityType>> = {
+  0: "playing",
+  2: "listening",
+  3: "watching",
+  5: "competing",
+};
+const STATUS_DISPLAY_TYPES: readonly StatusDisplayType[] = ["name", "state", "details"];
+/** Far above any lobby, and low enough that a page can't make Discord refuse the activity. */
+const MAX_PARTY = 10_000;
+
+function party(value: PresenceDataWire["party"]): ActivityParty | undefined {
+  if (!value) return undefined;
+  const { partySize: size, maxPartySize: max } = value;
+  return Number.isInteger(size) &&
+    Number.isInteger(max) &&
+    size >= 1 &&
+    size <= max &&
+    max <= MAX_PARTY
+    ? { size, max }
+    : undefined;
+}
+
 /**
  * What a PreMiD Activity reported, as Parousia's Activity. `page` is the tab's
  * URL, kept without its query string or fragment; `clientId` is the
  * Application its script picked, already checked against its source.
  */
 export function toActivity(
-  entry: ActivityManifest,
+  entry: { info: Pick<ActivityInfo, "id" | "name" | "icon"> },
   data: PresenceDataWire,
   page: URL,
   clientId: string,
@@ -113,10 +156,14 @@ export function toActivity(
   if (largeImage) assets.largeImage = largeImage;
   const largeText = text(data.largeImageText);
   if (largeText) assets.largeText = largeText;
+  const largeUrl = web(data.largeImageUrl);
+  if (largeUrl) assets.largeUrl = largeUrl;
   const smallImage = image(data.smallImageKey);
   if (smallImage) assets.smallImage = smallImage;
   const smallText = text(data.smallImageText);
   if (smallText) assets.smallText = smallText;
+  const smallUrl = web(data.smallImageUrl);
+  if (smallUrl) assets.smallUrl = smallUrl;
 
   const timestamps: ActivityTimestamps = {};
   const start = time(data.startTimestamp);
@@ -148,6 +195,14 @@ export function toActivity(
   if (Object.keys(assets).length > 0) activity.assets = assets;
   if (Object.keys(timestamps).length > 0) activity.timestamps = timestamps;
   if (buttons.length > 0) activity.buttons = buttons;
+  const type = data.type === undefined ? undefined : ACTIVITY_TYPES[data.type];
+  if (type && type !== "playing") activity.type = type;
+  const display =
+    data.statusDisplayType === undefined ? undefined : STATUS_DISPLAY_TYPES[data.statusDisplayType];
+  if (display && display !== "name") activity.statusDisplayType = display;
+  // Discord shows a party on a Playing activity only.
+  const group = type === undefined || type === "playing" ? party(data.party) : undefined;
+  if (group) activity.party = group;
   return activity;
 }
 
@@ -162,7 +217,8 @@ const ownImage = (value: string): boolean =>
  * held back here, on the way out:
  *
  * - `media`: what's playing (details, state, their links, buttons, times,
- *   captions, and a name it set from the page, like a song's title).
+ *   captions, the party, which line the status shows, links on the images,
+ *   and a name it set from the page, like a song's title).
  * - `thumbnails`: a large image from the page (its own icon shows instead).
  * - `creatorIcons`: a small image from the page.
  *
@@ -184,16 +240,22 @@ export function limitPageData(
     delete limited.stateUrl;
     delete limited.buttons;
     delete limited.timestamps;
+    delete limited.party;
+    delete limited.statusDisplayType;
     delete assets.largeText;
+    delete assets.largeUrl;
     delete assets.smallText;
+    delete assets.smallUrl;
   }
   if (!allowed.includes("thumbnails") && assets.largeImage && !ownImage(assets.largeImage)) {
     if (icon) assets.largeImage = icon;
     else delete assets.largeImage;
+    delete assets.largeUrl;
   }
   if (!allowed.includes("creatorIcons") && assets.smallImage && !ownImage(assets.smallImage)) {
     delete assets.smallImage;
     delete assets.smallText;
+    delete assets.smallUrl;
   }
   if (Object.keys(assets).length > 0) limited.assets = assets;
   else delete limited.assets;

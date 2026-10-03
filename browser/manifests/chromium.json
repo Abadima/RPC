@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Parousia",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Your Rich Presence on Discord and beyond.",
   "background": {
     "service_worker": "chromium.js",

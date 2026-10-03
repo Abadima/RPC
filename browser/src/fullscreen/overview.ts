@@ -1,3 +1,4 @@
+import { t } from "../core/i18n";
 import { renderPresence, type PresenceSnapshot } from "../shared/presence-view";
 import {
   connectionBadge,
@@ -5,6 +6,7 @@ import {
   isOffline,
   showsDiscordBridge,
 } from "../shared/connection-status";
+import { updateBanner } from "../shared/update-notice";
 import { presenceIcons, renderBadge, renderDiscordAside, renderOffline } from "../shared/views";
 import { fromTemplate, slot, type View, type ViewContext } from "./view";
 
@@ -14,19 +16,21 @@ export function overviewView(context: ViewContext): View {
   const retry = offline.querySelector("[data-retry]");
   retry?.addEventListener("click", context.reconnect);
   let shownSnapshot: PresenceSnapshot | null = null;
+  const showUpdateNotice = updateBanner(slot(element, "update"));
 
   return {
-    title: "Overview",
+    title: t("Overview"),
     element,
     update({ connection, checking, snapshot, settings }) {
       const sharing = snapshot?.activity != null;
       renderBadge(slot(element, "badge"), connection, sharing);
+      showUpdateNotice(connection);
       // Desktop missing is its own screen, as in the popup.
       offline.hidden = !isOffline(connection);
       slot(element, "online").hidden = isOffline(connection);
       renderOffline(offline, connection, checking, context.origin);
       slot(element, "status").textContent = connectionBadge(connection, sharing).text;
-      slot(element, "version").textContent = settings.report?.version ?? "Unknown";
+      slot(element, "version").textContent = settings.report?.version ?? t("Unknown");
       slot(element, "discord-row").hidden = !showsDiscordBridge(connection);
       slot(element, "discord").textContent = discordBridgeLabel(settings.discord);
       renderDiscordAside(slot(element, "discord-aside"), settings.discord);

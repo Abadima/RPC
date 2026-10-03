@@ -12,5 +12,5 @@ export type {
   PageDataKind,
   SettingValue,
 } from "./activity";
-export type { PageMedia, SettingValues as Settings } from "./registry";
+export type { PageImage, PageMedia, SettingValues as Settings } from "./registry";
 export type { NativePage as Page, NativeModule as NativeActivity } from "../activities/manifest";

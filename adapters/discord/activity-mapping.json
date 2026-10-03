@@ -1,5 +1,5 @@
 {
-  "$comment": "Parousia Activity -> Discord RPC activity. Checked by desktop/src/discord/activity.rs and browser/src/compat/discord-rpc-extension.test.ts; the rules are in both files.",
+  "$comment": "Parousia Activity -> Discord RPC activity. Checked by desktop/src/adapters/discord/activity.rs and browser/src/compat/discord-rpc-extension.test.ts; the rules are in both files.",
   "cases": [
     {
       "name": "everything Discord shows",

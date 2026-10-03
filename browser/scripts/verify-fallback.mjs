@@ -20,7 +20,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createServer } from "node:net";
 import { chromium } from "playwright-core";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { startFakeDiscord } from "./e2e/fake-discord.mjs";
 import {
   PAROUSIA_CLIENT_ID,
@@ -53,7 +53,7 @@ if (process.env.PAROUSIA_NETNS !== "1") {
 }
 
 const log = logger("fallback");
-const extensionDir = join(browserDir, "dist", "chromium");
+const extensionDir = resolve(browserDir, process.env.PAROUSIA_BUILD_DIR ?? "dist", "chromium");
 const RETRY_MS = 10_000;
 
 /** A stand-in for the app: a WebSocket server on 6969 that says its version and records everything. */

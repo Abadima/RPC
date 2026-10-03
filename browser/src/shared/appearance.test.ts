@@ -3,7 +3,6 @@ import type { PreferenceArea } from "../core/preferences";
 import {
   DEFAULT_THEME,
   THEME_IDS,
-  THEME_LABELS,
   applyTheme,
   loadTheme,
   parseTheme,
@@ -11,6 +10,7 @@ import {
   saveTheme,
   type HintStore,
 } from "./appearance";
+import { THEME_LABELS } from "./settings-view";
 
 function memoryArea(): PreferenceArea & { data: Record<string, unknown> } {
   const data: Record<string, unknown> = {};

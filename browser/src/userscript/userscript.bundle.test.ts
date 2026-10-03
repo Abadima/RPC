@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
+import { fileURLToPath } from "node:url";
 import { activitiesPlugin } from "../../scripts/activities/plugin";
 
 const bundle = (async () => {
   const result = await Bun.build({
-    entrypoints: [new URL("./index.ts", import.meta.url).pathname],
+    entrypoints: [fileURLToPath(new URL("./index.ts", import.meta.url))],
     target: "browser",
     format: "esm",
     minify: true,
+    define: { USERSCRIPT_VERSION: JSON.stringify("1.0.0") },
     // No Activities: this is about the bundle itself.
     plugins: [activitiesPlugin([])],
   });

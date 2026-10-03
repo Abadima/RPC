@@ -8,11 +8,15 @@
 //   PAROUSIA_REAL_DISCORD_IPC_DIR="$XDG_RUNTIME_DIR" bun run discord:verify
 //   Flatpak Discord: "$XDG_RUNTIME_DIR/app/com.discordapp.Discord"
 //
-// Linux; port 57179 must be free. Prerequisites: `bun run build` here,
+// On Windows Discord listens on a named pipe, so name it up to its number:
+//
+//   $env:PAROUSIA_REAL_DISCORD_IPC_DIR = '\\.\pipe\discord-ipc-'; bun run discord:verify
+//
+// Linux and Windows; port 57179 must be free. Prerequisites: `bun run build` here,
 // `cargo build` in ../desktop, `bun run chromium:setup` once.
 
 import { chromium } from "playwright-core";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   QUIET_DISCORD,
   assert,
@@ -32,14 +36,15 @@ const discordDir = process.env.PAROUSIA_REAL_DISCORD_IPC_DIR;
 if (!discordDir) {
   console.error(
     "discord:verify shows a real presence on your Discord. Name Discord's socket directory to run it:\n" +
-      '  PAROUSIA_REAL_DISCORD_IPC_DIR="$XDG_RUNTIME_DIR" bun run discord:verify',
+      '  PAROUSIA_REAL_DISCORD_IPC_DIR="$XDG_RUNTIME_DIR" bun run discord:verify\n' +
+      "(on Windows, the pipe's name up to its number: \\\\.\\pipe\\discord-ipc-)",
   );
   process.exit(2);
 }
 const HOLD_MS = Number(process.env.HOLD_SECONDS ?? 20) * 1000;
 
 const log = logger("discord");
-const extensionDir = join(browserDir, "dist", "chromium");
+const extensionDir = resolve(browserDir, process.env.PAROUSIA_BUILD_DIR ?? "dist", "chromium");
 const discordStatus = async (ws) =>
   (await status(ws)).platforms.find((platform) => platform.platform === "discord");
 

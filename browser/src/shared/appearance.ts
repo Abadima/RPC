@@ -12,19 +12,6 @@ export const THEME_IDS = ["atelier", "botanique", "monolith"] as const;
 
 export type ThemeId = (typeof THEME_IDS)[number];
 
-/** Kept apart from the ids so theme.js, which only needs the ids, stays small. */
-export const THEME_LABELS: Record<ThemeId, { name: string; description: string }> = {
-  atelier: { name: "Atelier", description: "Parousia's own: cocoa and linen on deep espresso." },
-  botanique: {
-    name: "Botanique",
-    description: "Pine forest greens over slate, with soft moss accents.",
-  },
-  monolith: {
-    name: "Monolith",
-    description: "Warm charcoal and concrete, bone white, and brushed bronze.",
-  },
-};
-
 export const DEFAULT_THEME: ThemeId = "atelier";
 
 const STORAGE_KEY = "theme";

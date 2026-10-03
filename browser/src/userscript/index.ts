@@ -18,6 +18,7 @@ const logger = createLogger("Parousia/userscript");
 const connection = new DesktopConnection({
   channel: webSocketChannel(),
   clientName: describeClient(navigator, "Userscript in "),
+  version: USERSCRIPT_VERSION,
 });
 
 const runtime = new PresenceRuntime(builtInActivities());

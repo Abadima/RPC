@@ -36,6 +36,7 @@ describe("PreMiD PresenceData", () => {
         { label: "Third", url: "https://example.com/3" },
       ],
       type: 3,
+      // Discord shows a party on a Playing activity only.
       party: { partySize: 1, maxPartySize: 2 },
     });
     expect(data && toActivity(entry, data, page, CLIENT)).toEqual({
@@ -55,7 +56,52 @@ describe("PreMiD PresenceData", () => {
       // Seconds become milliseconds; milliseconds are rounded to the second.
       timestamps: { start: 1_700_000_000_000, end: 1_700_000_212_000 },
       buttons: [{ label: "Watch", url: "https://example.com/watch?v=abc" }],
+      type: "watching",
     });
+  });
+
+  test("the type, status line, party, and image links go as Discord takes them", () => {
+    const parsed = parsePresenceData({
+      type: 2,
+      statusDisplayType: 2,
+      largeImageUrl: "https://example.com/album",
+      smallImageUrl: "javascript:alert(1)",
+      largeImageKey: "https://i.example/cover.jpg",
+    });
+    expect(parsed && toActivity(entry, parsed, page, CLIENT)).toMatchObject({
+      type: "listening",
+      statusDisplayType: "details",
+      assets: { largeImage: "https://i.example/cover.jpg", largeUrl: "https://example.com/album" },
+    });
+    // Playing, the default, and showing the name, the default, are left out.
+    const plain = parsePresenceData({ type: 0, statusDisplayType: 0 });
+    const activity = plain && toActivity(entry, plain, page, CLIENT);
+    expect(activity).not.toHaveProperty("type");
+    expect(activity).not.toHaveProperty("statusDisplayType");
+    // Streaming has no address to go with it, and 4 and 9 mean nothing.
+    for (const type of [1, 4, 9, -1]) {
+      const data = parsePresenceData({ type });
+      expect(data && toActivity(entry, data, page, CLIENT)).not.toHaveProperty("type");
+    }
+    const unknown = parsePresenceData({ statusDisplayType: 3 });
+    expect(unknown && toActivity(entry, unknown, page, CLIENT)).not.toHaveProperty(
+      "statusDisplayType",
+    );
+  });
+
+  test("a party shows on a Playing activity, and only when it makes sense", () => {
+    const party = (partySize: number, maxPartySize: number, type?: number) => {
+      const data = parsePresenceData({ party: { partySize, maxPartySize }, type });
+      return data && toActivity(entry, data, page, CLIENT).party;
+    };
+    expect(party(2, 5)).toEqual({ size: 2, max: 5 });
+    expect(party(2, 5, 0)).toEqual({ size: 2, max: 5 });
+    expect(party(2, 5, 3)).toBeUndefined();
+    expect(party(0, 5)).toBeUndefined();
+    expect(party(6, 5)).toBeUndefined();
+    expect(party(1.5, 5)).toBeUndefined();
+    expect(party(1, 10_001)).toBeUndefined();
+    expect(parsePresenceData({ party: { partySize: "2", maxPartySize: 5 } })).toEqual({});
   });
 
   test("its own name wins, and without an image it shows its logo", () => {
@@ -97,8 +143,13 @@ describe("PreMiD PresenceData", () => {
         largeImageText: "Album",
         smallImageKey: "https://yt3.ggpht.com/avatar.jpg",
         smallImageText: "Rick Astley",
+        largeImageUrl: "https://example.com/watch",
+        smallImageUrl: "https://example.com/channel",
         startTimestamp: 1_700_000_000,
         buttons: [{ label: "Watch", url: "https://example.com/watch" }],
+        type: 3,
+        statusDisplayType: 2,
+        party: { partySize: 1, maxPartySize: 2 },
       },
       page,
       CLIENT,
@@ -114,6 +165,21 @@ describe("PreMiD PresenceData", () => {
       url: "https://example.com/watch",
       discordClientId: CLIENT,
       assets: { largeImage: "https://cdn.example/logo.png" },
+      // What kind of Activity it is says nothing about what's playing.
+      type: "watching",
+    });
+    // Each image's link goes with the image it's on.
+    expect(limitPageData(activity, ["media", "thumbnails"], entry.info).assets).toEqual({
+      largeImage: "https://i.ytimg.com/vi/x/hq.jpg",
+      largeText: "Album",
+      largeUrl: "https://example.com/watch",
+    });
+    expect(limitPageData(activity, ["media", "creatorIcons"], entry.info).assets).toEqual({
+      largeImage: "https://cdn.example/logo.png",
+      largeText: "Album",
+      smallImage: "https://yt3.ggpht.com/avatar.jpg",
+      smallText: "Rick Astley",
+      smallUrl: "https://example.com/channel",
     });
     const own = toActivity(
       entry,

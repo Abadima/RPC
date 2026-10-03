@@ -16,6 +16,7 @@ import {
   renderConnectionStatus,
 } from "../shared/connection-status";
 import { fillIcons } from "../shared/icons";
+import { loadLanguage } from "../shared/language";
 import { createSettingsModel } from "../shared/settings-view";
 import { presenceSnapshot } from "../shared/views";
 import { activitiesView } from "./activities";
@@ -43,6 +44,9 @@ const byId = (id: string): HTMLElement => {
   if (!element) throw new Error(`fullscreen.html is missing #${id}`);
   return element;
 };
+
+// Before anything is built, so every string comes out in the chosen language.
+await loadLanguage();
 
 fillIcons(document, ICONS);
 

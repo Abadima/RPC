@@ -118,10 +118,23 @@ export function parseUiEvent(value: unknown): UiEvent | null {
   }
   if (message.type === "state") {
     const state = message.state as Record<string, unknown> | null;
-    if (typeof state?.status === "string" && STATUSES.has(state.status)) {
-      return { type: "state", state: { status: state.status as DesktopStatus } };
+    if (typeof state?.status !== "string" || !STATUSES.has(state.status)) return null;
+    const { desktopVersion, update } = state;
+    if (
+      desktopVersion !== undefined &&
+      (typeof desktopVersion !== "string" || desktopVersion.length > 32)
+    ) {
+      return null;
     }
-    return null;
+    if (update !== undefined && update !== "desktop" && update !== "extension") return null;
+    return {
+      type: "state",
+      state: {
+        status: state.status as DesktopStatus,
+        ...(desktopVersion !== undefined && { desktopVersion }),
+        ...(update !== undefined && { update }),
+      },
+    };
   }
   if (message.type === "report" && (message.report === null || isDesktopReport(message.report))) {
     return { type: "report", report: message.report };

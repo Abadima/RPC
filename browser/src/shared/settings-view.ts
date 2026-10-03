@@ -17,6 +17,7 @@ import { faSliders } from "@fortawesome/free-solid-svg-icons/faSliders";
 import { faTowerBroadcast } from "@fortawesome/free-solid-svg-icons/faTowerBroadcast";
 import { PAGE_DATA_KINDS, type PageDataKind } from "../core/activity";
 import type { DesktopReport, DesktopSetting } from "../core/desktop-protocol";
+import { LANGUAGES, LANGUAGE_NAMES, msg, t, type LanguagePreference } from "../core/i18n";
 import type { BridgeState } from "../core/ui-port";
 import { desktopPlatformLabel, discordBridgeLabel } from "./connection-status";
 import {
@@ -34,7 +35,6 @@ import {
 import { readGrants, setAllSites, watchGrants } from "./activity-catalog";
 import {
   THEME_IDS,
-  THEME_LABELS,
   applyTheme,
   loadTheme,
   parseTheme,
@@ -63,50 +63,77 @@ interface PageInfo {
 }
 
 export const SETTINGS_PAGES: readonly PageInfo[] = [
-  { id: "general", title: "General", subtitle: "Language, Parousia Desktop", icon: faSliders },
-  { id: "appearance", title: "Appearance", subtitle: "Theme", icon: faPalette },
+  {
+    id: "general",
+    title: msg("General"),
+    subtitle: msg("Language, Parousia Desktop"),
+    icon: faSliders,
+  },
+  { id: "appearance", title: msg("Appearance"), subtitle: msg("Theme"), icon: faPalette },
   {
     id: "privacy",
-    title: "Privacy",
-    subtitle: "What's shared, what Activities read, incognito",
+    title: msg("Privacy"),
+    subtitle: msg("What's shared, what Activities read, incognito"),
     icon: faLock,
   },
   {
     id: "access",
-    title: "Site access",
-    subtitle: "Access to all websites",
+    title: msg("Site access"),
+    subtitle: msg("Access to all websites"),
     icon: faGlobe,
   },
   {
     id: "platforms",
-    title: "Platforms",
-    subtitle: "Discord, Fluxer, Stoat",
+    title: msg("Platforms"),
+    subtitle: msg("Discord, Fluxer, Stoat"),
     icon: faTowerBroadcast,
   },
   {
     id: "connections",
-    title: "Connections",
-    subtitle: "Linked accounts",
+    title: msg("Connections"),
+    subtitle: msg("Linked accounts"),
     icon: faLink,
     soon: true,
   },
-  { id: "about", title: "About", subtitle: "Version, license, links", icon: faCircleInfo },
+  {
+    id: "about",
+    title: msg("About"),
+    subtitle: msg("Version, license, links"),
+    icon: faCircleInfo,
+  },
 ];
 
 /** How each kind of page data reads in Settings > Privacy. */
 export const DATA_LABELS: Record<PageDataKind, { title: string; detail: string }> = {
   media: {
-    title: "What's playing",
-    detail: "Titles, artists, and progress of what you're watching or listening to.",
+    title: msg("What's playing"),
+    detail: msg("Titles, artists, and progress of what you're watching or listening to."),
   },
   thumbnails: {
-    title: "Thumbnails",
-    detail:
+    title: msg("Thumbnails"),
+    detail: msg(
       "Images of what you're watching or reading, such as a video's thumbnail or an album cover.",
+    ),
   },
   creatorIcons: {
-    title: "Creator icons",
-    detail: "Pictures of the channel, artist, or creator.",
+    title: msg("Creator icons"),
+    detail: msg("Pictures of the channel, artist, or creator."),
+  },
+};
+
+/** How each theme reads in Settings > Appearance; the ids are in appearance.ts, which theme.js shares. */
+export const THEME_LABELS: Record<ThemeId, { name: string; description: string }> = {
+  atelier: {
+    name: msg("Atelier"),
+    description: msg("Parousia's own: cocoa and linen on deep espresso."),
+  },
+  botanique: {
+    name: msg("Botanique"),
+    description: msg("Pine forest greens over slate, with soft moss accents."),
+  },
+  monolith: {
+    name: msg("Monolith"),
+    description: msg("Warm charcoal and concrete, bone white, and brushed bronze."),
   },
 };
 
@@ -234,11 +261,14 @@ export function switchRow(
   return { row, input };
 }
 
+let controlRows = 0;
+
 /** A row with a control that isn't a single input, named by the row's title. */
 export function controlRow(title: string, detail: string, control: HTMLElement): HTMLElement {
   const row = el("div", "setting");
   const text = settingText(title, detail);
-  const titleId = `setting-${title.toLowerCase().replaceAll(/\W+/g, "-")}`;
+  // A number, not the title: titles in some languages have no letters an id can hold.
+  const titleId = `setting-control-${++controlRows}`;
   text.firstElementChild?.setAttribute("id", titleId);
   control.setAttribute("aria-labelledby", titleId);
   row.append(text, control);
@@ -280,20 +310,32 @@ export interface SettingsPageView {
 }
 
 function generalPage(actions: SettingsActions): SettingsPageView {
-  const language = select([["en", "English"]], (value) =>
-    actions.savePreferences({ language: value }),
+  const language = select<LanguagePreference>(
+    [
+      ["auto", t("Automatic")],
+      ...LANGUAGES.map((code): [LanguagePreference, string] => [code, LANGUAGE_NAMES[code]]),
+    ],
+    (value) => actions.savePreferences({ language: value }),
   );
-  const offline = el("p", "offline-note", "Connect to Parousia Desktop to see and change these.");
+  const offline = el(
+    "p",
+    "offline-note",
+    t("Connect to Parousia Desktop to see and change these."),
+  );
   const userscripts = switchRow(
-    "Allow userscripts",
-    "Any web page can connect while this is on. Userscripts can only publish presence, never read status or change settings.",
+    t("Allow userscripts"),
+    t(
+      "Any web page can connect while this is on. Userscripts can only publish presence, never read status or change settings.",
+    ),
     (checked) => actions.setDesktopSetting("allowUserscripts", checked),
     "setting-allowUserscripts",
   );
   const note = el(
     "p",
     "settings-note",
-    "Parousia Desktop couldn't confirm this connection is yours, so these can't be changed from here. Use the Parousia-Desktop set command or Desktop's own console instead.",
+    t(
+      "Parousia Desktop couldn't confirm this connection is yours, so these can't be changed from here. Use the Parousia-Desktop set command or Desktop's own console instead.",
+    ),
   );
   note.id = "settings-note";
   note.setAttribute("role", "alert");
@@ -302,9 +344,11 @@ function generalPage(actions: SettingsActions): SettingsPageView {
 
   const element = el("div", "settings-page-body");
   element.append(
-    sectionLabel("Language"),
-    group(controlRow("Language", "More languages are planned.", language.wrapper)),
-    sectionLabel("Parousia Desktop"),
+    sectionLabel(t("Language")),
+    group(
+      controlRow(t("Language"), t("Changing it reloads any open Parousia page."), language.wrapper),
+    ),
+    sectionLabel(t("Parousia Desktop")),
     offline,
     desktop,
   );
@@ -344,7 +388,7 @@ function appearancePage(): SettingsPageView {
     input.type = "radio";
     input.name = "theme";
     input.value = id;
-    const text = settingText(name, description);
+    const text = settingText(t(name), t(description));
     text.firstElementChild?.setAttribute("id", `theme-${id}-name`);
     text.lastElementChild?.setAttribute("id", `theme-${id}-description`);
     input.setAttribute("aria-labelledby", `theme-${id}-name`);
@@ -361,7 +405,7 @@ function appearancePage(): SettingsPageView {
     for (const { id, input } of options) input.checked = id === theme;
   };
 
-  const label = sectionLabel("Theme");
+  const label = sectionLabel(t("Theme"));
   label.id = "theme-label";
   const choices = group(...options.map(({ row }) => row));
   choices.setAttribute("role", "radiogroup");
@@ -378,8 +422,8 @@ function appearancePage(): SettingsPageView {
 
 function privacyPage(actions: SettingsActions): SettingsPageView {
   const media = switchRow(
-    "Share Media Details",
-    "Include what you're watching or reading, not just the site's name.",
+    t("Share Media Details"),
+    t("Include what you're watching or reading, not just the site's name."),
     (checked) => actions.savePreferences({ shareMediaDetails: checked }),
   );
 
@@ -388,8 +432,8 @@ function privacyPage(actions: SettingsActions): SettingsPageView {
   const plus = el("button", "stepper-button");
   const value = el("output", "stepper-value");
   minus.type = plus.type = "button";
-  minus.setAttribute("aria-label", "Shorter");
-  plus.setAttribute("aria-label", "Longer");
+  minus.setAttribute("aria-label", t("Shorter"));
+  plus.setAttribute("aria-label", t("Longer"));
   minus.append(icon(faMinus));
   plus.append(icon(faPlus));
   stepper.append(minus, value, plus);
@@ -401,15 +445,15 @@ function privacyPage(actions: SettingsActions): SettingsPageView {
 
   const incognito = select<IncognitoBehavior>(
     [
-      ["pause", "Pause activity"],
-      ["share", "Share as usual"],
+      ["pause", t("Pause activity")],
+      ["share", t("Share as usual")],
     ],
     (behavior) => actions.savePreferences({ incognito: behavior }),
   );
   const incognitoRow = el("div", "setting setting-stacked");
   const incognitoText = settingText(
-    "Incognito Behaviour",
-    "What to do in private windows, if you've allowed Parousia there.",
+    t("Incognito Behaviour"),
+    t("What to do in private windows, if you've allowed Parousia there."),
   );
   incognitoText.firstElementChild?.setAttribute("id", "setting-incognito");
   incognito.input.setAttribute("aria-labelledby", "setting-incognito");
@@ -420,7 +464,7 @@ function privacyPage(actions: SettingsActions): SettingsPageView {
   let pageData = DEFAULT_PREFERENCES.pageData;
   const kinds = PAGE_DATA_KINDS.map((kind) => {
     const { title, detail } = DATA_LABELS[kind];
-    const row = switchRow(title, detail, (on) =>
+    const row = switchRow(t(title), t(detail), (on) =>
       actions.savePreferences({ pageData: { ...pageData, [kind]: on } }),
     );
     row.row.dataset.kind = kind;
@@ -429,21 +473,25 @@ function privacyPage(actions: SettingsActions): SettingsPageView {
 
   const element = el("div", "settings-page-body");
   element.append(
-    sectionLabel("What leaves your browser"),
+    sectionLabel(t("What leaves your browser")),
     group(
       media.row,
       controlRow(
-        "Idle Timeout",
-        "Keep sharing this long after you switch away from the browser. Sound playing keeps it going.",
+        t("Idle Timeout"),
+        t(
+          "Keep sharing this long after you switch away from the browser. Sound playing keeps it going.",
+        ),
         stepper,
       ),
       incognitoRow,
     ),
-    sectionLabel("What Activities may read"),
+    sectionLabel(t("What Activities may read")),
     el(
       "p",
       "settings-hint",
-      "On sites you've granted, Activities that read pages may take these. Switched off, Parousia doesn't read them, and doesn't show what an Activity's own code read.",
+      t(
+        "On sites you've granted, Activities that read pages may take these. Switched off, Parousia doesn't read them, and doesn't show what an Activity's own code read.",
+      ),
     ),
     group(...kinds.map(({ row }) => row)),
   );
@@ -470,8 +518,8 @@ function platformsPage(actions: SettingsActions): SettingsPageView {
   const rows = PLATFORM_IDS.map((id) => {
     const name = PLATFORM_NAMES[id];
     const { row, input } = switchRow(
-      `${name} Rich Presence`,
-      `Show your activity on ${name}.`,
+      t("{name} Rich Presence", { name }),
+      t("Show your activity on {name}.", { name }),
       (checked) => {
         const platforms = { ...currentPlatforms, [id]: checked };
         actions.savePreferences({ platforms });
@@ -490,24 +538,38 @@ function platformsPage(actions: SettingsActions): SettingsPageView {
   const note = el(
     "p",
     "info-note",
-    "Parousia Desktop shows your activity on these apps. Discord works now; Fluxer and Stoat are still being built, so those choices are saved for when they arrive.",
+    t(
+      "Parousia Desktop shows your activity on these apps. Discord works now. Fluxer doesn't yet let other apps show activity on your profile, and Stoat is still being built, so those choices are saved for when they arrive.",
+    ),
   );
 
   const bridge = switchRow(
-    "Discord-RPC-Extension",
-    "Show Discord presence through Discord-RPC-Extension's app (discord_rpc_ext) on this computer, when it's running. Rich Presence only: nothing else is sent to it or accepted from it.",
+    t("Discord-RPC-Extension"),
+    t(
+      "Show Discord presence through Discord-RPC-Extension's app (discord_rpc_ext) on this computer, when it's running. Rich Presence only: nothing else is sent to it or accepted from it.",
+    ),
     (checked) => actions.savePreferences({ discordRpcExtension: checked }),
   );
   const bridgeStatus = el("span", "setting-status");
   bridge.row.querySelector(".setting-text")?.append(bridgeStatus);
 
+  const malSync = switchRow(
+    t("MAL-Sync"),
+    t(
+      "Show what MAL-Sync recognizes on anime and manga sites as your activity there, in place of the site's own. Parousia asks the MAL-Sync extension about the tab you're on and takes only Rich Presence from it. Turn off MAL-Sync's own Discord Rich Presence setting so it isn't shown twice.",
+    ),
+    (checked) => actions.savePreferences({ malSync: checked }),
+  );
+
   const element = el("div", "settings-page-body");
   element.append(
-    sectionLabel("Presence platforms"),
+    sectionLabel(t("Presence platforms")),
     note,
     group(...rows),
-    sectionLabel("Discord without Parousia Desktop"),
+    sectionLabel(t("Discord without Parousia Desktop")),
     group(bridge.row),
+    sectionLabel(t("Other extensions")),
+    group(malSync.row),
   );
   return {
     element,
@@ -517,17 +579,18 @@ function platformsPage(actions: SettingsActions): SettingsPageView {
       for (const [id, status] of statuses) {
         const label = preferences.platforms[id] ? desktopPlatformLabel(report, id) : null;
         status.hidden = label === null;
-        status.textContent = label ? `Parousia Desktop: ${label}` : "";
+        status.textContent = label ? t("Parousia Desktop: {status}", { status: label }) : "";
         const showing = report?.platforms.some((p) => p.platform === id && p.state === "showing");
         status.dataset.tone = showing ? "good" : "idle";
       }
+      malSync.input.checked = preferences.malSync;
       bridge.input.checked = preferences.discordRpcExtension;
       bridge.input.disabled = !preferences.platforms.discord;
       // A report means Desktop is connected, and then it shows Discord itself.
       bridgeStatus.textContent = !preferences.platforms.discord
-        ? "Off while Discord Rich Presence is off"
+        ? t("Off while Discord Rich Presence is off")
         : report && preferences.discordRpcExtension
-          ? "Standing by while Parousia Desktop shows Discord"
+          ? t("Standing by while Parousia Desktop shows Discord")
           : discordBridgeLabel(discord);
       bridgeStatus.dataset.tone = discord.status === "connected" && !report ? "good" : "idle";
     },
@@ -546,8 +609,10 @@ function platformsPage(actions: SettingsActions): SettingsPageView {
  */
 function accessPage(inPopup: boolean): SettingsPageView {
   const all = switchRow(
-    "Access your data for all websites",
-    "Off by default. With it on, Activities that read pages can read any site, without asking site by site. Parousia never turns it on by itself.",
+    t("Access your data for all websites"),
+    t(
+      "Off by default. With it on, Activities that read pages can read any site, without asking site by site. Parousia never turns it on by itself.",
+    ),
     (on) => {
       all.input.disabled = true;
       void setAllSites(on).then(refresh);
@@ -556,17 +621,19 @@ function accessPage(inPopup: boolean): SettingsPageView {
   );
   const element = el("div", "settings-page-body");
   element.append(
-    sectionLabel("All websites"),
+    sectionLabel(t("All websites")),
     group(all.row),
     el(
       "p",
       "info-note",
-      "Otherwise your browser asks before an Activity reads a site, when you turn the Activity on. Sites you allowed are managed in your browser's settings for this extension.",
+      t(
+        "Otherwise your browser asks before an Activity reads a site, when you turn the Activity on. Sites you allowed are managed in your browser's settings for this extension.",
+      ),
     ),
   );
   if (inPopup) {
     all.input.disabled = true;
-    const open = el("button", "button button-block", "Change in the dashboard");
+    const open = el("button", "button button-block", t("Change in the dashboard"));
     open.type = "button";
     open.addEventListener("click", () => {
       void chrome.tabs.create({ url: chrome.runtime.getURL("fullscreen.html#settings/access") });
@@ -576,7 +643,7 @@ function accessPage(inPopup: boolean): SettingsPageView {
       el(
         "p",
         "info-note",
-        "Your browser asks before granting access, which it does from the dashboard.",
+        t("Your browser asks before granting access, which it does from the dashboard."),
       ),
       open,
     );
@@ -600,12 +667,12 @@ function connectionsPage(): SettingsPageView {
   visual.append(icon(faLink));
   empty.append(
     visual,
-    el("span", "pill", "Coming soon"),
-    el("p", "empty-title", "Linked accounts"),
+    el("span", "pill", t("Coming soon")),
+    el("p", "empty-title", t("Linked accounts")),
     el(
       "p",
       "empty-text",
-      "Link accounts such as Jena Cloud to share presence without Parousia Desktop.",
+      t("Link accounts such as Jena Cloud to share presence without Parousia Desktop."),
     ),
   );
   element.append(empty);
@@ -621,15 +688,15 @@ function aboutPage(): SettingsPageView {
     facts.append(row);
     return dd;
   };
-  fact("Extension", chrome.runtime.getManifest().version);
-  const desktopVersion = fact("Parousia Desktop", "Not connected");
-  fact("License", "Apache License 2.0");
+  fact(t("Extension"), chrome.runtime.getManifest().version);
+  const desktopVersion = fact(t("Parousia Desktop"), t("Not connected"));
+  fact(t("License"), "Apache License 2.0");
 
   const links = el("div", "link-list");
   for (const [title, href, glyph] of [
-    ["Source code on GitHub", REPOSITORY, faCodeBranch],
-    ["Report an issue", `${REPOSITORY}/issues`, faBug],
-    ["Security policy", `${REPOSITORY}/security/policy`, faShieldHalved],
+    [t("Source code on GitHub"), REPOSITORY, faCodeBranch],
+    [t("Report an issue"), `${REPOSITORY}/issues`, faBug],
+    [t("Security policy"), `${REPOSITORY}/security/policy`, faShieldHalved],
     ["Apache License 2.0", `${REPOSITORY}/blob/main/LICENSE`, faScaleBalanced],
   ] as const) {
     const link = el("a", "row");
@@ -647,11 +714,11 @@ function aboutPage(): SettingsPageView {
   }
 
   const element = el("div", "settings-page-body");
-  element.append(sectionLabel("Versions"), facts, sectionLabel("Links"), links);
+  element.append(sectionLabel(t("Versions")), facts, sectionLabel(t("Links")), links);
   return {
     element,
     update({ report }) {
-      desktopVersion.textContent = report?.version ?? "Not connected";
+      desktopVersion.textContent = report?.version ?? t("Not connected");
     },
   };
 }
@@ -692,9 +759,12 @@ export function categoryList(
     const glyph = el("span", "category-icon");
     glyph.append(icon(page.icon));
     const text = el("span", "row-text");
-    text.append(el("span", "row-title", page.title), el("span", "row-subtitle", page.subtitle));
+    text.append(
+      el("span", "row-title", t(page.title)),
+      el("span", "row-subtitle", t(page.subtitle)),
+    );
     row.append(glyph, text);
-    if (page.soon) row.append(el("span", "pill", "Soon"));
+    if (page.soon) row.append(el("span", "pill", t("Soon")));
     const chevron = el("span", "row-chevron");
     chevron.append(icon(faChevronRight));
     row.append(chevron);
@@ -705,5 +775,5 @@ export function categoryList(
 }
 
 export function pageTitle(page: SettingsPageId): string {
-  return SETTINGS_PAGES.find((info) => info.id === page)?.title ?? "";
+  return t(SETTINGS_PAGES.find((info) => info.id === page)?.title ?? "");
 }

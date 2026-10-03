@@ -60,6 +60,12 @@ describe("parsePreferences", () => {
     });
   });
 
+  test("MAL-Sync is off until someone turns it on, and only a boolean counts", () => {
+    expect(DEFAULT_PREFERENCES.malSync).toBe(false);
+    expect(parsePreferences({ malSync: true }).malSync).toBe(true);
+    expect(parsePreferences({ malSync: "yes" }).malSync).toBe(false);
+  });
+
   test("every kind of page data is allowed until switched off", () => {
     expect(DEFAULT_PREFERENCES.pageData).toEqual({
       media: true,
@@ -106,6 +112,30 @@ describe("applyPreferences", () => {
       url: "https://jena.systems",
       discordClientId: "1553980756731363428",
       assets: { largeImage: "logo", smallImage: "dot" },
+    });
+  });
+
+  test("without media details the kind of Activity stays, and what describes the media goes", () => {
+    const watching: Activity = {
+      ...activity,
+      type: "watching",
+      statusDisplayType: "details",
+      party: { size: 1, max: 2 },
+      assets: {
+        largeImage: "logo",
+        largeUrl: "https://jena.systems/a",
+        smallUrl: "https://jena.systems/b",
+      },
+    };
+    expect(
+      applyPreferences(watching, { ...DEFAULT_PREFERENCES, shareMediaDetails: false }),
+    ).toEqual({
+      id: "jena",
+      name: "Jena",
+      url: "https://jena.systems",
+      discordClientId: "1553980756731363428",
+      type: "watching",
+      assets: { largeImage: "logo", smallImage: undefined },
     });
   });
 

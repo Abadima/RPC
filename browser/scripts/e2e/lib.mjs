@@ -3,20 +3,24 @@
 // config or socket is never touched), its CLI, and helpers
 // for driving the extension's popup page.
 //
-// Linux only (XDG_DATA_HOME / XDG_RUNTIME_DIR are how Desktop's directories
-// are redirected), and port 57179 must be free.
+// Linux and Windows. Desktop's directories are redirected with XDG_DATA_HOME
+// and XDG_RUNTIME_DIR on Linux, and PAROUSIA_DATA_DIR on Windows (whose own
+// can't be moved by an environment variable); its Discord is the fake one's
+// directory on Linux, and the fake one's named pipe on Windows. Port 57179
+// must be free.
 
 import { execFile, spawn } from "node:child_process";
-import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 export const browserDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+export const windows = process.platform === "win32";
 export const desktopBinary =
   process.env.PAROUSIA_DESKTOP_BIN ??
-  join(browserDir, "..", "desktop", "target", "debug", "Parousia-Desktop");
+  join(browserDir, "..", "desktop", "target", "debug", `Parousia-Desktop${windows ? ".exe" : ""}`);
 export const STEP_TIMEOUT_MS = 20_000;
 
 const run = promisify(execFile);
@@ -76,7 +80,9 @@ export async function waitUntil(check, description, timeoutMs = STEP_TIMEOUT_MS)
  *
  * Desktop looks for Discord only in `discordDir`, empty unless a check puts
  * a fake Discord there (fake-discord.mjs), so a test run never shows
- * anything on a real Discord. Only `discord:verify` passes a real one.
+ * anything on a real Discord. Only `discord:verify` passes a real one. On
+ * Windows `discordDir` is a named pipe's name up to its number
+ * (`\.\pipe\...-discord-ipc-`) rather than a directory.
  */
 export async function workspace(prefix, { discordDir } = {}) {
   // Short, so socket paths stay under the 108-byte limit.
@@ -85,9 +91,10 @@ export async function workspace(prefix, { discordDir } = {}) {
   const runtimeDir = join(dir, "run");
   const ownDiscordDir = join(dir, "discord");
   await mkdir(runtimeDir, { recursive: true });
-  await chmod(runtimeDir, 0o700);
   await mkdir(ownDiscordDir, { mode: 0o700 });
-  const discord = discordDir ?? ownDiscordDir;
+  if (!windows) await chmod(runtimeDir, 0o700);
+  const discord =
+    discordDir ?? (windows ? `\\\\.\\pipe\\${basename(dir)}-discord-ipc-` : ownDiscordDir);
   return {
     dir,
     dataHome,
@@ -96,9 +103,13 @@ export async function workspace(prefix, { discordDir } = {}) {
     configDir: join(dataHome, "parousia"),
     env: {
       ...process.env,
-      XDG_DATA_HOME: dataHome,
-      XDG_RUNTIME_DIR: runtimeDir,
-      PAROUSIA_DISCORD_IPC_DIR: discord,
+      ...(windows
+        ? { PAROUSIA_DATA_DIR: join(dataHome, "parousia"), PAROUSIA_DISCORD_IPC_PIPE: discord }
+        : {
+            XDG_DATA_HOME: dataHome,
+            XDG_RUNTIME_DIR: runtimeDir,
+            PAROUSIA_DISCORD_IPC_DIR: discord,
+          }),
     },
     cleanup: () => rm(dir, { recursive: true, force: true }),
   };
@@ -228,3 +239,14 @@ export const popup = {
     return hidden ? null : page.textContent("#connection-help");
   },
 };
+
+/** An Activity's packaged manifest, from its shard (src/activities/manifest.ts, `manifestShard`), or `null`. */
+export async function readManifest(extensionDir, id) {
+  const name = id.startsWith("premid:") ? id.slice("premid:".length) : id;
+  const first = name.normalize("NFKD").charAt(0).toLowerCase();
+  const shard = /^[a-z0-9]$/.test(first) ? first : "_";
+  const shards = JSON.parse(
+    await readFile(join(extensionDir, "activities", "manifests", `${shard}.json`), "utf8"),
+  );
+  return shards[id] ?? null;
+}

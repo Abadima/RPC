@@ -2,12 +2,18 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseCatalog, parseHosts, parseIndex, parseManifest } from "../../src/activities/manifest";
+import { hostIds, manifestShard, parseCatalog, parseShard } from "../../src/activities/manifest";
 import type { ActivityInfo } from "../../src/core/activity";
 import { buildActivities, type ActivitiesBuild } from "./build";
 import { activityId, folderLetter, websiteFolders } from "./discover";
 import { discover, linkVariants, websiteKey } from "./pipeline";
-import { extractClientIds, mapPremidSettings } from "./premid";
+import {
+  descriptionFiles,
+  extractClientIds,
+  mapPremidSettings,
+  readDescriptions,
+  wrapScript,
+} from "./premid";
 import { SOURCE_ENV } from "./sources";
 
 const FIXTURES = join(import.meta.dir, "fixtures");
@@ -28,12 +34,41 @@ describe("one pipeline for both sources", () => {
       "websites/N/NoClient",
       "websites/T/Tunes",
       "websites/V/Versioned",
+      "websites/V/VLC",
     ]);
     expect(folderLetter("Jena")).toBe("J");
     expect(folderLetter("9anime")).toBe("0-9");
     expect(folderLetter("Ютюб")).toBe("#");
     expect(activityId("YouTube Music")).toBe("youtube-music");
     expect(activityId("Café & Bar")).toBe("cafe-bar");
+  });
+
+  test("PreMiD's translated descriptions are kept for the languages the views have, and go to one file each", async () => {
+    // Trimmed; Spanish isn't a language of the views; an empty one is no translation.
+    expect(
+      readDescriptions({ en: "x", fr: " Bonjour ", de: "Hallo", es: "Hola", ja: " ", ru: 4 }),
+    ).toEqual({
+      fr: "Bonjour",
+      de: "Hallo",
+    });
+    expect(readDescriptions({ zh: "x".repeat(1000) }).zh).toHaveLength(256);
+    expect(readDescriptions("Example")).toEqual({});
+    const premid = await discover("premid", PREMID);
+    const example = premid.premid.find((found) => found.manifest.info.id === "premid:Example");
+    expect(example?.descriptions).toEqual({
+      de: "Beispiel, für Tests.",
+      fr: "Exemple, pour les tests.",
+      zh: "示例，用于测试。",
+    });
+    const files = descriptionFiles(premid.premid);
+    expect([...files.keys()].sort()).toEqual([
+      "activities/descriptions/de.json",
+      "activities/descriptions/fr.json",
+      "activities/descriptions/zh.json",
+    ]);
+    expect(JSON.parse(files.get("activities/descriptions/fr.json") ?? "")).toEqual({
+      "premid:Example": "Exemple, pour les tests.",
+    });
   });
 
   test("and both come out as the same manifest: catalog entry, matcher, settings, page data, sites", async () => {
@@ -257,8 +292,22 @@ describe("PreMiD Activities (PreMiD/Activities)", () => {
       },
       { service: "Future", reason: "Activity API 2 isn't supported yet" },
       { service: "NoClient", reason: "no Discord client id in its source" },
+      {
+        service: "VLC",
+        reason: "its script assigns page text to innerHTML, which Parousia won't ship",
+      },
     ]);
     expect(premid[0]?.strings).toEqual({ "example.custom": "right now" });
+  });
+
+  test("a script's wrapper is as short as it can be: it's in every packaged script", () => {
+    expect(wrapScript("CODE;", "premid:A", {}, false)).toBe(
+      'globalThis.__pmd?.bind("premid:A",(Presence,iFrame,Slideshow,SlideshowSlide,MIN_SLIDE_TIME)=>{\n' +
+        "CODE;\n});\n",
+    );
+    const frame = wrapScript("CODE;", "premid:A", { "a.b": "c" }, true);
+    expect(frame).toStartWith('globalThis.__pmd?.bindFrame("premid:A",(');
+    expect(frame).toEndWith('\n},{"a.b":"c"});\n');
   });
 
   test("settings map to Parousia's: switches, choices by index, text, numbers, and conditions", () => {
@@ -338,36 +387,37 @@ describe("the packaged build", () => {
       "premid:Versioned",
     ]);
     expect(Object.keys(catalog.sources).sort()).toEqual(["parousia", "premid"]);
-    expect(parseIndex(await read("activities/index.json")).files).toEqual({
-      "example-site": "native/example-site",
-      tunes: "native/tunes",
-      "premid:Example": "premid/example",
-      "premid:Tunes": "premid/tunes",
-      "premid:Versioned": "premid/versioned",
-    });
-    expect(parseManifest(await read("activities/premid/example.json"))?.script?.file).toBe(
-      "example",
-    );
+    const shard = async (id: string) =>
+      parseShard(await read(`activities/manifests/${manifestShard(id)}.json`), id);
+    expect((await shard("premid:Example"))?.script?.file).toBe("example");
     // The list needs no settings, page data, or Discord Applications: each manifest has those.
     const example = catalog.activities.find((info) => info.id === "premid:Example");
     expect(example?.settings).toBeUndefined();
     expect(example?.data).toBeUndefined();
     expect(example?.discordClientId).toBeUndefined();
     expect(example?.origins).toEqual(["*://example.com/*", "*://www.example.com/*"]);
-    const full = parseManifest(await read("activities/premid/example.json"))?.info;
+    const full = (await shard("premid:Example"))?.info;
     expect(full?.settings?.length).toBeGreaterThan(0);
     expect(full?.discordClientId).toBe("503557087041683458");
-    expect(parseManifest(await read("activities/native/tunes.json"))?.info.data).toEqual([
-      "media",
-      "thumbnails",
+    // The catalog has the words (they're searched and shown there), the manifest doesn't repeat them.
+    expect(full?.description).toBeUndefined();
+    expect(full?.keywords).toBeUndefined();
+    expect(example?.description).toBeDefined();
+    expect((await shard("tunes"))?.info.data).toEqual(["media", "thumbnails"]);
+    // Manifests share a file by first letter, so there's no file per Activity and no index of them.
+    expect(Object.keys((await read("activities/manifests/t.json")) as object).sort()).toEqual([
+      "premid:Tunes",
+      "tunes",
     ]);
-    expect(parseHosts(await read("activities/hosts.json")).hosts).toEqual({
-      "example.site": ["native/example-site"],
-      "tunes.example": ["native/tunes", "premid/tunes"],
-      "example.com": ["premid/example"],
-      "www.example.com": ["premid/example"],
-      "versioned.example": ["premid/versioned"],
-    });
+    expect(await Bun.file(join(out, "activities/index.json")).exists()).toBe(false);
+    expect(await Bun.file(join(out, "activities/premid/example.json")).exists()).toBe(false);
+    const hosts = await Bun.file(join(out, "activities/hosts.txt")).text();
+    expect(hostIds(hosts, "example.site")).toEqual(["example-site"]);
+    expect(hostIds(hosts, "tunes.example")).toEqual(["tunes", "premid:Tunes"]);
+    expect(hostIds(hosts, "www.example.com")).toEqual(["premid:Example"]);
+    expect(hostIds(hosts, "sub.www.example.com")).toEqual(["premid:Example"]);
+    expect(hostIds(hosts, "versioned.example")).toEqual(["premid:Versioned"]);
+    expect(hostIds(hosts, "other.example")).toEqual([]);
     for (const file of [
       "activities/collector.js",
       "activities/premid/runtime.js",
@@ -391,9 +441,9 @@ describe("the packaged build", () => {
     expect(catalog.find((info) => info.id === "premid:Tunes")?.variants).toEqual(variants);
     expect(catalog.find((info) => info.id === "premid:Example")?.variants).toBeUndefined();
     // The background reads PreMiD's manifest and bundles the native one: both know.
-    expect(parseManifest(await read("activities/premid/tunes.json"))?.info.variants).toEqual(
-      variants,
-    );
+    expect(
+      parseShard(await read("activities/manifests/t.json"), "premid:Tunes")?.info.variants,
+    ).toEqual(variants);
     expect(build.native.find((found) => found.site === "tunes")?.manifest.info.variants).toEqual(
       variants,
     );
