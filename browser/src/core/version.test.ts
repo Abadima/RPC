@@ -8,8 +8,30 @@ describe("parseRelease", () => {
     expect(parseRelease("12.0.4+build.7")).toEqual([12, 0, 4]);
   });
 
+  test("a fourth number is a store revision of the same release", () => {
+    // Firefox takes each version once, so a fix to 1.1.0 goes out as 1.1.0.1.
+    expect(parseRelease("1.1.0.1")).toEqual([1, 1, 0]);
+    expect(compareVersions("1.1.0.1", "1.1.0")).toBe("none");
+    expect(compareVersions("1.1.0", "1.1.0.7")).toBe("none");
+    expect(compareVersions("1.1.0.1", "1.0.1")).toBe("desktop");
+    expect(compareVersions("1.1.0.1", "2.0.0")).toBeNull();
+    expect(isNewerRelease("1.1.0.1", "1.1.0")).toBe(false);
+    expect(isNewerRelease("1.1.1", "1.1.0.9")).toBe(true);
+  });
+
   test("refuses anything else", () => {
-    for (const text of ["", "1", "1.2", "v1.0.0", "1.0.0.0", "1.x.0", "-1.0.0", "1.0.0 beta"]) {
+    for (const text of [
+      "",
+      "1",
+      "1.2",
+      "v1.0.0",
+      "1.0.0.0.0",
+      "1.0.0.x",
+      "1.0.0.",
+      "1.x.0",
+      "-1.0.0",
+      "1.0.0 beta",
+    ]) {
       expect(parseRelease(text)).toBeNull();
     }
     expect(parseRelease("1.0.0-" + "a".repeat(40))).toBeNull();

@@ -63,6 +63,18 @@ describe("checkRelease", () => {
     assert.deepEqual(checkRelease("v0.3.0-rc.1", root), []);
   });
 
+  test("Firefox may be a store revision of the release, since AMO takes a version only once", () => {
+    project({ chromium: "1.1.0", firefox: "1.1.0.1" });
+    assert.deepEqual(checkRelease("v1.1.0", root), []);
+  });
+
+  test("Firefox may not be anything else but the release or a revision of it", () => {
+    for (const firefox of ["1.1.1", "1.2.0", "2.1.0", "1.0.9", "1.1.0-beta.1", "1.1.0.1.1", "1.1.01", "1.1.0."]) {
+      project({ chromium: "1.1.0", firefox });
+      assert.match(checkRelease("v1.1.0", root).join("\n"), /firefox\.json/, firefox);
+    }
+  });
+
   test("names every extension file that disagrees with the tag", () => {
     project({ chromium: "0.4.0", firefox: "0.2.0", pkg: "0.1.0" });
     const problems = checkRelease("v0.3.0", root).join("\n");

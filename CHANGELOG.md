@@ -2,7 +2,7 @@
 
 ## [V1.1.0](https://github.com/Abadima/RPC/releases/tag/v1.1.0) - V1 FIRST STABLE RELEASE
 
-This release carries the browser extension and userscript **1.1.0** and Parousia Desktop **1.0.1**. It is the first stable release, with everything since the first public beta.
+This release carries the browser extension and userscript **1.1.0** (the Firefox build is **1.1.0.1**) and Parousia Desktop **1.0.1**. It is the first stable release, with everything since the first public beta.
 
 ### ✨ New Features
 
@@ -52,7 +52,7 @@ This release carries the browser extension and userscript **1.1.0** and Parousia
 
 - **Firefox Add-ons:** Parousia is now on [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/parousia/). Desktop still asks you to allow a Firefox install once, since Firefox gives every install its own identity. The Chrome Web Store listing is in review; until it is up, the Chromium extension loads from `parousia-chromium.zip`.
 
-- **Separate Versions:** Parousia Desktop and the extension now have their own version numbers (Desktop **1.0.1**, extension and userscript **1.1.0**). A release is named for the extension's, which its manifests, `package.json`, and the userscript carry, and its notes name the Desktop it contains.
+- **Separate Versions:** Parousia Desktop and the extension now have their own version numbers (Desktop **1.0.1**, extension and userscript **1.1.0**). A release is named for the extension's, which Chromium's manifest, `package.json`, and the userscript carry, and its notes name the Desktop it contains. Firefox's build is **1.1.0.1**: Mozilla takes each version only once and already has a 1.1.0 from before the update-notice change, so this one goes out as a revision of it. It is the same release as 1.1.0 everywhere else.
 
 - **Cross-Version Compatibility:** Extension and Desktop remain connected across different minor/patch/beta versions; only major version differences force a disconnection.
 

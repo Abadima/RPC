@@ -433,6 +433,8 @@ mod tests {
         for (version, expected) in [
             ("1.0.0", Some(1)),
             ("1.0.0-beta.1", Some(1)),
+            // Firefox's store revision of a release.
+            ("1.1.0.1", Some(1)),
             ("12.3.4+build", Some(12)),
             ("2", Some(2)),
             ("", None),
