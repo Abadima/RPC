@@ -47,6 +47,13 @@ export function checkRelease(input, root) {
     if (version !== parsed.core) {
       problems.push(`${path} has version ${version}, the release needs ${parsed.core}`);
     }
+    if (version !== extension) {
+      problems.push(`${path} has version ${version}, ${manifests[0].path} has ${extension}`);
+    }
+  }
+  const pkg = JSON.parse(readFileSync(join(root, "browser", "package.json"), "utf8")).version;
+  if (pkg !== extension) {
+    problems.push(`browser/package.json has version ${pkg}, the manifests have ${extension}`);
   }
   return problems;
 }
