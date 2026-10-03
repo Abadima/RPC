@@ -60,7 +60,7 @@ jobs:
         run: bun test
 
       - name: Cache Firefox automation build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-firefox-${{ hashFiles('browser/bun.lock') }}
