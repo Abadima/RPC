@@ -51,9 +51,10 @@ describe("releaseNotes", () => {
     assert.match(releaseNotes("latest", CHANGELOG).error, /not MAJOR\.MINOR\.PATCH/);
   });
 
-  test("the real changelog has a section for the version Desktop is at", () => {
-    const cargo = readFileSync(new URL("../desktop/Cargo.toml", import.meta.url), "utf8");
-    const version = /^version\s*=\s*"([^"]+)"/m.exec(cargo)?.[1] ?? "";
+  test("the real changelog has a section for the release the extension is at", () => {
+    // A release is named for the extension's version; Desktop has its own.
+    const manifest = readFileSync(new URL("../browser/manifests/chromium.json", import.meta.url), "utf8");
+    const { version } = JSON.parse(manifest);
     const changelog = readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8");
     assert.ok(releaseNotes(version, changelog).notes, `no notes for ${version}`);
   });

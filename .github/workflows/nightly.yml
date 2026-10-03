@@ -49,7 +49,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       SOURCES: ${{ needs.build.outputs.sources }}
-      VERSION: ${{ needs.build.outputs.version }}
+      VERSION: ${{ needs.build.outputs.desktop }}
       # Newest pre-releases kept.
       KEEP: "5"
     steps:

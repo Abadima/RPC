@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { compareVersions, parseRelease } from "./version";
+import { compareVersions, isNewerRelease, parseRelease } from "./version";
 
 describe("parseRelease", () => {
   test("reads the numbers and ignores a suffix", () => {
@@ -36,5 +36,21 @@ describe("compareVersions", () => {
     expect(compareVersions("1.0.1", "1.0.0")).toBe("desktop");
     expect(compareVersions("1.1.0", "1.2.0")).toBe("extension");
     expect(compareVersions("1.0.0", "1.0.3")).toBe("extension");
+  });
+});
+
+describe("isNewerRelease", () => {
+  test("compares the numbers, and a beta of the same numbers is level", () => {
+    expect(isNewerRelease("1.0.2", "1.0.1")).toBe(true);
+    expect(isNewerRelease("1.1.0", "1.0.9")).toBe(true);
+    expect(isNewerRelease("2.0.0", "1.9.9")).toBe(true);
+    expect(isNewerRelease("1.0.1", "1.0.1")).toBe(false);
+    expect(isNewerRelease("1.0.1-beta.2", "1.0.1")).toBe(false);
+    expect(isNewerRelease("1.0.0", "1.0.1")).toBe(false);
+  });
+
+  test("is false for text that isn't a release", () => {
+    expect(isNewerRelease("nonsense", "1.0.0")).toBe(false);
+    expect(isNewerRelease("1.0.1", "")).toBe(false);
   });
 });
