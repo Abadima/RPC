@@ -9,6 +9,7 @@ import {
 import type { PlatformId } from "./preferences";
 import type { Presence } from "./presence";
 import type { PresenceTransport } from "./transport";
+import { compareVersions, type UpdateNotice } from "./version";
 
 /** A steady pace, not a backoff: quick enough to notice Desktop starting, slow enough to cost nothing. */
 export const RETRY_DELAY_MS = 10_000;
@@ -22,7 +23,9 @@ const LINGER_MS = 30_000;
  *   Retrying every `RETRY_DELAY_MS`.
  * - `not_allowed`: Desktop answered, but this extension build isn't one it
  *   trusts; someone has to allow its origin on Desktop.
- * - `incompatible`: Desktop speaks another protocol version.
+ * - `incompatible`: Desktop is another major version or speaks another
+ *   protocol. A Desktop that's merely older or newer stays `connected`, with
+ *   `update` naming the side to update.
  */
 export type DesktopStatus =
   | "idle"
@@ -34,6 +37,10 @@ export type DesktopStatus =
 
 export interface ConnectionState {
   status: DesktopStatus;
+  /** While connected: Desktop's release version. */
+  desktopVersion?: string;
+  /** While connected: which side is behind the other, when one is. */
+  update?: UpdateNotice;
 }
 
 /** Runs `run` after `delayMs`; returns a cancel function. */
@@ -43,6 +50,8 @@ export interface DesktopConnectionOptions {
   channel: ChannelOpener;
   /** Shown in Desktop's client list, e.g. "Firefox on Linux". */
   clientName: string;
+  /** This extension's release version, which Desktop checks the major of. */
+  version: string;
   /** Test seam; defaults to `setTimeout`. */
   setTimer?: Timer;
 }
@@ -85,6 +94,7 @@ const defaultTimer: Timer = (run, delayMs) => {
 export class DesktopConnection implements DesktopLink {
   readonly #opener: ChannelOpener;
   readonly #clientName: string;
+  readonly #version: string;
   readonly #setTimer: Timer;
 
   #latest: Presence | null = null;
@@ -106,6 +116,7 @@ export class DesktopConnection implements DesktopLink {
   constructor(options: DesktopConnectionOptions) {
     this.#opener = options.channel;
     this.#clientName = options.clientName;
+    this.#version = options.version;
     this.#setTimer = options.setTimer ?? defaultTimer;
   }
 
@@ -182,7 +193,7 @@ export class DesktopConnection implements DesktopLink {
     this.#paused = true;
     this.#endSession();
     this.#cancelPendingRetry();
-    this.#setState("idle");
+    this.#setState({ status: "idle" });
   }
 
   resume(): void {
@@ -196,7 +207,7 @@ export class DesktopConnection implements DesktopLink {
     this.#stopped = true;
     this.#endSession();
     this.#cancelPendingRetry();
-    this.#setState("idle");
+    this.#setState({ status: "idle" });
   }
 
   #request(message: object): Promise<DesktopReport | null> {
@@ -224,13 +235,13 @@ export class DesktopConnection implements DesktopLink {
         this.#startLinger();
       } else {
         this.#endSession();
-        this.#setState("idle");
+        this.#setState({ status: "idle" });
       }
       return;
     }
     this.#stopLinger();
     if (this.#session || this.#cancelRetry || this.#blocked) return;
-    this.#setState("connecting");
+    this.#setState({ status: "connecting" });
     this.#open();
   }
 
@@ -249,6 +260,7 @@ export class DesktopConnection implements DesktopLink {
         session.channel.send({
           type: "hello",
           protocolVersion: PROTOCOL_VERSION,
+          version: this.#version,
           name: this.#clientName,
         });
       },
@@ -263,16 +275,30 @@ export class DesktopConnection implements DesktopLink {
   #receive(session: Session, raw: unknown, failed: () => void): void {
     const message = parseServerMessage(raw);
     if (!session.ready) {
-      if (message?.type === "welcome" && message.protocolVersion === PROTOCOL_VERSION) {
-        this.#ready(session);
+      const levels =
+        message?.type === "welcome" && message.protocolVersion === PROTOCOL_VERSION
+          ? compareVersions(this.#version, message.version)
+          : null;
+      if (message?.type === "welcome" && levels !== null) {
+        this.#ready(session, {
+          status: "connected",
+          desktopVersion: message.version,
+          ...(levels !== "none" && { update: levels }),
+        });
       } else if (
-        message?.type === "reject" &&
-        (message.reason === "origin_not_allowed" || message.reason === "unsupported_version")
+        message?.type === "welcome" ||
+        (message?.type === "reject" &&
+          (message.reason === "origin_not_allowed" || message.reason === "unsupported_version"))
       ) {
         // Retrying can't change this answer; wait until someone looks.
         this.#endSession();
         this.#blocked = true;
-        this.#setState(message.reason === "origin_not_allowed" ? "not_allowed" : "incompatible");
+        this.#setState({
+          status:
+            message.type === "reject" && message.reason === "origin_not_allowed"
+              ? "not_allowed"
+              : "incompatible",
+        });
       } else {
         // Another reject, or something that isn't Desktop squatting the port.
         failed();
@@ -287,11 +313,11 @@ export class DesktopConnection implements DesktopLink {
     // `pong`, and Desktop's non-fatal rejects of single frames: nothing to do.
   }
 
-  #ready(session: Session): void {
+  #ready(session: Session, state: ConnectionState): void {
     session.cancelTimeout?.();
     session.cancelTimeout = null;
     session.ready = true;
-    this.#setState("connected");
+    this.#setState(state);
     this.#sendPresence();
     this.#evaluate();
   }
@@ -307,7 +333,7 @@ export class DesktopConnection implements DesktopLink {
   }
 
   #retry(): void {
-    this.#setState("disconnected");
+    this.#setState({ status: "disconnected" });
     if (this.#halted() || !this.#wanted()) {
       this.#evaluate();
       return;
@@ -339,7 +365,7 @@ export class DesktopConnection implements DesktopLink {
       this.#cancelLinger = null;
       if (this.#wanted()) return;
       this.#endSession();
-      this.#setState("idle");
+      this.#setState({ status: "idle" });
     }, LINGER_MS);
   }
 
@@ -348,9 +374,9 @@ export class DesktopConnection implements DesktopLink {
     this.#cancelLinger = null;
   }
 
-  #setState(status: DesktopStatus): void {
-    if (this.#state.status === status) return;
-    this.#state = { status };
+  #setState(state: ConnectionState): void {
+    if (this.#state.status === state.status) return;
+    this.#state = state;
     for (const listener of this.#listeners) listener(this.#state);
   }
 }

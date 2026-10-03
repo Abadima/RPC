@@ -1,3 +1,4 @@
+import { t } from "../core/i18n";
 import {
   SETTINGS_PAGES,
   categoryList,
@@ -24,7 +25,7 @@ export function settingsView(context: ViewContext, segment: string | undefined):
   slot(element, "title").textContent = pageTitle(current);
   slot(element, "page").append(page.element);
   return {
-    title: `${pageTitle(current)} Settings`,
+    title: t("{page} Settings", { page: pageTitle(current) }),
     element,
     update: (shell) => page.update(shell.settings),
     destroy: () => page.destroy?.(),

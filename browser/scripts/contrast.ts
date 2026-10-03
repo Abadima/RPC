@@ -7,7 +7,7 @@
  * prints the table; contrast.test.ts fails on any pair under AA.
  */
 import { join } from "node:path";
-import { THEME_IDS, THEME_LABELS, type ThemeId } from "../src/shared/appearance";
+import { THEME_IDS, type ThemeId } from "../src/shared/appearance";
 
 type Rgba = readonly [r: number, g: number, b: number, a: number];
 
@@ -351,8 +351,7 @@ if (import.meta.main) {
   const css = await Bun.file(THEME_CSS).text();
   const results = audit(css);
   for (const id of THEME_IDS) {
-    const { name } = THEME_LABELS[id];
-    console.log(`\n${name}`);
+    console.log(`\n${id}`);
     for (const { check, ratio, required, pass } of results.filter((r) => r.theme === id)) {
       const on = check.on.map((token) => token.slice(2)).join(" + ");
       console.log(

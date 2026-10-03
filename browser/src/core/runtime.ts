@@ -2,6 +2,7 @@ import type { Activity, ActivityInfo } from "./activity";
 import { settingValues } from "./activity-state";
 import { createPresence, type Presence } from "./presence";
 import type { ActivityRegistry, Page, RegisteredActivity, SettingValues } from "./registry";
+import { withSiteImage } from "./site-image";
 
 export interface RuntimeOptions {
   /** Whether an Activity may run at `url`: turned on, and granted the site if it reads pages. By default, every one may. */
@@ -10,6 +11,12 @@ export interface RuntimeOptions {
   settings?: (info: ActivityInfo) => SettingValues;
   /** What to share when no Activity has anything to: the Default Activity, if one is set up. */
   fallback?: () => Activity | null;
+  /**
+   * An Activity another extension supplies for the page being shared (see
+   * compat/malsync.ts). It takes the page over: what the registry would
+   * detect there isn't looked at while there is one.
+   */
+  external?: () => Activity | null;
 }
 
 /**
@@ -36,13 +43,17 @@ export class PresenceRuntime {
 
   /** The Presence for `page`, or for no page at all (a browser page, a new tab): the fallback, if any. */
   resolve(page: Page | null): Presence {
+    const external = page && this.options.external?.();
+    if (external) return createPresence(external);
     const registered = page && this.find(page.url);
     let activity: Activity | null = null;
     if (page && registered) {
       const settings = this.options.settings?.(registered.info) ?? settingValues(registered.info);
       try {
         const detected = registered.detect(page, settings);
-        activity = detected && stampClientId(registered, detected);
+        activity =
+          detected &&
+          withSiteImage(stampClientId(registered, detected), registered.info, page.favicon);
       } catch {
         // A broken Activity shows nothing rather than stopping detection for every other one.
       }

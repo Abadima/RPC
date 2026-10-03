@@ -1,3 +1,4 @@
+import { t } from "../core/i18n";
 import { renderPresence } from "../shared/presence-view";
 import {
   DEFAULT_ACTIVITY_LIMITS,
@@ -73,8 +74,10 @@ export function defaultView(): View {
   let saved: DefaultActivity = EMPTY_DEFAULT_ACTIVITY;
 
   const toggle = switchRow(
-    "Show a Default Activity",
-    "Shared whenever the tab you're on has no Activity: a site none covers, a browser page, a new tab.",
+    t("Show a Default Activity"),
+    t(
+      "Shared whenever the tab you're on has no Activity: a site none covers, a browser page, a new tab.",
+    ),
     (on) => void setEnabled(on),
     "default-on",
   );
@@ -83,74 +86,85 @@ export function defaultView(): View {
   const fields: Record<TextField, Field & { element: HTMLElement }> = {
     name: field(
       "default-name",
-      "Name",
-      'Shown as what you\'re doing, like "Playing <name>". Required.',
+      t("Name"),
+      t('Shown as what you\'re doing, like "Playing <name>". Required.'),
       text,
     ),
-    details: field("default-details", "Details", "The first line under the name.", text),
-    state: field("default-state", "State", "The second line.", text),
+    details: field("default-details", t("Details"), t("The first line under the name."), text),
+    state: field("default-state", t("State"), t("The second line."), text),
     largeImage: field(
       "default-largeImage",
-      "Large image",
-      "An https image link, or an asset name from your own Discord Application.",
+      t("Large image"),
+      t("An https image link, or an asset name from your own Discord Application."),
       image,
     ),
     largeText: field(
       "default-largeText",
-      "Large image text",
-      "Shown when someone hovers over it.",
+      t("Large image text"),
+      t("Shown when someone hovers over it."),
       text,
     ),
     smallImage: field(
       "default-smallImage",
-      "Small image",
-      "Shown in the large image's corner.",
+      t("Small image"),
+      t("Shown in the large image's corner."),
       image,
     ),
     smallText: field(
       "default-smallText",
-      "Small image text",
-      "Shown when someone hovers over it.",
+      t("Small image text"),
+      t("Shown when someone hovers over it."),
       text,
     ),
     discordClientId: field(
       "default-discordClientId",
-      "Discord Application ID",
-      "Optional: show it as your own Discord Application instead of Parousia.",
+      t("Discord Application ID"),
+      t("Optional: show it as your own Discord Application instead of Parousia."),
       20,
     ),
   };
   const buttons = [0, 1].map((n) => ({
-    label: field(`default-button-${n}-label`, `Button ${n + 1}`, "Its label.", label),
-    url: field(`default-button-${n}-url`, `Button ${n + 1} link`, "Where it goes.", link, "url"),
+    label: field(
+      `default-button-${n}-label`,
+      t("Button {n}", { n: n + 1 }),
+      t("Its label."),
+      label,
+    ),
+    url: field(
+      `default-button-${n}-url`,
+      t("Button {n} link", { n: n + 1 }),
+      t("Where it goes."),
+      link,
+      "url",
+    ),
   }));
   const buttonsError = el("p", "field-error");
   buttonsError.hidden = true;
   buttonsError.setAttribute("role", "alert");
 
   const elapsed = switchRow(
-    "Show elapsed time",
-    "How long it's been shown, counted from when it started.",
+    t("Show elapsed time"),
+    t("How long it's been shown, counted from when it started."),
     () => renderPreview(),
     "default-elapsed",
   );
 
   form.append(
-    sectionLabel("Text"),
+    sectionLabel(t("Text")),
     group(fields.name.element, fields.details.element, fields.state.element),
-    sectionLabel("Images"),
+    sectionLabel(t("Images")),
     group(
       fields.largeImage.element,
       fields.largeText.element,
       fields.smallImage.element,
       fields.smallText.element,
     ),
-    sectionLabel("Buttons"),
+    sectionLabel(t("Buttons")),
     group(...buttons.flatMap((button) => [button.label.element, button.url.element]), buttonsError),
-    sectionLabel("More"),
+    sectionLabel(t("More")),
     group(elapsed.row, fields.discordClientId.element),
   );
-  const save = el("button", "button", "Save");
+  const save = el("button", "button", t("Save"));
   save.type = "submit";
   const actions = el("div", "form-actions");
   actions.append(save, status);
@@ -232,11 +246,11 @@ export function defaultView(): View {
     // It turns on only as something that can be shown.
     if (on && !showProblems(activity)) {
       toggle.input.checked = false;
-      status.textContent = "Fix what's marked, then turn it on.";
+      status.textContent = t("Fix what's marked, then turn it on.");
       return;
     }
     fill(await saveDefaultActivity(on ? activity : { ...saved, enabled: false }));
-    status.textContent = on ? "On." : "Off.";
+    status.textContent = on ? t("On.") : t("Off.");
   }
 
   form.addEventListener("input", () => {
@@ -247,14 +261,14 @@ export function defaultView(): View {
     event.preventDefault();
     const activity = read();
     if (!showProblems(activity)) {
-      status.textContent = "Not saved: fix what's marked.";
+      status.textContent = t("Not saved: fix what's marked.");
       return;
     }
     void saveDefaultActivity(activity).then((next) => {
       fill(next);
       status.textContent = next.enabled
-        ? "Saved. It's shown when no Activity is."
-        : "Saved. Turn it on above to share it.";
+        ? t("Saved. It's shown when no Activity is.")
+        : t("Saved. Turn it on above to share it.");
     });
   });
 
@@ -265,7 +279,7 @@ export function defaultView(): View {
   void loadDefaultActivity().then(fill, () => fill(EMPTY_DEFAULT_ACTIVITY));
 
   return {
-    title: "Default Activity",
+    title: t("Default Activity"),
     element,
     update() {},
     destroy: stop,

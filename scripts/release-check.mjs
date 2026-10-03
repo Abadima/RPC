@@ -1,8 +1,10 @@
 #!/usr/bin/env node
-// Checks that a release version agrees with the files that carry one, so a tag
-// never publishes artifacts that report another version. Extension manifests
-// take numbers only (`1.2.3`); a pre-release suffix (`1.2.3-rc.1`) lives in
-// Desktop's Cargo.toml and the tag.
+// Checks that a release agrees with the files that carry a version, so a tag
+// never publishes artifacts that report another one. The tag is Parousia
+// Desktop's version (Desktop's Cargo.toml, with a pre-release suffix such as
+// `1.2.3-rc.1` where there is one). The extension versions on its own and
+// carries numbers only (`1.2.3`), because the stores take nothing else: both
+// manifests and browser/package.json must say the same one, whatever the tag.
 //
 //   node scripts/release-check.mjs v1.2.3
 import { readFileSync } from "node:fs";
@@ -35,12 +37,23 @@ export function checkRelease(input, root) {
   if (cargo !== parsed.version) {
     problems.push(`desktop/Cargo.toml has version ${cargo}, the release is ${parsed.version}`);
   }
-  for (const target of MANIFESTS) {
+
+  const manifests = MANIFESTS.map((target) => {
     const path = join("browser", "manifests", `${target}.json`);
-    const { version } = JSON.parse(readFileSync(join(root, path), "utf8"));
-    if (version !== parsed.core) {
-      problems.push(`${path} has version ${version}, the release needs ${parsed.core}`);
+    return { path, version: JSON.parse(readFileSync(join(root, path), "utf8")).version };
+  });
+  const extension = manifests[0].version;
+  for (const { path, version } of manifests) {
+    if (parseVersion(version)?.prerelease !== false) {
+      problems.push(`${path} has version ${version}, which isn't MAJOR.MINOR.PATCH (the stores take no suffix)`);
     }
+    if (version !== extension) {
+      problems.push(`${path} has version ${version}, ${manifests[0].path} has ${extension}`);
+    }
+  }
+  const pkg = JSON.parse(readFileSync(join(root, "browser", "package.json"), "utf8")).version;
+  if (pkg !== extension) {
+    problems.push(`browser/package.json has version ${pkg}, the manifests have ${extension}`);
   }
   return problems;
 }
@@ -51,5 +64,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const problems = checkRelease(input, root);
   for (const problem of problems) console.error(`release-check: ${problem}`);
   if (problems.length > 0) process.exit(1);
-  console.log(`release-check: ${input} matches Desktop and the extension manifests`);
+  console.log(`release-check: ${input} matches Desktop, and the extension's manifests agree`);
 }

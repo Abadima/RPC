@@ -5,39 +5,23 @@
     windows_subsystem = "windows"
 )]
 
-mod config;
-mod console;
-mod control;
-mod discord;
-mod http;
-mod hub;
-mod identity;
-#[cfg(unix)]
-mod ipc;
-mod peer;
+mod adapters;
+mod app;
+mod link;
 mod platform;
-mod presence;
-mod protocol;
-mod rate;
-mod server;
-mod session;
-#[cfg(any(target_os = "linux", windows))]
-#[cfg_attr(windows, path = "wintray.rs")]
-mod tray;
-#[cfg(windows)]
-mod winsys;
-mod ws;
 
 use std::io::IsTerminal;
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::thread;
 
-use config::{AppPaths, Settings};
-use control::ControlRequest;
-use discord::DiscordAdapter;
-use hub::{Hub, Setting};
-use server::Server;
+use adapters::discord::{self, DiscordAdapter};
+use app::config::{AppPaths, Settings};
+use app::console;
+use app::control::{self, ControlRequest};
+use app::hub::{Hub, Setting};
+use link::server::{self, Server};
+use platform::TrayExit;
 
 const USAGE: &str = "\
 Usage: Parousia-Desktop [command] [--json]
@@ -58,9 +42,8 @@ Commands (talk to the running Desktop):
 
 fn main() -> ExitCode {
     // Commands typed into a terminal print there; a plain launch stays windowless.
-    #[cfg(windows)]
     if std::env::args_os().len() > 1 {
-        winsys::attach_parent_console();
+        platform::attach_parent_console();
     }
     let args: Vec<String> = std::env::args_os()
         .skip(1)
@@ -117,16 +100,21 @@ fn main() -> ExitCode {
 
 fn fail(message: impl std::fmt::Display) -> ExitCode {
     eprintln!("parousia-desktop: {message}");
-    #[cfg(windows)]
-    winsys::alert(&message.to_string());
+    platform::alert(&message.to_string());
     ExitCode::FAILURE
 }
 
 /// What to tell someone whose Desktop can't take its port. The port is fixed
 /// (the extensions connect to exactly this address), so the fix is theirs.
-fn bind_failure(err: &std::io::Error) -> String {
+/// `holder` is who has it, where that can be told.
+fn bind_failure(err: &std::io::Error, holder: platform::Owner) -> String {
     let address = server::ADDRESS;
-    if err.kind() == std::io::ErrorKind::AddrInUse {
+    if err.kind() == std::io::ErrorKind::AddrInUse && holder == platform::Owner::OtherUser {
+        format!(
+            "port {} is held by a program another user on this computer runs, so Parousia Desktop can't start, and Parousia in your browsers may be sending it what you're doing instead. Find out what's using {address}, or ask an administrator, before using Parousia here.",
+            server::DEFAULT_PORT
+        )
+    } else if err.kind() == std::io::ErrorKind::AddrInUse {
         format!(
             "port {} is already in use, so Parousia Desktop can't start. Close whatever is using {address} (often another copy of Parousia Desktop that a previous run left behind), then start it again.",
             server::DEFAULT_PORT
@@ -149,10 +137,9 @@ fn run_desktop(with_tray: bool, debug: bool) -> ExitCode {
         Err(err) => return fail(format!("invalid {}: {err}", config_path.display())),
     };
 
-    // The IPC socket doubles as the single-instance check.
-    #[cfg(unix)]
-    let ipc_listener = match ipc::bind(&paths.socket_path()) {
-        Ok(listener) => listener,
+    // The control socket doubles as the single-instance check.
+    let control_server = match platform::control::claim(&paths) {
+        Ok(server) => server,
         Err(err) if err.kind() == std::io::ErrorKind::AddrInUse => {
             println!("Parousia Desktop is already running.");
             return send(ControlRequest::Show, false);
@@ -161,10 +148,16 @@ fn run_desktop(with_tray: bool, debug: bool) -> ExitCode {
     };
 
     // Without the port no browser can reach Desktop, so there's nothing to
-    // run. Where there's no IPC socket yet, this also stops a second Desktop.
+    // run. Where there's no control socket (Windows), this also stops a second
+    // Desktop.
     let listener = match Server::bind() {
         Ok(listener) => listener,
-        Err(err) => return fail(bind_failure(&err)),
+        Err(err) => {
+            return fail(bind_failure(
+                &err,
+                platform::listener_owner(server::DEFAULT_PORT),
+            ));
+        }
     };
     let discord_client_id = settings
         .discord_client_id
@@ -174,7 +167,6 @@ fn run_desktop(with_tray: bool, debug: bool) -> ExitCode {
     hub.set_debug(debug);
     hub.add_adapter(Box::new(DiscordAdapter::new(
         discord_client_id,
-        owner_uid(&paths),
         hub.reporter(),
     )));
     {
@@ -184,11 +176,7 @@ fn run_desktop(with_tray: bool, debug: bool) -> ExitCode {
     if debug {
         println!("Parousia Desktop listening on {}", server::ADDRESS);
     }
-    #[cfg(unix)]
-    {
-        let hub = Arc::clone(&hub);
-        thread::spawn(move || ipc::serve(ipc_listener, hub));
-    }
+    platform::control::start(control_server, Arc::clone(&hub));
     if debug {
         println!(
             "Parousia Desktop: settings in {}",
@@ -199,54 +187,27 @@ fn run_desktop(with_tray: bool, debug: bool) -> ExitCode {
     if std::io::stdin().is_terminal() {
         console::spawn(Arc::clone(&hub), quit);
     }
-    #[cfg(any(target_os = "linux", windows))]
     if with_tray {
-        match tray::run(Arc::clone(&hub)) {
-            tray::Exit::Quit => quit(),
-            tray::Exit::Unavailable(reason) if hub.debug() => eprintln!(
+        match platform::run_tray(Arc::clone(&hub)) {
+            Some(TrayExit::Quit) => quit(),
+            Some(TrayExit::Unavailable(reason)) if hub.debug() => eprintln!(
                 "parousia-desktop: no tray ({reason}); still running. Use `Parousia-Desktop status`."
             ),
-            tray::Exit::Unavailable(_) => {}
+            Some(TrayExit::Unavailable(_)) | None => {}
         }
     }
-    #[cfg(not(any(target_os = "linux", windows)))]
-    let _ = with_tray;
     loop {
         thread::park();
     }
 }
 
-/// This user's uid, as the owner of the data directory Desktop just made
-/// private to it: only a Discord socket with the same owner is trusted.
-#[cfg(unix)]
-fn owner_uid(paths: &AppPaths) -> Option<u32> {
-    use std::os::unix::fs::MetadataExt;
-    std::fs::metadata(&paths.data_dir)
-        .ok()
-        .map(|meta| meta.uid())
-}
-
-#[cfg(not(unix))]
-fn owner_uid(_paths: &AppPaths) -> Option<u32> {
-    None
-}
-
-/// Removes the socket so the next start doesn't have to probe it.
 fn quit() -> ! {
-    #[cfg(unix)]
-    if let Ok(paths) = AppPaths::locate() {
-        let _ = std::fs::remove_file(paths.socket_path());
-    }
+    platform::control::release();
     std::process::exit(0)
 }
 
-#[cfg(unix)]
 fn send(request: ControlRequest, json: bool) -> ExitCode {
-    let paths = match AppPaths::locate() {
-        Ok(paths) => paths,
-        Err(err) => return fail(err),
-    };
-    match ipc::request(&paths.socket_path(), &request) {
+    match platform::control::send(&request) {
         Ok(response) => {
             if json {
                 println!(
@@ -266,13 +227,6 @@ fn send(request: ControlRequest, json: bool) -> ExitCode {
     }
 }
 
-#[cfg(not(unix))]
-fn send(_request: ControlRequest, _json: bool) -> ExitCode {
-    fail(
-        "controlling Desktop from another terminal isn't supported on this platform yet; use the tray menu or the Parousia extension's dashboard",
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -280,15 +234,31 @@ mod tests {
 
     #[test]
     fn a_taken_port_says_which_and_what_to_do() {
-        let message = bind_failure(&Error::from(ErrorKind::AddrInUse));
+        let message = bind_failure(
+            &Error::from(ErrorKind::AddrInUse),
+            platform::Owner::ThisUser,
+        );
         assert!(message.contains("57179"));
         assert!(message.contains("already in use"));
         assert!(message.contains("Close whatever is using 127.0.0.1:57179"));
     }
 
     #[test]
+    fn a_port_another_user_holds_is_called_out() {
+        let message = bind_failure(
+            &Error::from(ErrorKind::AddrInUse),
+            platform::Owner::OtherUser,
+        );
+        assert!(message.contains("another user"), "{message}");
+        assert!(message.contains("127.0.0.1:57179"));
+    }
+
+    #[test]
     fn any_other_failure_keeps_its_reason() {
-        let message = bind_failure(&Error::new(ErrorKind::PermissionDenied, "denied"));
+        let message = bind_failure(
+            &Error::new(ErrorKind::PermissionDenied, "denied"),
+            platform::Owner::Unknown,
+        );
         assert!(message.contains("denied"));
         assert!(message.contains("127.0.0.1:57179"));
     }

@@ -46,7 +46,8 @@ jobs:
         run: cargo fmt --check
 
   # Desktop has Windows- and macOS-only code (the Discord named pipe, for
-  # one) that the Linux job never compiles. Tests stay on Linux for now.
+  # one) that the Linux job never compiles. Windows runs the tests too, against
+  # real named pipes, the TCP table, and the registry; macOS only lints.
   cross:
     name: Clippy (${{ matrix.os }})
     strategy:
@@ -67,6 +68,10 @@ jobs:
 
       - name: Clippy
         run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Test
+        if: matrix.os == 'windows-latest'
+        run: cargo test --locked
 
   audit:
     name: Dependency audit

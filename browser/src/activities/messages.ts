@@ -1,5 +1,5 @@
 import { PAGE_DATA_KINDS, type PageDataKind, type SettingValue } from "../core/activity";
-import type { PageData, PageMedia } from "../core/registry";
+import type { PageData, PageImage, PageMedia } from "../core/registry";
 import { parsePresenceData, type PresenceDataWire } from "../premid/presence-data";
 
 /**
@@ -198,6 +198,10 @@ export type ToCollector =
 
 const MAX_TEXT = 256;
 const MAX_URL = 512;
+/** `images` as they're kept: a list that fits a message, of addresses that fit Discord's own limit. */
+export const MAX_IMAGES = 24;
+export const MAX_IMAGE_URL = 300;
+export const MAX_IMAGE_ALT = 64;
 const text = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim() ? value.trim().slice(0, MAX_TEXT) : undefined;
 const seconds = (value: unknown): number | undefined =>
@@ -216,6 +220,7 @@ export function parsePageData(value: unknown): PageData | null {
       if (found) media[field] = found;
     }
     if (typeof value.media.playing === "boolean") media.playing = value.media.playing;
+    if (value.media.kind === "video" || value.media.kind === "audio") media.kind = value.media.kind;
     const duration = seconds(value.media.duration);
     if (duration !== undefined) media.duration = duration;
     const start = unixMs(value.media.start);
@@ -230,6 +235,19 @@ export function parsePageData(value: unknown): PageData | null {
     value.thumbnail.length <= MAX_URL
   ) {
     data.thumbnail = value.thumbnail;
+  }
+  if (Array.isArray(value.images)) {
+    const images: PageImage[] = [];
+    for (const item of value.images.slice(0, MAX_IMAGES)) {
+      if (!isObject(item)) continue;
+      const { src } = item;
+      if (typeof src !== "string" || !src.startsWith("https://") || src.length > MAX_IMAGE_URL) {
+        continue;
+      }
+      const alt = typeof item.alt === "string" ? item.alt.trim().slice(0, MAX_IMAGE_ALT) : "";
+      images.push(alt ? { src, alt } : { src });
+    }
+    if (images.length > 0) data.images = images;
   }
   return data;
 }

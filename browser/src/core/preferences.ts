@@ -1,4 +1,5 @@
 import type { Activity, PageDataKind } from "./activity";
+import { LANGUAGES, t, type LanguagePreference } from "./i18n";
 
 /**
  * The extension's own settings, kept in `chrome.storage.local` so the
@@ -7,12 +8,11 @@ import type { Activity, PageDataKind } from "./activity";
  */
 export type IncognitoBehavior = "pause" | "share";
 export type PlatformId = "discord" | "fluxer" | "stoat";
-export type Language = "en";
 /** Which kinds of page data Activities may read, for every Activity at once. */
 export type PageDataPreferences = Readonly<Record<PageDataKind, boolean>>;
 
 export interface Preferences {
-  language: Language;
+  language: LanguagePreference;
   /** Off: publish only the Activity's name, never its details, state, or image captions. */
   shareMediaDetails: boolean;
   /** How long presence stays after the browser loses focus; 0 clears it at once. Sound playing in the tab keeps it either way. */
@@ -22,6 +22,8 @@ export interface Preferences {
   platforms: Record<PlatformId, boolean>;
   /** Also show Discord presence through Discord-RPC-Extension's app, when it's running. */
   discordRpcExtension: boolean;
+  /** Show what the MAL-Sync extension recognizes on a page as the Activity, by asking it about the tab being shared. */
+  malSync: boolean;
   /**
    * What Activities may read from pages they've been granted: switched off,
    * a kind is never collected (native Activities) or never shown (PreMiD's).
@@ -33,12 +35,13 @@ export const PLATFORM_IDS: readonly PlatformId[] = ["discord", "fluxer", "stoat"
 export const IDLE_TIMEOUT_STEPS: readonly number[] = [0, 1, 2, 5, 10, 15, 30, 60];
 
 export const DEFAULT_PREFERENCES: Preferences = {
-  language: "en",
+  language: "auto",
   shareMediaDetails: true,
-  idleTimeoutMinutes: 0,
+  idleTimeoutMinutes: 1,
   incognito: "pause",
   platforms: { discord: true, fluxer: true, stoat: true },
   discordRpcExtension: true,
+  malSync: false,
   pageData: { media: true, thumbnails: true, creatorIcons: true },
 };
 
@@ -55,7 +58,7 @@ export function parsePreferences(value: unknown): Preferences {
   const flag = (candidate: unknown, fallback: boolean): boolean =>
     typeof candidate === "boolean" ? candidate : fallback;
   return {
-    language: "en",
+    language: LANGUAGES.find((language) => language === stored.language) ?? "auto",
     shareMediaDetails: flag(stored.shareMediaDetails, DEFAULT_PREFERENCES.shareMediaDetails),
     idleTimeoutMinutes:
       typeof stored.idleTimeoutMinutes === "number" &&
@@ -72,6 +75,7 @@ export function parsePreferences(value: unknown): Preferences {
       stoat: flag(platforms.stoat, DEFAULT_PREFERENCES.platforms.stoat),
     },
     discordRpcExtension: flag(stored.discordRpcExtension, DEFAULT_PREFERENCES.discordRpcExtension),
+    malSync: flag(stored.malSync, DEFAULT_PREFERENCES.malSync),
     pageData: {
       media: flag(pageData.media, DEFAULT_PREFERENCES.pageData.media),
       thumbnails: flag(pageData.thumbnails, DEFAULT_PREFERENCES.pageData.thumbnails),
@@ -88,15 +92,16 @@ export function stepIdleTimeout(current: number, direction: 1 | -1): number {
 }
 
 export function formatIdleTimeout(minutes: number): string {
-  return minutes === 0 ? "Off" : minutes === 60 ? "1 h" : `${minutes} min`;
+  return minutes === 0 ? t("Off") : minutes === 60 ? t("1 h") : t("{n} min", { n: minutes });
 }
 
 /**
  * What may be shared of `activity` under `preferences`, from a tab that may
  * be private. Without media details: the Activity's own name (`ownName`: an
  * Activity may set one from the page, like a song's title), link, and images
- * only (no captions, detail or state links, or buttons, which describe the
- * media too).
+ * only (no captions, detail or state links, links on the images, buttons,
+ * party, or choice of status line, which describe the media too). Its type
+ * stays: "Watching" says nothing about what.
  */
 export function applyPreferences(
   activity: Activity | null,
@@ -113,6 +118,8 @@ export function applyPreferences(
     detailsUrl: _detailsUrl,
     stateUrl: _stateUrl,
     buttons: _buttons,
+    statusDisplayType: _statusDisplayType,
+    party: _party,
     assets,
     ...rest
   } = activity;

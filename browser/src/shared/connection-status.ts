@@ -1,5 +1,6 @@
 import type { ConnectionState, DesktopStatus } from "../core/desktop-connection";
 import type { DesktopReport, DesktopSetting } from "../core/desktop-protocol";
+import { msg, t } from "../core/i18n";
 import { UI_PORT_NAME, parseUiEvent, type BridgeState, type UiActivity } from "../core/ui-port";
 
 export interface BackgroundLink {
@@ -67,12 +68,32 @@ interface StatusView {
 }
 
 const STATUS_VIEW: Record<DesktopStatus, StatusView> = {
-  idle: { label: "Not connected", badge: "Idle", tone: "idle" },
-  connecting: { label: "Connecting to Parousia Desktop…", badge: "Connecting", tone: "busy" },
-  connected: { label: "Connected to Parousia Desktop", badge: "Connected", tone: "good" },
-  disconnected: { label: "Not connected to Parousia Desktop", badge: "Disconnected", tone: "bad" },
-  not_allowed: { label: "Not allowed by Parousia Desktop", badge: "Not allowed", tone: "warn" },
-  incompatible: { label: "Parousia Desktop version mismatch", badge: "Mismatch", tone: "warn" },
+  idle: { label: msg("Not connected"), badge: msg("Idle"), tone: "idle" },
+  connecting: {
+    label: msg("Connecting to Parousia Desktop…"),
+    badge: msg("Connecting"),
+    tone: "busy",
+  },
+  connected: {
+    label: msg("Connected to Parousia Desktop"),
+    badge: msg("Connected"),
+    tone: "good",
+  },
+  disconnected: {
+    label: msg("Not connected to Parousia Desktop"),
+    badge: msg("Disconnected"),
+    tone: "bad",
+  },
+  not_allowed: {
+    label: msg("Not allowed by Parousia Desktop"),
+    badge: msg("Not allowed"),
+    tone: "warn",
+  },
+  incompatible: {
+    label: msg("Parousia Desktop version mismatch"),
+    badge: msg("Mismatch"),
+    tone: "warn",
+  },
 };
 
 /**
@@ -81,7 +102,7 @@ const STATUS_VIEW: Record<DesktopStatus, StatusView> = {
  * the text is testable without a DOM.
  */
 export function connectionStatusLabel(state: ConnectionState, version?: string): string {
-  const label = STATUS_VIEW[state.status].label;
+  const label = t(STATUS_VIEW[state.status].label);
   return state.status === "connected" && version ? `${label} v${version}` : label;
 }
 
@@ -93,9 +114,9 @@ export function connectionBadge(
   state: ConnectionState,
   sharing = false,
 ): { text: string; tone: ConnectionTone } {
-  if (state.status === "connected" && !sharing) return { text: "Idle", tone: "idle" };
+  if (state.status === "connected" && !sharing) return { text: t("Idle"), tone: "idle" };
   const { badge, tone } = STATUS_VIEW[state.status];
-  return { text: badge, tone };
+  return { text: t(badge), tone };
 }
 
 export interface ConnectionHelp {
@@ -110,20 +131,21 @@ export function connectionHelp(state: ConnectionState, origin: string): Connecti
   switch (state.status) {
     case "not_allowed":
       return {
-        title: "Parousia Desktop doesn't recognize this build",
-        detail: "Allow it from the Parousia Desktop menu (Diagnostics), or run:",
+        title: t("Parousia Desktop doesn't recognize this build"),
+        detail: t("Allow it from the Parousia Desktop menu (Diagnostics), or run:"),
         command: `Parousia-Desktop allow ${origin}`,
       };
     case "incompatible":
       return {
-        title: "Versions don't match",
-        detail:
-          "This extension and Parousia Desktop are different versions. Update whichever is older.",
+        title: t("Versions don't match"),
+        detail: t(
+          "This extension and Parousia Desktop are different major versions. Update whichever is older.",
+        ),
       };
     case "disconnected":
       return {
-        title: "Parousia Desktop couldn't be found",
-        detail: "Launch Parousia Desktop to share your browser activity.",
+        title: t("Parousia Desktop couldn't be found"),
+        detail: t("Launch Parousia Desktop to share your browser activity."),
       };
     default:
       return null;
@@ -143,16 +165,18 @@ export function desktopPlatformLabel(
   if (!adapter) return null;
   switch (adapter.state) {
     case "showing":
-      return adapter.activity ? `Showing ${adapter.activity}` : "Showing your activity";
+      return adapter.activity
+        ? t("Showing {activity}", { activity: adapter.activity })
+        : t("Showing your activity");
     case "connected":
     case "idle":
-      return "Ready";
+      return t("Ready");
     case "connecting":
-      return "Connecting…";
+      return t("Connecting…");
     case "not_running":
-      return "Not running";
+      return t("Not running");
     case "refused":
-      return adapter.error ? `Refused: ${adapter.error}` : "Refused";
+      return adapter.error ? t("Refused: {error}", { error: adapter.error }) : t("Refused");
   }
 }
 
@@ -169,13 +193,15 @@ export function showsDiscordBridge(state: ConnectionState): boolean {
 export function discordBridgeLabel(state: BridgeState): string {
   switch (state.status) {
     case "off":
-      return "Off";
+      return t("Off");
     case "connected":
-      return state.version ? `Connected, v${state.version}` : "Connected";
+      return state.version
+        ? t("Connected, v{version}", { version: state.version })
+        : t("Connected");
     case "unavailable":
-      return "Not running";
+      return t("Not running");
     default:
-      return "Looking for it…";
+      return t("Looking for it…");
   }
 }
 

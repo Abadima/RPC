@@ -1,3 +1,4 @@
+import { translateTree } from "../core/i18n";
 import type { PresenceSnapshot } from "../shared/presence-view";
 import type { ActivityInfo } from "../core/activity";
 import type { ConnectionState } from "../core/desktop-connection";
@@ -35,7 +36,7 @@ export interface View {
   destroy?(): void;
 }
 
-/** A copy of `<template id="view-…">`'s content, as one element. */
+/** A copy of `<template id="view-…">`'s content, as one element, in the chosen language. */
 export function fromTemplate(name: string): HTMLElement {
   const template = document.getElementById(`view-${name}`);
   const element =
@@ -44,6 +45,7 @@ export function fromTemplate(name: string): HTMLElement {
       : null;
   if (!(element instanceof HTMLElement))
     throw new Error(`fullscreen.html is missing #view-${name}`);
+  translateTree(element);
   return element;
 }
 

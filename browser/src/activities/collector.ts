@@ -1,6 +1,13 @@
 import type { PageDataKind } from "../core/activity";
-import type { PageData, PageMedia } from "../core/registry";
-import { PAGE_DATA_PORT, parseToCollector } from "./messages";
+import type { PageData, PageImage, PageMedia } from "../core/registry";
+import {
+  MAX_IMAGE_ALT,
+  MAX_IMAGE_URL,
+  MAX_IMAGES,
+  PAGE_DATA_PORT,
+  parseToCollector,
+} from "./messages";
+import { PlayerBridge, type PlayerClock } from "./player-bridge";
 
 /**
  * Parousia's page-data collector: how a native Activity that declares page
@@ -10,10 +17,14 @@ import { PAGE_DATA_PORT, parseToCollector } from "./messages";
  *
  * - `media`: the page's Media Session (title, artist, album, and whether it
  *   says it's playing) and its playing (or first) `<video>`/`<audio>` element
- *   (whether it's playing if the session doesn't say, duration, and the clock
- *   as `start` and `end`).
+ *   (which of the two it is, whether it's playing if the session doesn't say,
+ *   duration, and the clock as `start` and `end`). A player in an iframe is
+ *   out of reach, so where the page's iframe tells the page how it's doing
+ *   (`postMessage`), that report is the clock instead (player-bridge.ts).
  * - `thumbnails`: the Media Session's largest `https` artwork, or the page's
- *   `og:image`.
+ *   `og:image`; and the page's own loaded `<img>`s (their address and alt
+ *   text, a few of them in page order), for an Activity that knows where its
+ *   site keeps a cover or an avatar. It reads no markup around them.
  *
  * It's shared by every native Activity that declares these, and runs only
  * for one that does: injected (as `activities/collector.js`) into the active
@@ -43,12 +54,40 @@ function width(sizes: string | undefined): number {
   return Math.max(0, ...(sizes ?? "").split(/\s+/).map((size) => Number.parseInt(size, 10) || 0));
 }
 
-/** Reads `kinds` from `doc` and `nav`, and nothing else. */
+/** Images smaller than this are icons and spacers, not a cover or an avatar. */
+const MIN_IMAGE_SIDE = 48;
+/** How many `<img>`s are looked at, so a page of thousands can't make a tick slow. */
+const MAX_IMAGE_ELEMENTS = 400;
+
+/** The page's loaded `https` images, in page order: address and alt text, without repeats. */
+export function loadedImages(doc: Pick<Document, "querySelectorAll">): PageImage[] {
+  const images: PageImage[] = [];
+  const seen = new Set<string>();
+  const elements = [...doc.querySelectorAll<HTMLImageElement>("img")].slice(0, MAX_IMAGE_ELEMENTS);
+  for (const element of elements) {
+    if (images.length >= MAX_IMAGES) break;
+    const src = element.currentSrc || element.src || "";
+    if (!src.startsWith("https://") || src.length > MAX_IMAGE_URL || seen.has(src)) continue;
+    if (!element.complete || element.naturalWidth < MIN_IMAGE_SIDE) continue;
+    if (element.naturalHeight < MIN_IMAGE_SIDE) continue;
+    seen.add(src);
+    const alt = (element.alt ?? "").trim().slice(0, MAX_IMAGE_ALT);
+    images.push(alt ? { src, alt } : { src });
+  }
+  return images;
+}
+
+/**
+ * Reads `kinds` from `doc` and `nav`, and nothing else. `player` is what a
+ * player in an iframe has told the page (its word outranks the page's own
+ * elements, which can't be the one playing).
+ */
 export function collect(
   kinds: readonly PageDataKind[],
   doc: Pick<Document, "querySelector" | "querySelectorAll">,
   nav: { mediaSession?: { metadata: MediaMetadata | null; playbackState?: string } },
   now: number = Date.now(),
+  player: PlayerClock | null = null,
 ): PageData {
   const data: PageData = {};
   const session = nav.mediaSession?.metadata ?? null;
@@ -70,6 +109,9 @@ export function collect(
     if (said === "playing" || said === "paused") media.playing = said === "playing";
     else if (element) media.playing = !element.paused;
     if (element) {
+      if (element.localName === "video" || element.localName === "audio") {
+        media.kind = element.localName;
+      }
       const duration = finite(element.duration);
       if (duration !== undefined) media.duration = duration;
       const position = finite(element.currentTime);
@@ -79,6 +121,16 @@ export function collect(
         media.start = start;
         if (duration !== undefined) media.end = start + Math.round(duration) * 1000;
       }
+    }
+    if (player) {
+      media.kind = "video";
+      media.playing = player.playing;
+      delete media.duration;
+      delete media.start;
+      delete media.end;
+      if (player.duration !== undefined) media.duration = player.duration;
+      if (player.start !== undefined) media.start = player.start;
+      if (player.end !== undefined) media.end = player.end;
     }
     if (Object.keys(media).length > 0) data.media = media;
   }
@@ -90,6 +142,8 @@ export function collect(
       https(artwork) ??
       https(doc.querySelector('meta[property="og:image"]')?.getAttribute("content"));
     if (thumbnail) data.thumbnail = thumbnail;
+    const images = loadedImages(doc);
+    if (images.length > 0) data.images = images;
   }
   return data;
 }
@@ -118,9 +172,18 @@ export function startCollector(activity: string): void {
   let closed = false;
   let port: chrome.runtime.Port | null = null;
   let timer: ReturnType<typeof setInterval> | null = null;
+  const bridge = new PlayerBridge(
+    () => document.querySelectorAll("iframe"),
+    () => location.pathname + location.search,
+  );
+  const onMessage = (event: MessageEvent): void => {
+    // A pause, a seek or a new source is news now, not on the next tick.
+    if (!closed && kinds.includes("media") && bridge.accept(event, Date.now())) tick();
+  };
 
   const stop = (): void => {
     closed = true;
+    window.removeEventListener("message", onMessage);
     if (timer !== null) clearInterval(timer);
     timer = null;
     document.removeEventListener("visibilitychange", schedule);
@@ -176,7 +239,8 @@ export function startCollector(activity: string): void {
       open();
       return;
     }
-    const data = collect(kinds, document, navigator);
+    const now = Date.now();
+    const data = collect(kinds, document, navigator, now, bridge.clock(now));
     if (unchanged(data, sent)) return;
     sent = data;
     post({ type: "data", data });
@@ -192,6 +256,7 @@ export function startCollector(activity: string): void {
   }
 
   document.addEventListener("visibilitychange", schedule);
+  window.addEventListener("message", onMessage);
   schedule();
   tick();
 }

@@ -7,7 +7,11 @@
   },
   "service": "Example",
   "description": {
-    "en": "Example, for tests."
+    "en": "Example, for tests.",
+    "fr": "  Exemple, pour les tests.  ",
+    "zh": "示例，用于测试。",
+    "de": "Beispiel, für Tests.",
+    "ja": ""
   },
   "url": ["example.com", "www.example.com"],
   "regExp": "^https?[:][/][/](www[.])?example[.]com[/]",

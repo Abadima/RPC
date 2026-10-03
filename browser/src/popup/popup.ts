@@ -5,6 +5,7 @@ import { faGear } from "@fortawesome/free-solid-svg-icons/faGear";
 import { faUpRightAndDownLeftFromCenter } from "@fortawesome/free-solid-svg-icons/faUpRightAndDownLeftFromCenter";
 import { renderPresence } from "../shared/presence-view";
 import type { ActivityInfo } from "../core/activity";
+import { t } from "../core/i18n";
 import {
   loadActivityStates,
   watchActivityStates,
@@ -33,6 +34,7 @@ import {
   renderConnectionStatus,
 } from "../shared/connection-status";
 import { fillIcons } from "../shared/icons";
+import { loadLanguage } from "../shared/language";
 import {
   categoryList,
   createSettingsModel,
@@ -41,6 +43,7 @@ import {
   type SettingsPageId,
   type SettingsPageView,
 } from "../shared/settings-view";
+import { updateBanner } from "../shared/update-notice";
 import {
   presenceIcons,
   presenceSnapshot,
@@ -59,6 +62,9 @@ const buttonById = (id: string): HTMLButtonElement => {
   if (!(element instanceof HTMLButtonElement)) throw new Error(`#${id} isn't a button`);
   return element;
 };
+
+// Before anything is built, so every string comes out in the chosen language.
+await loadLanguage();
 
 fillIcons(document, {
   alert: faCircleExclamation,
@@ -92,11 +98,14 @@ function renderFooter(): void {
   );
 }
 
+const showUpdateNotice = updateBanner(byId("update-notice"));
+
 const background = connectToBackground(
   (next) => {
     const shown = displayedState(state, next);
     state = shown.state;
     renderFooter();
+    showUpdateNotice(state);
     renderBadge(byId("status-badge"), state, sharing);
     // Desktop missing is its own screen (Figma: screen-3-disconnected), not a banner over the activity.
     renderHome();
@@ -150,8 +159,8 @@ function renderHome(): void {
   byId("idle-view").hidden = !idle || offer !== null;
   byId("idle-view").textContent =
     found?.status === "on"
-      ? `${found.info.name} is on. Nothing to share on this page yet.`
-      : "Nothing to share on this page.";
+      ? t("{name} is on. Nothing to share on this page yet.", { name: found.info.name })
+      : t("Nothing to share on this page.");
   if (offer) renderOffer(offer);
 }
 
@@ -165,16 +174,21 @@ function renderOffer({ info, status }: Found): void {
   const action = buttonById("suggestion-action");
   if (status === "off") {
     note.textContent = declined
-      ? "Your browser didn't allow access to its sites, so it stays off."
+      ? t("Your browser didn't allow access to its sites, so it stays off.")
       : sites
-        ? `An Activity for this site, turned off. Turning it on asks your browser for access to ${sites}.`
-        : "An Activity for this site, turned off.";
-    action.textContent = "Turn on";
+        ? t(
+            "An Activity for this site, turned off. Turning it on asks your browser for access to {sites}.",
+            { sites },
+          )
+        : t("An Activity for this site, turned off.");
+    action.textContent = t("Turn on");
   } else {
     note.textContent = declined
-      ? `Your browser didn't allow access to ${sites}, so it still can't run here.`
-      : `It's on, but your browser hasn't given it access to ${sites}, so it can't run here.`;
-    action.textContent = "Allow access";
+      ? t("Your browser didn't allow access to {sites}, so it still can't run here.", { sites })
+      : t("It's on, but your browser hasn't given it access to {sites}, so it can't run here.", {
+          sites,
+        });
+    action.textContent = t("Allow access");
   }
   action.disabled = busy;
 }
