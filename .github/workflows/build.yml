@@ -45,8 +45,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # A glob, not the folder: Node 22 (the runner's) reads a folder as a module to run.
       - name: Test the release scripts
-        run: node --test scripts/
+        run: node --test "scripts/*.test.mjs"
 
       - name: Read and check the version
         id: version
