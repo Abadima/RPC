@@ -41,7 +41,7 @@ Parousia consists of a lightweight browser extension and native desktop applicat
 
 | Browser  | Status    | Install                                                                                                |
 | -------- | --------- | ------------------------------------------------------------------------------------------------------ |
-| Chromium | In review | [Chrome Web Store](https://chromewebstore.google.com/detail/parousia/achhedhokopfgfnigkfchklhbebbhebd) |
+| Chromium | Available | [Chrome Web Store](https://chromewebstore.google.com/detail/parousia/achhedhokopfgfnigkfchklhbebbhebd) |
 | Firefox  | Available | [Mozilla Add-ons](https://addons.mozilla.org/en-US/firefox/addon/parousia/)                            |
 
 ### Desktop & Other Downloads
