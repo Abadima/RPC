@@ -36,12 +36,12 @@
   },
   "devDependencies": {
     "@fortawesome/free-solid-svg-icons": "^7.3.1",
-    "@types/bun": "^1.4.2",
-    "@types/chrome": "^0.3.0",
-    "oxfmt": "^0.70.0",
-    "oxlint": "^1.85.0",
-    "playwright-core": "^1.63.0",
-    "web-ext": "^10.7.0"
+    "@types/bun": "^1.4.3",
+    "@types/chrome": "^0.3.5",
+    "oxfmt": "^0.73.0",
+    "oxlint": "^1.88.0",
+    "playwright-core": "^1.64.1",
+    "web-ext": "^10.8.0"
   },
   "peerDependencies": {
     "typescript": "^7.0.2"
