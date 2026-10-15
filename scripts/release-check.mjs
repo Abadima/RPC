@@ -32,7 +32,8 @@ function packageVersion(cargoToml) {
 
 /** Whether `version` is `core` or a store revision of it (`core` and one more number, as 1.1.0.1 is of 1.1.0). */
 function isRevisionOf(core, version) {
-  return version === core || new RegExp(`^${core.replaceAll(".", "\\.")}\\.\\d{1,9}$`).test(version);
+  if (version === core) return true;
+  return version.startsWith(`${core}.`) && /^\d{1,9}$/.test(version.slice(core.length + 1));
 }
 
 /** Everything that disagrees with `input`, as messages; empty means the release can go ahead. */
