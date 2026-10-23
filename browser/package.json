@@ -36,10 +36,10 @@
   },
   "devDependencies": {
     "@fortawesome/free-solid-svg-icons": "^7.3.1",
-    "@types/bun": "^1.4.3",
-    "@types/chrome": "^0.3.5",
-    "oxfmt": "^0.73.0",
-    "oxlint": "^1.88.0",
+    "@types/bun": "^1.4.4",
+    "@types/chrome": "^0.3.6",
+    "oxfmt": "^0.74.0",
+    "oxlint": "^1.89.0",
     "playwright-core": "^1.64.1",
     "web-ext": "^10.8.0"
   },
