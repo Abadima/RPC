@@ -14,6 +14,8 @@
 //!   and right away whenever the Activity changes. Nothing to show, no tries.
 //! - Discord quitting or restarting ends the connection; the current
 //!   Activity is shown again once Discord is back.
+//! - A write Discord doesn't take within 5 seconds (it has stopped reading)
+//!   ends the connection and is retried like a restart.
 //! - Discord accepts 5 activity updates per 20 seconds. Faster changes are
 //!   coalesced: only the latest is sent once the window allows. (Rapid
 //!   changes within one Activity rarely get that far: `coalesce` holds them
