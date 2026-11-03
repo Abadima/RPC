@@ -14,10 +14,14 @@ use std::io::{self, Write};
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use crate::adapters::discord::ipc::{Deliver, Incoming, encode, read_frame};
 
 use super::user;
+
+/// A write to Discord that takes longer than this means it has stopped listening.
+const WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Where to look for Discord.
 #[derive(Debug, Clone)]
@@ -124,6 +128,9 @@ pub fn open(endpoints: &Endpoints, deliver: Deliver) -> io::Result<Link> {
                 .uid
                 .is_some_and(|uid| !user::peer_is(&stream, uid))
             {
+                continue;
+            }
+            if stream.set_write_timeout(Some(WRITE_TIMEOUT)).is_err() {
                 continue;
             }
             let mut reader = stream.try_clone()?;
@@ -260,5 +267,45 @@ mod tests {
             opened > 0 && refused > 0,
             "{opened} opened, {refused} refused"
         );
+    }
+
+    /// A Discord that accepts the connection and never reads, as a stopped or
+    /// hung one does: the write that can't finish must fail, so the adapter
+    /// drops the connection and retries instead of waiting on it for good.
+    #[test]
+    fn a_write_to_a_discord_that_stopped_reading_times_out() {
+        use crate::adapters::discord::ipc::{MAX_FRAME, OP_FRAME};
+        use std::os::unix::net::UnixListener;
+        use std::sync::mpsc;
+
+        let dir = crate::app::config::tests::temp_dir("discord-stalled");
+        let listener = UnixListener::bind(dir.join("discord-ipc-0")).unwrap();
+        let (release, held) = mpsc::channel::<()>();
+        std::thread::spawn(move || {
+            let _silent = listener.accept();
+            let _ = held.recv();
+        });
+
+        let (done, result) = mpsc::channel();
+        let endpoints = Endpoints::at(dir.clone());
+        std::thread::spawn(move || {
+            let mut link = open(&endpoints, Box::new(|_| {})).unwrap();
+            let frame = vec![b'x'; MAX_FRAME];
+            let error = loop {
+                if let Err(error) = link.send(OP_FRAME, &frame) {
+                    break error;
+                }
+            };
+            let _ = done.send(error.kind());
+        });
+
+        let ended = result.recv_timeout(WRITE_TIMEOUT * 3);
+        drop(release);
+        std::fs::remove_dir_all(dir).ok();
+        let kind = ended.expect("the write never gave up on a Discord that stopped reading");
+        assert!(matches!(
+            kind,
+            io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+        ));
     }
 }
