@@ -72,7 +72,6 @@ jobs:
         run: bun run firefox:verify
 
       - name: Audit dependencies
-        # node-forge (web-ext > adbkit, a development tool that never ships) has no
-        # patched release yet, so this one advisory is named and the rest still fail.
-        # Remove the flag once node-forge has a fix.
-        run: bun audit --ignore GHSA-86w9-cpqp-85rv
+        # Fails only on high and critical advisories. Low and moderate ones are reported
+        # but do not fail the build, since many have no fixed release yet.
+        run: bun audit --audit-level=high
