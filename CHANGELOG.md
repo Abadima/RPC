@@ -1,5 +1,17 @@
 # VERSION 1
 
+## V1.2.0 - IN DEVELOPMENT
+
+Version numbers in the manifests, `package.json`, and `desktop/Cargo.toml` change when the release is cut.
+
+### ✨ New Features
+
+- **Activity Versions:** Every Activity's page in the dashboard shows its version, taken from its own `metadata.json`: Parousia's native Activities and the bundled PreMiD ones alike. Only each Activity's manifest carries it, so the catalog the dashboard lists and searches doesn't grow.
+
+### 🛡️ Stability
+
+- **Discord Connection (Linux and macOS):** A Discord that stops reading its socket no longer holds Desktop's Discord connection forever. A write it doesn't take within 5 seconds ends the connection, and Desktop retries as it does after a Discord restart. Windows already did this. This is a Desktop change, so the release that ships it needs a Desktop version above 1.0.1.
+
 ## [V1.1.0](https://github.com/Abadima/RPC/releases/tag/v1.1.0) - V1 FIRST STABLE RELEASE
 
 This release carries the browser extension and userscript **1.1.0** (the Firefox build is **1.1.0.1**) and Parousia Desktop **1.0.1**. It is the first stable release, with everything since the first public beta.
