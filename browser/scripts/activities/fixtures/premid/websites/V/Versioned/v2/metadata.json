@@ -11,7 +11,7 @@
   },
   "url": "versioned.example",
   "regExp": "^https?[:][/][/]versioned[.]example[/]",
-  "version": "1.0.0",
+  "version": "9.9.9",
   "logo": "https://cdn.example/versioned.png",
   "thumbnail": "https://cdn.example/versioned-thumb.png",
   "color": "#000000",

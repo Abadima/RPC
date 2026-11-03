@@ -66,6 +66,8 @@ export interface ActivityInfo {
   /** The sites it recognizes, for display and search, e.g. `youtube.com`. */
   hosts: string[];
   source: ActivitySource;
+  /** Its own version, as its metadata.json gives it (`MAJOR.MINOR.PATCH`). Only its page shows it. */
+  version?: string;
   /** More words to find it by: other names, tags. */
   keywords?: string[];
   /** Its icon: an `https` image URL, shown in the dashboard when it loads. */

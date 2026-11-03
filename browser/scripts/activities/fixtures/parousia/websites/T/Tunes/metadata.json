@@ -4,7 +4,7 @@
   "id": "tunes",
   "name": "Tunes",
   "description": "What's playing on tunes.example, for tests.",
-  "version": "1.0.0",
+  "version": "1.2.3",
   "authors": [{ "name": "Test" }],
   "icon": "https://tunes.example/icon.png",
   "matches": ["https://tunes.example/listen*"],
