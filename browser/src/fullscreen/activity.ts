@@ -194,7 +194,9 @@ export function activityView(context: ViewContext, id: string): View {
     for (const [term, value] of [
       [t("Sites"), activity.hosts.join(", ")],
       [t("From"), t("{source} Activities", { source: SOURCES[activity.source] })],
+      [t("Version"), activity.version],
     ] as const) {
+      if (!value) continue;
       const row = el("div");
       row.append(el("dt", "", term), el("dd", "", value));
       facts.append(row);

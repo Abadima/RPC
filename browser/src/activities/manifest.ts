@@ -143,7 +143,13 @@ export const shardPath = (id: string): string => shardFile(manifestShard(id));
 
 /** An Activity as the catalog lists it: everything but what only its own page needs. */
 export function catalogEntry(info: ActivityInfo): ActivityInfo {
-  const { settings: _settings, data: _data, discordClientId: _discordClientId, ...entry } = info;
+  const {
+    settings: _settings,
+    data: _data,
+    discordClientId: _discordClientId,
+    version: _version,
+    ...entry
+  } = info;
   return entry;
 }
 

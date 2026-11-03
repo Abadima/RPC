@@ -20,6 +20,7 @@ export interface Draft {
   id: string;
   name: string;
   description?: string;
+  version?: string;
   hosts: string[];
   match: ActivityMatch;
   icon?: string;
@@ -48,6 +49,13 @@ export const LIMITS = {
 
 export const SETTING_ID = /^[A-Za-z0-9_-]{1,64}$/;
 export const CLIENT_ID = /^\d{17,20}$/;
+
+/** An Activity's version, as both sources' metadata.json write it. */
+export const VERSION = /^\d+\.\d+\.\d+$/;
+
+/** A metadata.json `version` if it's one, so a PreMiD Activity with an odd one still builds, only without it. */
+export const versionFrom = (value: unknown): string | undefined =>
+  typeof value === "string" && VERSION.test(value) ? value : undefined;
 
 /** What's wrong with a setting, by the rules both sources' settings follow, or `null`. */
 export function checkSetting(setting: ActivitySetting): string | null {
@@ -124,6 +132,7 @@ export function manifestFrom(draft: Draft): ActivityManifest {
   };
   const description = draft.description?.trim().slice(0, LIMITS.description);
   if (description) info.description = description;
+  if (draft.version) info.version = draft.version;
   if (draft.keywords && draft.keywords.length > 0) info.keywords = keywordsFrom(draft.keywords);
   if (draft.icon) info.icon = draft.icon;
   if (draft.discordClientId) info.discordClientId = draft.discordClientId;

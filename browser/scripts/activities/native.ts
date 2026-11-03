@@ -4,7 +4,14 @@ import type { ActivitySetting, PageDataKind, SettingValue } from "../../src/core
 import { compileMatchPattern, patternHost } from "../../src/core/match-pattern";
 import type { ActivityManifest } from "../../src/activities/manifest";
 import { FOLDER_NAME, activityId, folderLetter, type WebsiteFolder } from "./discover";
-import { CLIENT_ID, LIMITS, checkSetting, manifestFrom, patternOrigin } from "./metadata";
+import {
+  CLIENT_ID,
+  LIMITS,
+  checkSetting,
+  manifestFrom,
+  patternOrigin,
+  versionFrom,
+} from "./metadata";
 
 /**
  * The adapter for native Activities (github.com/parousia-project/activities):
@@ -131,9 +138,8 @@ export function parseNativeMetadata(
   if (!isText(description, LIMITS.description)) {
     problems.push(`description must be 1 to ${LIMITS.description} characters`);
   }
-  if (typeof version !== "string" || !/^\d+\.\d+\.\d+$/.test(version)) {
-    problems.push("version must be MAJOR.MINOR.PATCH");
-  }
+  const release = versionFrom(version);
+  if (release === undefined) problems.push("version must be MAJOR.MINOR.PATCH");
   if (
     !Array.isArray(authors) ||
     authors.length === 0 ||
@@ -213,6 +219,7 @@ export function parseNativeMetadata(
     id,
     name,
     description,
+    version: release,
     hosts: patterns.map(patternHost),
     match: { patterns },
     ...(typeof icon === "string" && { icon }),
