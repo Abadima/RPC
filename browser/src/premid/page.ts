@@ -60,6 +60,8 @@ const isObject = (value: unknown): value is Data =>
 const tickers = new Set<() => Promise<void>>();
 const inFlight = new Set<() => Promise<void>>();
 let timer: ReturnType<typeof setInterval> | null = null;
+/** The background keeps this tab's music or video, so it reads even while the tab isn't shown. */
+let background = false;
 /** How long one update may take before it's given up on and the next one starts. */
 export const MAX_UPDATE_MS = 10_000;
 
@@ -97,8 +99,14 @@ export async function runUpdates(
 
 const tick = (): Promise<void> => runUpdates(tickers);
 
+/** The background says whether to keep reading while the page isn't shown (`ToPage`, `background`). */
+function keepReading(on: boolean): void {
+  background = on;
+  schedule();
+}
+
 function schedule(): void {
-  const run = tickers.size > 0 && !document.hidden;
+  const run = tickers.size > 0 && (!document.hidden || background);
   if (run && timer === null) {
     timer = setInterval(() => void tick(), TICK_MS);
     // At once too, not a second from now: after the Activity's script has
@@ -608,6 +616,8 @@ export function createApi(
         this.answers.answer(message.nonce, message.value);
       } else if (message.type === "frame-data") {
         void emit(this.listeners, "iFrameData", message.data);
+      } else if (message.type === "background") {
+        keepReading(message.on);
       }
     }
 
@@ -754,6 +764,7 @@ export function createApi(
         () => ({ type: "hello", activity }),
         (message) => {
           if (message.type === "page-result") this.answers.answer(message.nonce, message.value);
+          else if (message.type === "background") keepReading(message.on);
         },
         () => {},
       );

@@ -131,6 +131,8 @@
   "Parousia Desktop": "Parousia Desktop",
   "Share media details": "メディアの詳細を共有",
   "Include what you're watching or reading, not only the site's name.": "サイト名だけでなく、視聴中・閲覧中の内容も含めます。",
+  "Show media presence": "メディアのプレゼンスを表示",
+  "Keep showing music and video activity when switching to websites without an enabled Activity.": "有効なアクティビティがないウェブサイトに移動しても、音楽や動画のアクティビティを表示し続けます。",
   "Shorter": "短くする",
   "Longer": "長くする",
   "Pause activity": "アクティビティを一時停止",

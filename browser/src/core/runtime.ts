@@ -9,6 +9,11 @@ export interface RuntimeOptions {
   usable?: (info: ActivityInfo, url: URL) => boolean;
   /** Its settings as set; by default, each at its default. */
   settings?: (info: ActivityInfo) => SettingValues;
+  /**
+   * Music or video still playing in another tab (see media-presence.ts):
+   * shared when the page has nothing of its own, ahead of the fallback.
+   */
+  media?: () => Activity | null;
   /** What to share when no Activity has anything to: the Default Activity, if one is set up. */
   fallback?: () => Activity | null;
   /**
@@ -41,24 +46,38 @@ export class PresenceRuntime {
     return this.registry.resolve(url, usable && ((info) => usable(info, url)));
   }
 
-  /** The Presence for `page`, or for no page at all (a browser page, a new tab): the fallback, if any. */
+  /**
+   * What the Activity for `page` detects there, with its Discord Application
+   * and an image to fall back on: the registry alone, with no Activity from
+   * another extension, no media kept from another tab, and no fallback. Only
+   * an Activity that's `usable` here is ever run.
+   */
+  detect(page: Page): Activity | null {
+    const registered = this.find(page.url);
+    if (!registered) return null;
+    const settings = this.options.settings?.(registered.info) ?? settingValues(registered.info);
+    try {
+      const detected = registered.detect(page, settings);
+      return (
+        detected &&
+        withSiteImage(stampClientId(registered, detected), registered.info, page.favicon)
+      );
+    } catch {
+      // A broken Activity shows nothing rather than stopping detection for every other one.
+      return null;
+    }
+  }
+
+  /**
+   * The Presence for `page`, or for no page at all (a browser page, a new
+   * tab): the page's own Activity, else music or video kept from another tab,
+   * else the fallback, if any.
+   */
   resolve(page: Page | null): Presence {
     const external = page && this.options.external?.();
     if (external) return createPresence(external);
-    const registered = page && this.find(page.url);
-    let activity: Activity | null = null;
-    if (page && registered) {
-      const settings = this.options.settings?.(registered.info) ?? settingValues(registered.info);
-      try {
-        const detected = registered.detect(page, settings);
-        activity =
-          detected &&
-          withSiteImage(stampClientId(registered, detected), registered.info, page.favicon);
-      } catch {
-        // A broken Activity shows nothing rather than stopping detection for every other one.
-      }
-    }
-    return createPresence(activity ?? this.options.fallback?.() ?? null);
+    const own = page && this.detect(page);
+    return createPresence(own ?? this.options.media?.() ?? this.options.fallback?.() ?? null);
   }
 
   /** Whether `url` is a page some Activity looks at (so its title matters too). */

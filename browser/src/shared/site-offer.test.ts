@@ -3,7 +3,7 @@ import { siteOffer } from "./site-offer";
 
 describe("siteOffer", () => {
   test("nothing for a site with no Activity, whatever is shared", () => {
-    for (const sharing of ["nothing", "default", "activity"] as const) {
+    for (const sharing of ["nothing", "other", "activity"] as const) {
       expect(siteOffer(sharing, null)).toBe("none");
     }
   });
@@ -23,12 +23,12 @@ describe("siteOffer", () => {
     expect(siteOffer("nothing", "needs-access")).toBe("offer");
   });
 
-  test("an offer while the Default Activity is shared, so the site's Activity is still one click away", () => {
-    expect(siteOffer("default", "off")).toBe("offer");
-    expect(siteOffer("default", "needs-access")).toBe("offer");
+  test("an offer while the Default Activity or music kept from another tab is shared, so the site's Activity is still one click away", () => {
+    expect(siteOffer("other", "off")).toBe("offer");
+    expect(siteOffer("other", "needs-access")).toBe("offer");
   });
 
-  test("an offer while the Default Activity is shared and the site's Activity is on but has nothing to share", () => {
-    expect(siteOffer("default", "on")).toBe("offer");
+  test("an offer while something else is shared and the site's Activity is on but has nothing to share", () => {
+    expect(siteOffer("other", "on")).toBe("offer");
   });
 });

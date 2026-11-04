@@ -49,6 +49,11 @@ export type ToPage =
   | { type: "settings"; values: Record<string, SettingValue> }
   | { type: "page-result"; nonce: number; value: unknown }
   | { type: "frame-data"; data: unknown }
+  /**
+   * Keep reading while the tab is in the background (`on`), or only while it's
+   * shown: the tab's music or video is being kept, so a skipped song is news.
+   */
+  | { type: "background"; on: boolean }
   /** Not wanted here (turned off, or not this page's): stop ticking and don't reconnect. */
   | { type: "stop" };
 
@@ -182,6 +187,9 @@ export function parseToPage(value: unknown): ToPage | null {
   if (value.type === "frame-data" && "data" in value) {
     return { type: "frame-data", data: value.data };
   }
+  if (value.type === "background" && typeof value.on === "boolean") {
+    return { type: "background", on: value.on };
+  }
   if (value.type === "stop") return { type: "stop" };
   return null;
 }
@@ -194,7 +202,10 @@ export type CollectorMessage =
 
 export type ToCollector =
   /** What to read: the kinds its Activity declares, isn't denied, and has access for. */
-  { type: "collect"; kinds: PageDataKind[] } | { type: "stop" };
+  | { type: "collect"; kinds: PageDataKind[] }
+  /** As for a page script (`ToPage`): keep reading while the tab is in the background. */
+  | { type: "background"; on: boolean }
+  | { type: "stop" };
 
 const MAX_TEXT = 256;
 const MAX_URL = 512;
@@ -266,6 +277,9 @@ export function parseCollectorMessage(value: unknown): CollectorMessage | null {
 export function parseToCollector(value: unknown): ToCollector | null {
   if (!isObject(value)) return null;
   if (value.type === "stop") return { type: "stop" };
+  if (value.type === "background" && typeof value.on === "boolean") {
+    return { type: "background", on: value.on };
+  }
   if (value.type === "collect" && Array.isArray(value.kinds)) {
     const kinds: readonly unknown[] = value.kinds;
     return { type: "collect", kinds: PAGE_DATA_KINDS.filter((kind) => kinds.includes(kind)) };

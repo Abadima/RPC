@@ -430,6 +430,13 @@ function privacyPage(actions: SettingsActions): SettingsPageView {
     t("Include what you're watching or reading, not only the site's name."),
     (checked) => actions.savePreferences({ shareMediaDetails: checked }),
   );
+  const mediaPresence = switchRow(
+    t("Show media presence"),
+    t(
+      "Keep showing music and video activity when switching to websites without an enabled Activity.",
+    ),
+    (checked) => actions.savePreferences({ showMediaPresence: checked }),
+  );
 
   const stepper = el("div", "stepper");
   const minus = el("button", "stepper-button");
@@ -480,6 +487,7 @@ function privacyPage(actions: SettingsActions): SettingsPageView {
     sectionLabel(t("What leaves your browser")),
     group(
       media.row,
+      mediaPresence.row,
       controlRow(
         t("Idle timeout"),
         t("Keep sharing this long after you leave the browser. Sound keeps it going."),
@@ -503,6 +511,7 @@ function privacyPage(actions: SettingsActions): SettingsPageView {
       pageData = preferences.pageData;
       for (const { kind, input } of kinds) input.checked = preferences.pageData[kind];
       media.input.checked = preferences.shareMediaDetails;
+      mediaPresence.input.checked = preferences.showMediaPresence;
       minutes = preferences.idleTimeoutMinutes;
       value.textContent = formatIdleTimeout(minutes);
       minus.disabled = stepIdleTimeout(minutes, -1) === minutes;

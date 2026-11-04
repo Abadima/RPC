@@ -25,6 +25,7 @@ import {
 } from "../core/desktop-connection";
 import { createLogger } from "../core/logger";
 import { PresenceController } from "../core/lifecycle";
+import { MediaTabs, isMediaActivity } from "../core/media-presence";
 import {
   DEFAULT_PREFERENCES,
   applyPreferences,
@@ -33,7 +34,7 @@ import {
   watchPreferences,
   type Preferences,
 } from "../core/preferences";
-import { ActivityRegistry } from "../core/registry";
+import { ActivityRegistry, type Page } from "../core/registry";
 import { PresenceRuntime } from "../core/runtime";
 import type { PresenceTransport } from "../core/transport";
 import {
@@ -62,6 +63,23 @@ export function createDesktopConnection(): DesktopConnection {
 }
 
 export const KEEPALIVE_MS = 20_000;
+
+/**
+ * Where the tabs whose music or video is kept are written down. MV3 stops the
+ * background and starts it again, and a tab number lasts as long as the
+ * browser is open, as `storage.session` does: tab numbers and nothing else.
+ */
+const MEDIA_TABS_KEY = "mediaTabs";
+const MAX_MEDIA_TABS = 64;
+
+/** The tab numbers written down, as far as they're sound: the most recent last. */
+function parseMediaTabs(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  const tabs: unknown[] = value;
+  return tabs
+    .filter((tab): tab is number => Number.isSafeInteger(tab) && (tab as number) > 0)
+    .slice(-MAX_MEDIA_TABS);
+}
 
 /**
  * An MV3 background is stopped after about 30 seconds without extension
@@ -112,12 +130,17 @@ export function createDiscordBridge(): DiscordBridge {
  * when it has settings of its own (the Default Activity is set up on its own
  * page).
  */
-export function uiActivity(activity: Activity | null, configurable = false): UiActivity | null {
+export function uiActivity(
+  activity: Activity | null,
+  configurable = false,
+  kept = false,
+): UiActivity | null {
   if (!activity) return null;
   return {
     id: activity.id,
     name: activity.name,
     ...(configurable && { configurable }),
+    ...(kept && { kept }),
     ...(activity.details !== undefined && { details: activity.details }),
     ...(activity.state !== undefined && { state: activity.state }),
     ...(activity.timestamps?.start !== undefined && { startedAt: activity.timestamps.start }),
@@ -239,13 +262,42 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   /** The idle timeout ran out: nothing is shared again until the browser has focus, or sound plays. */
   let idleExpired = false;
+  /**
+   * The tabs whose music or video can be kept (see core/media-presence.ts);
+   * empty while the setting is off. Their page scripts read even while the tab
+   * isn't shown, which is how a song skipped there is noticed.
+   */
+  const mediaTabs = new MediaTabs((tabs) => {
+    pages.keepReading(tabs);
+    // Without a session store the tabs are kept only until the background stops.
+    void chrome.storage.session?.set({ [MEDIA_TABS_KEY]: tabs }).catch(() => {});
+  });
+  /** The tabs written down before the background last stopped, put back once, before they're first needed. */
+  let restoring: Promise<void> | null = null;
+  const restoreMediaTabs = (): Promise<void> =>
+    (restoring ??= (async () => {
+      try {
+        const written = (await chrome.storage.session.get(MEDIA_TABS_KEY))[MEDIA_TABS_KEY];
+        mediaTabs.restore(parseMediaTabs(written));
+      } catch {
+        // No session store here, or nothing written.
+      }
+    })());
+  /** The music or video kept from another tab for the page being shared, which `refresh` decides before it resolves. */
+  let kept: Activity | null = null;
+  /** The last refresh found no Activity of its own on the tab shared, so those other tabs matter. */
+  let watchingMedia = false;
+  /** What's shared is that kept music or video, not what the tab shared has; the popup says so. */
+  let keptShown = false;
+  /** What UIs were last told about that. */
+  let keptTold = false;
 
   const pages = new PageHost(
     registry,
     options.pages ?? chromePageBrowser(),
     options.natives ?? [],
     (tabId) => {
-      if (tabId === activeTabId) void refresh();
+      if (tabId === activeTabId || (watchingMedia && mediaTabs.has(tabId))) void refresh();
     },
   );
   const malSync = new MalSyncSource({
@@ -255,6 +307,10 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
   const runtime = new PresenceRuntime(registry, {
     usable: (info, url) => pages.usable(info, url),
     settings: (info) => settingValues(info, states),
+    media: () => {
+      keptShown = kept !== null;
+      return kept;
+    },
     fallback: () => defaultActivityToShow(defaultActivity, defaultSince ?? Date.now()),
     // What MAL-Sync shows is a page's own reading, so Settings > Privacy limits it like a PreMiD
     // Activity's. Its cover is the series itself: without media details it isn't a picture to share.
@@ -287,7 +343,13 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
   /** The shared Activity as UIs show it: with whether it has settings to change from the popup. */
   const shown = (activity: Activity | null): UiActivity | null => {
     const info = activity && activity.id !== DEFAULT_ACTIVITY_ID ? registry.get(activity.id) : null;
-    return uiActivity(activity, (info?.settings?.length ?? 0) > 0);
+    return uiActivity(activity, (info?.settings?.length ?? 0) > 0, keptShown);
+  };
+  const announce = (activity: Activity | null): void => {
+    keptTold = keptShown;
+    if (watchers.size === 0) return;
+    const ui = shown(activity);
+    for (const watcher of watchers) watcher(ui);
   };
   const controller = new PresenceController(runtime, {
     send: (presence) => {
@@ -297,12 +359,18 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
         activity?.id === DEFAULT_ACTIVITY_ID ? (activity.timestamps?.start ?? defaultSince) : null;
       link.send(presence);
       bridge.send(presence);
-      if (watchers.size > 0) {
-        const ui = shown(activity);
-        for (const watcher of watchers) watcher(ui);
-      }
+      announce(activity);
     },
   });
+  /** Publishes the page's presence. UIs are told if it now comes from another tab, or no longer does, though it is as it was. */
+  const update = (
+    page: Page | null,
+    share: (activity: Activity | null) => Activity | null,
+  ): void => {
+    keptShown = false;
+    controller.update(page, share);
+    if (keptShown !== keptTold) announce(controller.getActivity());
+  };
 
   serveUi(link, bridge, {
     get: () => shown(controller.getActivity()),
@@ -323,6 +391,7 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
    * someone looked at Discord, or opened the popup), or for the Idle Timeout,
    * if there is one. Either way, what's shared keeps following the tab: a song
    * that changes while someone's in another window changes in Discord too.
+   * When it says no, the caller clears, unless music or video is kept.
    */
   function sharingWhileAway(tab: chrome.tabs.Tab): boolean {
     if (windowFocused || tab.audible === true) {
@@ -333,21 +402,64 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
     const minutes = preferences.idleTimeoutMinutes;
     if (minutes === 0 || idleExpired) {
       stopIdleTimer();
-      controller.clear();
       return false;
     }
     idleTimer ??= setTimeout(() => {
       idleTimer = null;
       idleExpired = true;
-      controller.clear();
+      // Music or video kept from another tab goes on with its sound: look again rather than clear.
+      if (preferences.showMediaPresence) void refresh();
+      else controller.clear();
     }, minutes * 60_000);
     return true;
+  }
+
+  /**
+   * The music or video in tab `tabId` as it is now. None unless sound is
+   * playing there and its Activity is on and presents media: the same
+   * Activity code and switches as for the tab shared, and nothing injected
+   * into a tab nobody is looking at. Shared as that tab shares: a private tab
+   * that's paused keeps nothing.
+   */
+  async function mediaOf(tabId: number): Promise<Activity | null> {
+    const tab = await chrome.tabs.get(tabId);
+    if (tab.audible !== true || !tab.url) return null;
+    const url = new URL(tab.url);
+    if (!/^https?:$/.test(url.protocol)) return null;
+    const page: Page = {
+      url,
+      title: tab.title ?? "",
+      ...(tab.favIconUrl && { favicon: tab.favIconUrl }),
+      ...(await pages.peek(tabId, url)),
+    };
+    const detected = runtime.detect(page);
+    if (!detected || !isMediaActivity(detected)) return null;
+    return applyPreferences(detected, preferences, tab.incognito, registry.get(detected.id)?.name);
+  }
+
+  /**
+   * For "Show media presence": notes whether the tab shared (`tabId`, with
+   * `own`, what its Activity detects) is playing music or video, and when it
+   * has nothing of its own, finds the music or video to keep from another
+   * tab. Off, nothing is noted and nothing is kept.
+   */
+  async function keepMedia(
+    tabId: number,
+    tab: chrome.tabs.Tab,
+    own: Activity | null,
+  ): Promise<Activity | null> {
+    watchingMedia = preferences.showMediaPresence && own === null;
+    if (!preferences.showMediaPresence) return null;
+    await restoreMediaTabs();
+    mediaTabs.shared(tabId, own, tab.audible === true);
+    return own === null ? ((await mediaTabs.pick(tabId, mediaOf))?.media ?? null) : null;
   }
 
   async function refresh(): Promise<void> {
     if (activeTabId === null) {
       stopIdleTimer();
       malSync.watch(null);
+      watchingMedia = false;
       controller.clear();
       return;
     }
@@ -355,10 +467,6 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
       const tabId = activeTabId;
       const tab = await chrome.tabs.get(tabId);
       if (tabId !== activeTabId) return;
-      if (!sharingWhileAway(tab)) {
-        malSync.watch(null);
-        return;
-      }
       const share = (activity: Activity | null): Activity | null =>
         applyPreferences(
           activity,
@@ -366,38 +474,74 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
           tab.incognito,
           activity ? registry.get(activity.id)?.name : undefined,
         );
-      if (!tab.url) {
-        // A page the extension can't see (a browser page): only the Default Activity, if one is set up.
+      if (tab.incognito && preferences.incognito === "pause") {
+        // Nothing of a paused private tab is shared, so no Activity runs there: not its code,
+        // not its page scripts, and MAL-Sync isn't asked about it either.
+        stopIdleTimer();
         malSync.watch(null);
-        controller.update(null, share);
+        watchingMedia = false;
+        mediaTabs.forget(tabId);
+        controller.clear();
+        return;
+      }
+      if (!sharingWhileAway(tab)) {
+        malSync.watch(null);
+        // Away, the tab shared says nothing; sound in a tab whose music or video is kept does.
+        watchingMedia = preferences.showMediaPresence;
+        if (watchingMedia) await restoreMediaTabs();
+        kept = watchingMedia ? ((await mediaTabs.pick(tabId, mediaOf))?.media ?? null) : null;
+        if (tabId !== activeTabId) return;
+        if (kept) update(null, share);
+        else controller.clear();
+        return;
+      }
+      if (!tab.url) {
+        // A page the extension can't see (a browser page): only music or video kept, or the Default Activity, if one is set up.
+        malSync.watch(null);
+        kept = await keepMedia(tabId, tab, null);
+        if (tabId !== activeTabId) return;
+        update(null, share);
         return;
       }
       const url = new URL(tab.url);
-      // A private tab that's paused is never asked about, so MAL-Sync isn't woken for it either.
-      const asked =
-        /^https?:$/.test(url.protocol) && !(tab.incognito && preferences.incognito === "pause");
-      malSync.watch(asked ? { id: tabId, url } : null);
+      malSync.watch(/^https?:$/.test(url.protocol) ? { id: tabId, url } : null);
       // Site access, the page data it's granted, and what the page gave, for an Activity that reads pages.
       const page = await pages.page(tabId, url);
       if (tabId !== activeTabId) return;
-      controller.update(
-        {
-          url,
-          title: tab.title ?? "",
-          ...(tab.favIconUrl && { favicon: tab.favIconUrl }),
-          ...page,
-        },
-        share,
+      const detail: Page = {
+        url,
+        title: tab.title ?? "",
+        ...(tab.favIconUrl && { favicon: tab.favIconUrl }),
+        ...page,
+      };
+      // Detected here too only for the setting, which is off until someone turns it on.
+      kept = await keepMedia(
+        tabId,
+        tab,
+        preferences.showMediaPresence ? runtime.detect(detail) : null,
       );
+      if (tabId !== activeTabId) return;
+      update(detail, share);
     } catch {
       // Tab vanished between the event firing and this lookup running.
       malSync.watch(null);
+      watchingMedia = false;
       controller.clear();
     }
   }
 
   const usePreferences = (next: Preferences): void => {
     preferences = next;
+    if (!next.showMediaPresence) {
+      mediaTabs.clear();
+      watchingMedia = false;
+      kept = null;
+      // Nothing is brought back for a setting that was off: what was written down before is forgotten.
+      if (restoring === null) {
+        restoring = Promise.resolve();
+        void chrome.storage.session?.set({ [MEDIA_TABS_KEY]: [] }).catch(() => {});
+      }
+    }
     pages.setPageData(next.pageData);
     link.setPlatforms(enabledPlatforms(next));
     bridge.setEnabled(next.platforms.discord && next.discordRpcExtension);
@@ -447,16 +591,26 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
   chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     const loaded = changeInfo.status === "complete" && pages.active;
     if (loaded) pages.loaded(tabId);
-    if (tabId !== activeTabId) return;
     // The favicon is the last image an Activity without one falls back on, and tabs report it after the page.
-    const titleMatters =
+    const titleMatters = (): boolean =>
       (changeInfo.title !== undefined || changeInfo.favIconUrl !== undefined) &&
       tab.url !== undefined &&
       runtime.matches(new URL(tab.url));
+    if (tabId !== activeTabId) {
+      // Music or video kept from this tab follows it: its sound, and the song or video it shows.
+      if (
+        watchingMedia &&
+        mediaTabs.has(tabId) &&
+        (changeInfo.audible !== undefined || changeInfo.url !== undefined || titleMatters())
+      ) {
+        void refresh();
+      }
+      return;
+    }
     // Sound starting or stopping decides whether a tab is shared while the browser is out of focus.
     if (
       changeInfo.url !== undefined ||
-      titleMatters ||
+      titleMatters() ||
       loaded ||
       changeInfo.audible !== undefined
     ) {
@@ -466,10 +620,15 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
 
   chrome.tabs.onRemoved.addListener((tabId) => {
     pages.forget(tabId);
+    const keptFrom = mediaTabs.has(tabId);
+    mediaTabs.forget(tabId);
     if (tabId === activeTabId) {
       activeTabId = null;
       malSync.watch(null);
       controller.clear();
+    } else if (keptFrom && watchingMedia) {
+      // The music or video being kept was in this tab: another may take over, or nothing is left.
+      void refresh();
     }
   });
 

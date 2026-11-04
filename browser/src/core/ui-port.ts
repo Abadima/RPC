@@ -33,6 +33,8 @@ export interface UiActivity {
   name: string;
   /** It has settings of its own, which the popup can show. */
   configurable?: boolean;
+  /** It's music or video kept from another tab, not what the tab being shared has (see core/media-presence.ts). */
+  kept?: boolean;
   details?: string;
   state?: string;
   /** Unix milliseconds. */
@@ -85,14 +87,18 @@ const optionalText = (value: unknown): value is string | undefined =>
 function parseUiActivity(value: unknown): UiActivity | null | undefined {
   if (value === null) return null;
   if (typeof value !== "object") return undefined;
-  const { id, name, configurable, details, state, startedAt } = value as Record<string, unknown>;
+  const { id, name, configurable, kept, details, state, startedAt } = value as Record<
+    string,
+    unknown
+  >;
   if (
     typeof id !== "string" ||
     id.length > 256 ||
     typeof name !== "string" ||
     !optionalText(details) ||
     !optionalText(state) ||
-    (configurable !== undefined && typeof configurable !== "boolean")
+    (configurable !== undefined && typeof configurable !== "boolean") ||
+    (kept !== undefined && typeof kept !== "boolean")
   ) {
     return undefined;
   }
@@ -103,6 +109,7 @@ function parseUiActivity(value: unknown): UiActivity | null | undefined {
     id,
     name,
     ...(configurable === true && { configurable }),
+    ...(kept === true && { kept }),
     ...(details !== undefined && { details }),
     ...(state !== undefined && { state }),
     ...(startedAt !== undefined && { startedAt }),

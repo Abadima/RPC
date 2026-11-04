@@ -262,3 +262,83 @@ describe("PresenceRuntime", () => {
     expect(registry.list().map((info) => info.id)).toEqual(["a", "b"]);
   });
 });
+
+describe("PresenceRuntime: music or video kept from another tab", () => {
+  const registry = new ActivityRegistry();
+  const detections: string[] = [];
+  registry.register({
+    info: { id: "site", name: "Site", hosts: ["site.example"], source: "parousia" },
+    matcher: (url) => url.hostname === "site.example",
+    detect: ({ url }) => {
+      detections.push(url.href);
+      return { id: "site", name: "Site", url: url.href };
+    },
+  });
+  const kept: Activity = { id: "player", name: "Player", type: "listening" };
+  const fallback: Activity = { id: "default", name: "Default" };
+  const nowhere = { url: new URL("https://nowhere.example"), title: "" };
+  const site = { url: new URL("https://site.example"), title: "" };
+
+  test("shown when the page has nothing of its own, ahead of the fallback", () => {
+    const runtime = new PresenceRuntime(registry, { media: () => kept, fallback: () => fallback });
+    expect(runtime.resolve(nowhere).activity?.id).toBe("player");
+    // A browser page, which no Activity covers, is the same.
+    expect(runtime.resolve(null).activity?.id).toBe("player");
+  });
+
+  test("the page's own Activity comes first", () => {
+    const runtime = new PresenceRuntime(registry, { media: () => kept, fallback: () => fallback });
+    expect(runtime.resolve(site).activity?.id).toBe("site");
+  });
+
+  test("an Activity from another extension, which takes the page over, comes first too", () => {
+    const runtime = new PresenceRuntime(registry, {
+      external: () => ({ id: "compat:other", name: "Other" }),
+      media: () => kept,
+    });
+    expect(runtime.resolve(nowhere).activity?.id).toBe("compat:other");
+  });
+
+  test("with none to keep, the fallback is shown; with neither, nothing", () => {
+    expect(
+      new PresenceRuntime(registry, { media: () => null, fallback: () => fallback }).resolve(
+        nowhere,
+      ).activity?.id,
+    ).toBe("default");
+    expect(
+      new PresenceRuntime(registry, { media: () => null }).resolve(nowhere).activity,
+    ).toBeNull();
+  });
+
+  test("detect is the registry alone: no Activity from another extension, no media, no fallback", () => {
+    const runtime = new PresenceRuntime(registry, {
+      external: () => ({ id: "compat:other", name: "Other" }),
+      media: () => kept,
+      fallback: () => fallback,
+    });
+    expect(runtime.detect(nowhere)).toBeNull();
+    expect(runtime.detect(site)?.id).toBe("site");
+  });
+
+  test("an Activity that isn't usable is never run, by resolve or by detect", () => {
+    detections.length = 0;
+    const runtime = new PresenceRuntime(registry, { usable: () => false, media: () => null });
+    expect(runtime.detect(site)).toBeNull();
+    expect(runtime.resolve(site).activity).toBeNull();
+    expect(detections).toEqual([]);
+  });
+
+  test("an Activity that throws shows nothing, and the page falls through", () => {
+    const broken = new ActivityRegistry();
+    broken.register({
+      info: { id: "broken", name: "Broken", hosts: ["site.example"], source: "parousia" },
+      matcher: () => true,
+      detect: () => {
+        throw new Error("page changed");
+      },
+    });
+    const runtime = new PresenceRuntime(broken, { media: () => kept });
+    expect(runtime.detect(site)).toBeNull();
+    expect(runtime.resolve(site).activity?.id).toBe("player");
+  });
+});

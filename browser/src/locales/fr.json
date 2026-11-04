@@ -131,6 +131,8 @@
   "Parousia Desktop": "Parousia Desktop",
   "Share media details": "Partager les détails des médias",
   "Include what you're watching or reading, not only the site's name.": "Inclure ce que vous regardez ou lisez, et pas seulement le nom du site.",
+  "Show media presence": "Afficher la présence média",
+  "Keep showing music and video activity when switching to websites without an enabled Activity.": "Continuer à afficher la musique et les vidéos en cours de lecture quand vous passez à un site sans activité activée.",
   "Shorter": "Plus court",
   "Longer": "Plus long",
   "Pause activity": "Suspendre l’activité",

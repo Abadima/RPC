@@ -41,6 +41,15 @@ describe("parsePreferences", () => {
     expect(parsePreferences(undefined)).toEqual(DEFAULT_PREFERENCES);
   });
 
+  test("showing media presence is off by default, and only a real boolean turns it on", () => {
+    expect(DEFAULT_PREFERENCES.showMediaPresence).toBe(false);
+    expect(parsePreferences({ showMediaPresence: true }).showMediaPresence).toBe(true);
+    expect(parsePreferences({ showMediaPresence: false }).showMediaPresence).toBe(false);
+    for (const bad of ["true", 1, null, [], {}]) {
+      expect(parsePreferences({ showMediaPresence: bad }).showMediaPresence).toBe(false);
+    }
+  });
+
   test("invalid fields fall back one by one, valid ones are kept", () => {
     expect(
       parsePreferences({

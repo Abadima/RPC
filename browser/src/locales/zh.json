@@ -131,6 +131,8 @@
   "Parousia Desktop": "Parousia Desktop",
   "Share media details": "分享媒体详情",
   "Include what you're watching or reading, not only the site's name.": "包含你正在观看或阅读的内容，而不只是网站名称。",
+  "Show media presence": "显示媒体状态",
+  "Keep showing music and video activity when switching to websites without an enabled Activity.": "切换到没有已启用活动的网站时，继续显示音乐和视频活动。",
   "Shorter": "缩短",
   "Longer": "延长",
   "Pause activity": "暂停活动",

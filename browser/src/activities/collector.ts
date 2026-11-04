@@ -28,8 +28,9 @@ import { PlayerBridge, type PlayerClock } from "./player-bridge";
  *
  * It's shared by every native Activity that declares these, and runs only
  * for one that does: injected (as `activities/collector.js`) into the active
- * tab's page, it reads once a second while the page is visible and sends
- * only changes. A song playing through is no change: its `start` and `end`
+ * tab's page, it reads once a second while the page is shown, or while the
+ * background says its music or video is kept (`background`), and sends only
+ * changes. A song playing through is no change: its `start` and `end`
  * stay put until it's paused or seeked.
  */
 export const COLLECTOR_KEY = "__parousiaCollector";
@@ -170,8 +171,11 @@ export function startCollector(activity: string): void {
   let kinds: PageDataKind[] = [];
   let sent: PageData | null = null;
   let closed = false;
+  /** The background keeps this tab's music or video, so it reads even while the tab isn't shown. */
+  let background = false;
   let port: chrome.runtime.Port | null = null;
   let timer: ReturnType<typeof setInterval> | null = null;
+  const reading = (): boolean => !document.hidden || background;
   const bridge = new PlayerBridge(
     () => document.querySelectorAll("iframe"),
     () => location.pathname + location.search,
@@ -208,6 +212,10 @@ export function startCollector(activity: string): void {
           kinds = message.kinds;
           sent = null;
           tick();
+        } else if (message?.type === "background") {
+          background = message.on;
+          schedule();
+          tick();
         }
       });
       opened.onDisconnect.addListener(() => {
@@ -233,7 +241,7 @@ export function startCollector(activity: string): void {
   };
 
   function tick(): void {
-    if (closed || document.hidden) return;
+    if (closed || !reading()) return;
     if (kinds.length === 0) {
       // Not told what to read yet (or the background restarted): ask.
       open();
@@ -248,8 +256,8 @@ export function startCollector(activity: string): void {
 
   function schedule(): void {
     if (closed) return;
-    if (!document.hidden && timer === null) timer = setInterval(tick, TICK_MS);
-    else if (document.hidden && timer !== null) {
+    if (reading() && timer === null) timer = setInterval(tick, TICK_MS);
+    else if (!reading() && timer !== null) {
       clearInterval(timer);
       timer = null;
     }

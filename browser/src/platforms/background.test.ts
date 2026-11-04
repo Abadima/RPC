@@ -6,7 +6,9 @@ import type { Presence } from "../core/presence";
 import { REPORT } from "../core/test-desktop";
 import { ActivityRegistry } from "../core/registry";
 import { UI_PORT_NAME, type BridgeState } from "../core/ui-port";
-import type { PageBrowser } from "../activities/host";
+import type { PageBrowser, Port } from "../activities/host";
+import { registered, type ActivityManifest } from "../activities/manifest";
+import { PAGE_DATA_PORT } from "../activities/messages";
 import {
   KEEPALIVE_MS,
   backgroundKeepalive,
@@ -156,32 +158,61 @@ type UpdatedListener = (
   tab: FakeTab,
 ) => void;
 
-function installChromeMock(tab: FakeTab = { url: "https://example.com" }): {
+function installChromeMock(
+  tab: FakeTab = { url: "https://example.com" },
+  /** What `storage.local` holds, by key, and how long a read takes. */
+  initial: Record<string, unknown> = {},
+  storageDelayMs = 0,
+  /**
+   * A browser that is already running: what `storage.session` holds (it outlives the background, which
+   * MV3 stops and starts again), the other tabs, and which tab is active.
+   */
+  running: {
+    session?: Record<string, unknown>;
+    others?: Record<number, FakeTab>;
+    active?: number;
+    /** Tabs that have closed. */
+    closed?: number[];
+  } = {},
+): {
   connect: (name: string, senderId?: string, senderUrl?: string) => FakeUiPort;
   savePreferences: (value: unknown) => void;
   saveDefault: (value: unknown) => void;
+  /** Which Activities someone turned on or off, as the dashboard saves them. */
+  saveStates: (value: unknown) => void;
   tabLookups: () => number;
+  /** Tab 1 unless `tabId` says another. */
   update: (
     change: { url?: string; title?: string; audible?: boolean; favIconUrl?: string },
     next?: FakeTab,
+    tabId?: number,
   ) => void;
+  /** Closes a tab. */
+  remove: (tabId: number) => void;
+  /** What `storage.session` holds now. */
+  session: () => Record<string, unknown>;
   /** Opens a tab in `windowId`, where it becomes that window's active tab. */
   activate: (tabId: number, tab: FakeTab, windowId: number) => void;
   focus: (windowId: number) => void;
   /** Closes a window without saying where focus went; `focusNow` is what the browser reports after. */
   close: (windowId: number, focusNow: number) => void;
 } {
-  const noop = { addListener: (): void => {} };
   const activatedListeners: Array<(info: { tabId: number; windowId: number }) => void> = [];
   const focusListeners: Array<(windowId: number) => void> = [];
   const removedListeners: Array<(windowId: number) => void> = [];
   let lastFocused = 1;
   /** Tabs besides the first, and each window's active tab (window 1's is tab 1). */
-  const others = new Map<number, FakeTab>();
-  const activeIn = new Map<number, number>([[1, 1]]);
+  const others = new Map<number, FakeTab>(
+    Object.entries(running.others ?? {}).map(([id, other]) => [Number(id), other]),
+  );
+  const activeIn = new Map<number, number>([[1, running.active ?? 1]]);
+  const sessionStore: Record<string, unknown> = { ...running.session };
   const connectListeners: Array<(port: unknown) => void> = [];
   const storageListeners: Array<(changes: object, area: string) => void> = [];
   const updatedListeners: UpdatedListener[] = [];
+  const stored = { ...initial };
+  const removedTabListeners: Array<(tabId: number) => void> = [];
+  const closed = new Set<number>(running.closed ?? []);
   let current = tab;
   let tabLookups = 0;
   globalThis.chrome = {
@@ -191,9 +222,12 @@ function installChromeMock(tab: FakeTab = { url: "https://example.com" }): {
           activatedListeners.push(listener),
       },
       onUpdated: { addListener: (listener: UpdatedListener) => updatedListeners.push(listener) },
-      onRemoved: noop,
+      onRemoved: {
+        addListener: (listener: (tabId: number) => void) => removedTabListeners.push(listener),
+      },
       get: (async (tabId: number) => {
         tabLookups++;
+        if (closed.has(tabId)) throw new Error(`No tab with id: ${tabId}`);
         return others.get(tabId) ?? current;
       }) as unknown as typeof chrome.tabs.get,
       query: (async (query: { windowId?: number }) => {
@@ -213,7 +247,20 @@ function installChromeMock(tab: FakeTab = { url: "https://example.com" }): {
       WINDOW_ID_NONE: -1,
     },
     storage: {
-      local: { get: async () => ({}), set: async () => {} },
+      local: {
+        get: async (key: string) => {
+          if (storageDelayMs > 0)
+            await new Promise((resolve) => setTimeout(resolve, storageDelayMs));
+          return key in stored ? { [key]: stored[key] } : {};
+        },
+        set: async () => {},
+      },
+      session: {
+        get: async (key: string) => (key in sessionStore ? { [key]: sessionStore[key] } : {}),
+        set: async (items: Record<string, unknown>) => {
+          Object.assign(sessionStore, items);
+        },
+      },
       onChanged: {
         addListener: (listener: (changes: object, area: string) => void) =>
           storageListeners.push(listener),
@@ -233,6 +280,15 @@ function installChromeMock(tab: FakeTab = { url: "https://example.com" }): {
       storageListeners.forEach((l) => l({ preferences: { newValue: value } }, "local")),
     saveDefault: (value) =>
       storageListeners.forEach((l) => l({ defaultActivity: { newValue: value } }, "local")),
+    saveStates: (value) => {
+      stored.activities = value;
+      storageListeners.forEach((l) => l({ activities: { newValue: value } }, "local"));
+    },
+    session: () => ({ ...sessionStore }),
+    remove: (tabId) => {
+      closed.add(tabId);
+      for (const listener of removedTabListeners) listener(tabId);
+    },
     tabLookups: () => tabLookups,
     activate: (tabId, tab, windowId) => {
       others.set(tabId, tab);
@@ -247,9 +303,10 @@ function installChromeMock(tab: FakeTab = { url: "https://example.com" }): {
       lastFocused = focusNow;
       for (const listener of removedListeners) listener(windowId);
     },
-    update: (change, next = current) => {
-      current = next;
-      for (const listener of updatedListeners) listener(1, change, next);
+    update: (change, next = current, tabId = 1) => {
+      if (tabId === 1) current = next;
+      else others.set(tabId, next);
+      for (const listener of updatedListeners) listener(tabId, change, next);
     },
     connect(name, senderId = EXTENSION_ID, senderUrl = EXTENSION_PAGE) {
       const port: FakeUiPort = { posted: [], onMessageListeners: [], onDisconnectListeners: [] };
@@ -901,5 +958,627 @@ describe("backgroundKeepalive", () => {
 
   test("the interval stays under the 30-second MV3 idle limit", () => {
     expect(KEEPALIVE_MS).toBeLessThan(30_000);
+  });
+});
+
+/** Stand-ins for a music site and a video site, beside `arcade`; `detected` is every run of their code. */
+function players(): { registry: ActivityRegistry; detected: string[] } {
+  const detected: string[] = [];
+  const registry = arcade();
+  for (const [id, host, type] of [
+    ["tunes", "tunes.example", "listening"],
+    ["movies", "movies.example", "watching"],
+  ] as const) {
+    registry.register({
+      info: { id, name: id, hosts: [host], source: "parousia" },
+      matcher: (url) => url.hostname === host,
+      detect: ({ url, title }) => {
+        detected.push(`${id}: ${title}`);
+        return { id, name: id, type, details: title, url: url.href };
+      },
+    });
+  }
+  return { registry, detected };
+}
+
+const NOWHERE: FakeTab = { url: "https://example.com", title: "Example" };
+const song = (title: string, audible = true): FakeTab => ({
+  url: "https://tunes.example/play",
+  title,
+  audible,
+});
+const film = (title: string, audible = true): FakeTab => ({
+  url: "https://movies.example/watch",
+  title,
+  audible,
+});
+const CHESS: FakeTab = {
+  url: "https://arcade.example/chess",
+  title: "Chess - Arcade",
+  audible: true,
+};
+const MEDIA_ON = { preferences: { showMediaPresence: true } };
+
+describe("Show media presence", () => {
+  /** Starts with `first` as tab 1, and gives back what's shared as it changes. */
+  async function open(
+    first: FakeTab,
+    stored: Record<string, unknown> = MEDIA_ON,
+    storageDelayMs = 0,
+    running: Parameters<typeof installChromeMock>[3] = {},
+  ) {
+    const chromeMock = installChromeMock(first, stored, storageDelayMs, running);
+    const link = fakeLink();
+    const { registry, detected } = players();
+    startBackground("test", { link, bridge: fakeBridge(), registry, pages: quietPages });
+    await tick();
+    const ids = (): Array<string | null> =>
+      link.sent.map((presence) => presence.activity?.id ?? null);
+    const shown = (): { id?: string; details?: string } | null =>
+      link.sent.at(-1)?.activity ?? null;
+    return { chromeMock, link, detected, ids, shown };
+  }
+
+  test("is off by default: music stops showing once another site is shared", async () => {
+    const { chromeMock, shown } = await open(song("Song A"), {});
+    expect(shown()?.id).toBe("tunes");
+    chromeMock.activate(2, NOWHERE, 1);
+    await tick();
+    expect(shown()).toBeNull();
+  });
+
+  test("on, music keeps showing on a site without an Activity, with no gap in between", async () => {
+    const { chromeMock, ids, shown } = await open(song("Song A"));
+    expect(shown()).toMatchObject({ id: "tunes", details: "Song A" });
+    chromeMock.activate(2, NOWHERE, 1);
+    await tick();
+    expect(shown()).toMatchObject({ id: "tunes", details: "Song A" });
+    // Nothing between: the presence was never cleared, so Discord never flickered.
+    expect(ids().slice(ids().indexOf("tunes"))).toEqual(["tunes"]);
+  });
+
+  test("a browser page the extension can't see keeps it too", async () => {
+    const { chromeMock, shown } = await open(song("Song A"));
+    chromeMock.activate(2, { title: "New Tab" }, 1);
+    await tick();
+    expect(shown()).toMatchObject({ id: "tunes", details: "Song A" });
+  });
+
+  test("it follows the tab it keeps: the next track shows, and stopping clears", async () => {
+    const { chromeMock, shown } = await open(song("Song A"));
+    chromeMock.activate(2, NOWHERE, 1);
+    await tick();
+
+    chromeMock.update({ title: "Song B" }, song("Song B"), 1);
+    await tick();
+    expect(shown()).toMatchObject({ id: "tunes", details: "Song B" });
+
+    chromeMock.update({ audible: false }, song("Song B", false), 1);
+    await tick();
+    expect(shown()).toBeNull();
+  });
+
+  test("playing again in the background brings it back", async () => {
+    const { chromeMock, shown } = await open(song("Song A"));
+    chromeMock.activate(2, NOWHERE, 1);
+    await tick();
+    chromeMock.update({ audible: false }, song("Song A", false), 1);
+    await tick();
+    expect(shown()).toBeNull();
+    chromeMock.update({ audible: true }, song("Song A"), 1);
+    await tick();
+    expect(shown()).toMatchObject({ id: "tunes", details: "Song A" });
+  });
+
+  test("music that was paused when someone left the tab is not kept", async () => {
+    const { chromeMock, shown } = await open(song("Song A", false));
+    chromeMock.activate(2, NOWHERE, 1);
+    await tick();
+    expect(shown()).toBeNull();
+  });
+
+  test("closing the tab it plays in ends it", async () => {
+    const { chromeMock, shown } = await open(song("Song A"));
+    chromeMock.activate(2, NOWHERE, 1);
+    await tick();
+    expect(shown()?.id).toBe("tunes");
+    chromeMock.remove(1);
+    await tick();
+    expect(shown()).toBeNull();
+  });
+
+  test("leaving the tab for another site and back is not the end of it", async () => {
+    const { chromeMock, shown } = await open(song("Song A"));
+    chromeMock.activate(2, NOWHERE, 1);
+    await tick();
+    chromeMock.activate(1, song("Song A"), 1);
+    await tick();
+    expect(shown()).toMatchObject({ id: "tunes", details: "Song A" });
+  });
+
+  test("an enabled Activity on the current tab comes first", async () => {
+    const { chromeMock, shown } = await open(song("Song A"));
+    chromeMock.activate(2, CHESS, 1);
+    await tick();
+    expect(shown()).toMatchObject({ id: "arcade", details: "Playing Chess" });
+    chromeMock.activate(3, NOWHERE, 1);
+    await tick();
+    expect(shown()).toMatchObject({ id: "tunes", details: "Song A" });
+  });
+
+  test("sound alone is not music: a game or a page with a video ad is not kept", async () => {
+    const { chromeMock, shown } = await open(CHESS);
+    expect(shown()?.id).toBe("arcade");
+    chromeMock.activate(2, NOWHERE, 1);
+    await tick();
+    expect(shown()).toBeNull();
+  });
+
+  test("it comes before the Default Activity, which shows when there is no music", async () => {
+    const { chromeMock, shown } = await open(song("Song A"));
+    chromeMock.saveDefault({ enabled: true, name: "Studying", elapsed: false });
+    chromeMock.activate(2, NOWHERE, 1);
+    await tick();
+    expect(shown()).toMatchObject({ id: "tunes" });
+    chromeMock.update({ audible: false }, song("Song A", false), 1);
+    await tick();
+    expect(shown()).toMatchObject({ id: "parousia:default", name: "Studying" });
+  });
+
+  test("turning the setting off clears it at once; on again, it is not brought back from before", async () => {
+    const { chromeMock, shown } = await open(song("Song A"));
+    chromeMock.activate(2, NOWHERE, 1);
+    await tick();
+    expect(shown()?.id).toBe("tunes");
+    chromeMock.savePreferences({ showMediaPresence: false });
+    await tick();
+    expect(shown()).toBeNull();
+    chromeMock.savePreferences({ showMediaPresence: true });
+    await tick();
+    expect(shown()).toBeNull();
+  });
+
+  test("an open UI is told when what is shown is music kept from another tab, and when it is not any more", async () => {
+    const { chromeMock } = await open(song("Song A"));
+    const port = chromeMock.connect(UI_PORT_NAME);
+    const last = (): unknown =>
+      port.posted.filter((m) => (m as { type: string }).type === "activity").at(-1);
+    // On the music's own tab it is simply what the tab shows.
+    expect(last()).toEqual({
+      type: "activity",
+      activity: { id: "tunes", name: "tunes", details: "Song A" },
+    });
+
+    chromeMock.activate(2, NOWHERE, 1);
+    await tick();
+    expect(last()).toEqual({
+      type: "activity",
+      activity: { id: "tunes", name: "tunes", details: "Song A", kept: true },
+    });
+
+    // Back on its own tab, the same presence is no longer kept: the UI hears it though nothing was resent.
+    chromeMock.activate(1, song("Song A"), 1);
+    await tick();
+    expect(last()).toEqual({
+      type: "activity",
+      activity: { id: "tunes", name: "tunes", details: "Song A" },
+    });
+  });
+
+  test("a UI that opens while music is kept hears so at once", async () => {
+    const { chromeMock } = await open(song("Song A"));
+    chromeMock.activate(2, NOWHERE, 1);
+    await tick();
+    const port = chromeMock.connect(UI_PORT_NAME);
+    expect(port.posted).toContainEqual({
+      type: "activity",
+      activity: { id: "tunes", name: "tunes", details: "Song A", kept: true },
+    });
+  });
+
+  describe("when the background restarts", () => {
+    test("the tabs being remembered are written down as they change, for the next time", async () => {
+      const { chromeMock } = await open(song("Song A"));
+      expect(chromeMock.session()).toEqual({ mediaTabs: [1] });
+      chromeMock.activate(2, film("Film"), 1);
+      await tick();
+      expect(chromeMock.session()).toEqual({ mediaTabs: [1, 2] });
+      chromeMock.activate(1, song("Song A"), 1);
+      await tick();
+      expect(chromeMock.session()).toEqual({ mediaTabs: [2, 1] });
+    });
+
+    test("music that was being kept is kept again, with nothing visited since", async () => {
+      // The background had kept Song A from tab 1 while tab 2 was shared; it stops and starts again.
+      const { shown } = await open(song("Song A"), MEDIA_ON, 0, {
+        session: { mediaTabs: [1] },
+        others: { 2: NOWHERE },
+        active: 2,
+      });
+      expect(shown()).toMatchObject({ id: "tunes", details: "Song A" });
+    });
+
+    test("without what it wrote down, nothing is kept: a tab nobody shared is never picked up", async () => {
+      const { shown } = await open(song("Song A"), MEDIA_ON, 0, {
+        others: { 2: NOWHERE },
+        active: 2,
+      });
+      expect(shown()).toBeNull();
+    });
+
+    test("the most recent of the tabs written down is the one kept", async () => {
+      const { shown } = await open(song("Song A"), MEDIA_ON, 0, {
+        session: { mediaTabs: [1, 3] },
+        others: { 2: NOWHERE, 3: film("Film") },
+        active: 2,
+      });
+      expect(shown()).toMatchObject({ id: "movies", details: "Film" });
+    });
+
+    test("a tab that closed meanwhile is dropped, and the next is kept", async () => {
+      const { chromeMock, shown } = await open(song("Song A"), MEDIA_ON, 0, {
+        session: { mediaTabs: [1, 3] },
+        others: { 2: NOWHERE, 3: film("Film") },
+        active: 2,
+        closed: [3],
+      });
+      expect(shown()).toMatchObject({ id: "tunes", details: "Song A" });
+      expect(chromeMock.session()).toEqual({ mediaTabs: [1] });
+    });
+
+    test("what was written down is used only as far as it is sound", async () => {
+      const { shown } = await open(song("Song A"), MEDIA_ON, 0, {
+        session: { mediaTabs: ["1", 1.5, -1, 0, null, 1] },
+        others: { 2: NOWHERE },
+        active: 2,
+      });
+      expect(shown()).toMatchObject({ id: "tunes", details: "Song A" });
+      const none = await open(song("Song A"), MEDIA_ON, 0, {
+        session: { mediaTabs: "1" },
+        others: { 2: NOWHERE },
+        active: 2,
+      });
+      expect(none.shown()).toBeNull();
+    });
+
+    test("with the setting off, none of it is brought back, and what was written down is forgotten", async () => {
+      const { chromeMock, shown } = await open(song("Song A"), {}, 0, {
+        session: { mediaTabs: [1] },
+        others: { 2: NOWHERE },
+        active: 2,
+      });
+      expect(shown()).toBeNull();
+      await tick();
+      expect(chromeMock.session()).toEqual({ mediaTabs: [] });
+    });
+
+    test("turning the setting off forgets what was written down", async () => {
+      const { chromeMock } = await open(song("Song A"));
+      expect(chromeMock.session()).toEqual({ mediaTabs: [1] });
+      chromeMock.savePreferences({ showMediaPresence: false });
+      await tick();
+      expect(chromeMock.session()).toEqual({ mediaTabs: [] });
+    });
+  });
+
+  describe("with several players", () => {
+    test("only the one shared most recently shows, and the one before it takes over when it stops", async () => {
+      const { chromeMock, shown } = await open(song("Song A"));
+      chromeMock.activate(2, film("Film"), 1);
+      await tick();
+      expect(shown()).toMatchObject({ id: "movies" });
+      chromeMock.activate(3, NOWHERE, 1);
+      await tick();
+      expect(shown()).toMatchObject({ id: "movies", details: "Film" });
+
+      chromeMock.update({ audible: false }, film("Film", false), 2);
+      await tick();
+      expect(shown()).toMatchObject({ id: "tunes", details: "Song A" });
+
+      chromeMock.update({ audible: false }, song("Song A", false), 1);
+      await tick();
+      expect(shown()).toBeNull();
+
+      chromeMock.update({ audible: true }, film("Film"), 2);
+      await tick();
+      expect(shown()).toMatchObject({ id: "movies" });
+    });
+
+    test("they never trade places while both play, even as the other changes track", async () => {
+      const { chromeMock, ids } = await open(song("Song A"));
+      chromeMock.activate(2, film("Film"), 1);
+      await tick();
+      chromeMock.activate(3, NOWHERE, 1);
+      await tick();
+      const from = ids().length;
+
+      chromeMock.update({ title: "Song B" }, song("Song B"), 1);
+      await tick();
+      chromeMock.update({ title: "Song C" }, song("Song C"), 1);
+      await tick();
+      expect(ids().slice(from)).toEqual([]);
+    });
+
+    test("visiting a player again makes it the most recent", async () => {
+      const { chromeMock, shown } = await open(song("Song A"));
+      chromeMock.activate(2, film("Film"), 1);
+      await tick();
+      chromeMock.activate(1, song("Song A"), 1);
+      await tick();
+      chromeMock.activate(3, NOWHERE, 1);
+      await tick();
+      expect(shown()).toMatchObject({ id: "tunes", details: "Song A" });
+    });
+
+    test("closing the one shown hands over to the other", async () => {
+      const { chromeMock, shown } = await open(song("Song A"));
+      chromeMock.activate(2, film("Film"), 1);
+      await tick();
+      chromeMock.activate(3, NOWHERE, 1);
+      await tick();
+      chromeMock.remove(2);
+      await tick();
+      expect(shown()).toMatchObject({ id: "tunes", details: "Song A" });
+    });
+  });
+
+  describe("an Activity that is off", () => {
+    const OFF = { ...MEDIA_ON, activities: { tunes: { on: false } } };
+
+    test("is never run, and never kept, even with music playing in it", async () => {
+      const { chromeMock, detected, shown } = await open(song("Song A"), OFF);
+      expect(shown()).toBeNull();
+      chromeMock.activate(2, NOWHERE, 1);
+      await tick();
+      expect(shown()).toBeNull();
+      expect(detected).toEqual([]);
+    });
+
+    test("is not run at startup before its switch has been read", async () => {
+      // The stored states arrive late: until they do, every Activity is at its default (on).
+      const { chromeMock, detected, shown } = await open(song("Song A"), OFF, 40);
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      expect(detected).toEqual([]);
+      expect(shown()).toBeNull();
+      chromeMock.activate(2, NOWHERE, 1);
+      await tick();
+      expect(detected).toEqual([]);
+    });
+
+    test("turned off while its music is kept, it ends at once and none of its code runs again", async () => {
+      const { chromeMock, detected, shown } = await open(song("Song A"));
+      chromeMock.activate(2, NOWHERE, 1);
+      await tick();
+      expect(shown()?.id).toBe("tunes");
+      const runs = detected.length;
+
+      chromeMock.saveStates({ tunes: { on: false } });
+      await tick();
+      expect(shown()).toBeNull();
+      chromeMock.update({ title: "Song B" }, song("Song B"), 1);
+      await tick();
+      expect(shown()).toBeNull();
+      expect(detected).toHaveLength(runs);
+    });
+
+    test("turned on again, it starts over from the tab being shared, not from before", async () => {
+      const { chromeMock, shown } = await open(song("Song A"));
+      chromeMock.activate(2, NOWHERE, 1);
+      await tick();
+      chromeMock.saveStates({ tunes: { on: false } });
+      await tick();
+      chromeMock.saveStates({});
+      await tick();
+      // The tab is still remembered and still playing, so it counts again.
+      expect(shown()).toMatchObject({ id: "tunes", details: "Song A" });
+    });
+  });
+
+  describe("in private windows", () => {
+    test("music in a private tab is not kept when private windows are paused", async () => {
+      const { chromeMock, shown } = await open({ ...song("Song A"), incognito: true });
+      expect(shown()).toBeNull();
+      chromeMock.activate(2, NOWHERE, 1);
+      await tick();
+      expect(shown()).toBeNull();
+    });
+
+    test("none of an Activity's code runs for a private tab that is paused", async () => {
+      const { detected } = await open({ ...song("Song A"), incognito: true });
+      expect(detected).toEqual([]);
+    });
+
+    test("when private windows are shared, music in one is kept like any other", async () => {
+      const { chromeMock, shown } = await open(
+        { ...song("Song A"), incognito: true },
+        { preferences: { showMediaPresence: true, incognito: "share" } },
+      );
+      chromeMock.activate(2, NOWHERE, 1);
+      await tick();
+      expect(shown()).toMatchObject({ id: "tunes", details: "Song A" });
+    });
+
+    test("nothing is kept onto a private tab that is paused", async () => {
+      const { chromeMock, shown } = await open(song("Song A"));
+      chromeMock.activate(2, { ...NOWHERE, incognito: true }, 1);
+      await tick();
+      expect(shown()).toBeNull();
+    });
+  });
+
+  describe("away from the browser", () => {
+    const AWAY = { preferences: { showMediaPresence: true, idleTimeoutMinutes: 0 } };
+
+    test("sound in the tab that is kept keeps it going", async () => {
+      const { chromeMock, shown } = await open(song("Song A"), AWAY);
+      chromeMock.activate(2, NOWHERE, 1);
+      await tick();
+      chromeMock.focus(-1);
+      await tick();
+      expect(shown()).toMatchObject({ id: "tunes", details: "Song A" });
+
+      chromeMock.update({ audible: false }, song("Song A", false), 1);
+      await tick();
+      expect(shown()).toBeNull();
+    });
+
+    test("without the setting, leaving the browser clears it as it always did", async () => {
+      const { chromeMock, shown } = await open(song("Song A"), {
+        preferences: { idleTimeoutMinutes: 0 },
+      });
+      chromeMock.activate(2, NOWHERE, 1);
+      await tick();
+      chromeMock.focus(-1);
+      await tick();
+      expect(shown()).toBeNull();
+    });
+  });
+});
+
+describe("Show media presence: a tab that is not shown", () => {
+  /** A music site whose Activity reads what's playing through the collector, so its page has scripts. */
+  const tunes: ActivityManifest = {
+    info: {
+      id: "tunes",
+      name: "Tunes",
+      hosts: ["tunes.example"],
+      source: "parousia",
+      data: ["media"],
+      origins: ["https://tunes.example/*"],
+    },
+    match: { patterns: ["https://tunes.example/*"] },
+  };
+
+  /** The collector in tab 1 as the background sees it: a port to say hello and send what's playing on. */
+  function collectorPort() {
+    const listeners: Array<(message: unknown) => void> = [];
+    const port = {
+      name: PAGE_DATA_PORT,
+      sender: { id: EXTENSION_ID, url: "https://tunes.example/play", frameId: 0, tab: { id: 1 } },
+      posted: [] as Array<{ type: string; on?: boolean }>,
+      postMessage: (message: { type: string; on?: boolean }) => port.posted.push(message),
+      disconnect: () => {},
+      onMessage: {
+        addListener: (listener: (message: unknown) => void) => listeners.push(listener),
+      },
+      onDisconnect: { addListener: () => {} },
+      send: (message: unknown) => listeners.forEach((listener) => listener(message)),
+    };
+    return port;
+  }
+
+  async function open(stored: Record<string, unknown> = MEDIA_ON) {
+    const chromeMock = installChromeMock(song("Song A"), {
+      ...stored,
+      activities: { tunes: { on: true } },
+    });
+    const link = fakeLink();
+    const registry = arcade();
+    registry.register(
+      registered(tunes, {
+        detect: ({ url, media }) => ({
+          id: "tunes",
+          name: "Tunes",
+          type: "listening",
+          details: media?.title ?? "Nothing yet",
+          url: url.href,
+        }),
+      }),
+    );
+    registry.register({
+      info: { id: "movies", name: "Movies", hosts: ["movies.example"], source: "parousia" },
+      matcher: (url) => url.hostname === "movies.example",
+      detect: ({ title }) => ({ id: "movies", name: "Movies", type: "watching", details: title }),
+    });
+    let connect: (port: Port) => void = () => {};
+    const pages: PageBrowser = {
+      ...quietPages,
+      onConnect: (listener) => {
+        connect = listener;
+      },
+      grants: async () => ({ all: false, origins: ["https://tunes.example/*"] }),
+    };
+    startBackground("test", {
+      link,
+      bridge: fakeBridge(),
+      registry,
+      natives: [tunes],
+      pages,
+    });
+    await tick();
+    const port = collectorPort();
+    connect(port);
+    port.send({ type: "hello", activity: "tunes" });
+    await tick();
+    const shown = (): { id?: string; details?: string } | null =>
+      link.sent.at(-1)?.activity ?? null;
+    const settleReports = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 260));
+    return { chromeMock, link, port, shown, settleReports };
+  }
+
+  const backgroundMessages = (port: { posted: Array<{ type: string; on?: boolean }> }) =>
+    port.posted.filter((message) => message.type === "background");
+
+  test("a tab whose music is kept is told to keep reading, and told to stop when it is not kept", async () => {
+    const { chromeMock, port } = await open();
+    expect(backgroundMessages(port)).toEqual([{ type: "background", on: true }]);
+    chromeMock.activate(2, NOWHERE, 1);
+    await tick();
+    expect(backgroundMessages(port)).toEqual([{ type: "background", on: true }]);
+
+    chromeMock.savePreferences({ showMediaPresence: false });
+    await tick();
+    expect(backgroundMessages(port)).toEqual([
+      { type: "background", on: true },
+      { type: "background", on: false },
+    ]);
+  });
+
+  test("without the setting a tab is never told to read in the background", async () => {
+    const { chromeMock, port } = await open({});
+    chromeMock.activate(2, NOWHERE, 1);
+    await tick();
+    expect(backgroundMessages(port).filter((message) => message.on)).toEqual([]);
+  });
+
+  test("a song skipped in a tab that is not shown reaches Discord without going back to it", async () => {
+    const { chromeMock, port, shown, settleReports } = await open();
+    port.send({ type: "data", data: { media: { title: "Song A", playing: true } } });
+    await settleReports();
+    expect(shown()).toMatchObject({ id: "tunes", details: "Song A" });
+
+    chromeMock.activate(2, NOWHERE, 1);
+    await tick();
+    expect(shown()).toMatchObject({ id: "tunes", details: "Song A" });
+
+    // The tab keeps reading in the background; its next song is news, and the title moves with it.
+    port.send({ type: "data", data: { media: { title: "Song B", playing: true } } });
+    await settleReports();
+    expect(shown()).toMatchObject({ id: "tunes", details: "Song B" });
+    port.send({ type: "data", data: { media: { title: "Song C", playing: true } } });
+    await settleReports();
+    expect(shown()).toMatchObject({ id: "tunes", details: "Song C" });
+  });
+
+  test("with another player shared more recently, the one that moves on in the background does not take over", async () => {
+    const { chromeMock, link, port, shown, settleReports } = await open();
+    port.send({ type: "data", data: { media: { title: "Song A", playing: true } } });
+    await settleReports();
+    chromeMock.activate(2, film("Film"), 1);
+    await tick();
+    chromeMock.activate(3, NOWHERE, 1);
+    await tick();
+    expect(shown()).toMatchObject({ id: "movies", details: "Film" });
+    const from = link.sent.length;
+
+    port.send({ type: "data", data: { media: { title: "Song B", playing: true } } });
+    await settleReports();
+    expect(shown()).toMatchObject({ id: "movies", details: "Film" });
+    expect(link.sent.length).toBe(from);
+
+    // When the film stops, the song it left behind is the current one, not the old one.
+    chromeMock.update({ audible: false }, film("Film", false), 2);
+    await tick();
+    expect(shown()).toMatchObject({ id: "tunes", details: "Song B" });
   });
 });

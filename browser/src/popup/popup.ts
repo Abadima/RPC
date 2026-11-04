@@ -150,10 +150,14 @@ let busy = false;
 /** The browser declined the last request; the card says so until the next click or tab. */
 let declined = false;
 
-/** What's being shared: nothing, the Default Activity, or a site's Activity (or `undefined` until the background says). */
+/**
+ * What's being shared: nothing; something that isn't the tab's own Activity
+ * (the Default Activity, or music or video kept from another tab); or a site's
+ * Activity (or `undefined` until the background says).
+ */
 function sharingNow(): Sharing {
   if (shared === null) return "nothing";
-  return shared?.id === DEFAULT_ACTIVITY_ID ? "default" : "activity";
+  return shared?.id === DEFAULT_ACTIVITY_ID || shared?.kept === true ? "other" : "activity";
 }
 
 function renderHome(): void {

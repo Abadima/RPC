@@ -131,6 +131,8 @@
   "Parousia Desktop": "Parousia Desktop",
   "Share media details": "Передавать сведения о медиа",
   "Include what you're watching or reading, not only the site's name.": "Показывать, что вы смотрите или читаете, а не только название сайта.",
+  "Show media presence": "Показывать статус медиа",
+  "Keep showing music and video activity when switching to websites without an enabled Activity.": "Продолжать показывать музыку и видео при переходе на сайты без включённой активности.",
   "Shorter": "Короче",
   "Longer": "Дольше",
   "Pause activity": "Приостанавливать активность",
