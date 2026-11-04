@@ -74,10 +74,8 @@ export function defaultView(): View {
   let saved: DefaultActivity = EMPTY_DEFAULT_ACTIVITY;
 
   const toggle = switchRow(
-    t("Show a Default Activity"),
-    t(
-      "Shared whenever the tab you're on has no Activity: a site none covers, a browser page, a new tab.",
-    ),
+    t("Turn on the Default Activity"),
+    t("Shared when the tab has no Activity: a site none covers, a browser page, or a new tab."),
     (on) => void setEnabled(on),
     "default-on",
   );
@@ -95,31 +93,21 @@ export function defaultView(): View {
     largeImage: field(
       "default-largeImage",
       t("Large image"),
-      t("An https image link, or an asset name from your own Discord Application."),
+      t("An https image link, or an asset name from your Discord application."),
       image,
     ),
-    largeText: field(
-      "default-largeText",
-      t("Large image text"),
-      t("Shown when someone hovers over it."),
-      text,
-    ),
+    largeText: field("default-largeText", t("Large image text"), t("Shown on hover."), text),
     smallImage: field(
       "default-smallImage",
       t("Small image"),
       t("Shown in the large image's corner."),
       image,
     ),
-    smallText: field(
-      "default-smallText",
-      t("Small image text"),
-      t("Shown when someone hovers over it."),
-      text,
-    ),
+    smallText: field("default-smallText", t("Small image text"), t("Shown on hover."), text),
     discordClientId: field(
       "default-discordClientId",
-      t("Discord Application ID"),
-      t("Optional: show it as your own Discord Application instead of Parousia."),
+      t("Discord application ID"),
+      t("Optional. Show it as your own Discord application instead of Parousia."),
       20,
     ),
   };
@@ -144,7 +132,7 @@ export function defaultView(): View {
 
   const elapsed = switchRow(
     t("Show elapsed time"),
-    t("How long it's been shown, counted from when it started."),
+    t("Counts up from when it started."),
     () => renderPreview(),
     "default-elapsed",
   );
@@ -261,13 +249,13 @@ export function defaultView(): View {
     event.preventDefault();
     const activity = read();
     if (!showProblems(activity)) {
-      status.textContent = t("Not saved: fix what's marked.");
+      status.textContent = t("Not saved. Fix the marked fields.");
       return;
     }
     void saveDefaultActivity(activity).then((next) => {
       fill(next);
       status.textContent = next.enabled
-        ? t("Saved. It's shown when no Activity is.")
+        ? t("Saved. It shows when no Activity has anything to share.")
         : t("Saved. Turn it on above to share it.");
     });
   });

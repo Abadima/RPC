@@ -19,10 +19,18 @@
 // - Native: an Activity that reads pages is off until turned on, which the
 //   popup does in one click; the collector reads the page's Media Session.
 // - Settings > Privacy: what Activities may read, for all of them at once.
-// - The popup: "Current activity" only while something's shared, "Configure
+// - The popup: "Now sharing" only while something's shared, "Configure
 //   activity" for an Activity with settings, and a quiet line otherwise.
 // - The Default Activity: written in the dashboard, shared where no Activity
 //   is, and gone once it's off.
+// - Show media presence, with a tab that really makes sound: the song stays on
+//   Discord on a site without an Activity, a song skipped in a tab nobody is
+//   looking at reaches Discord (headless Chromium never hides a tab, so the tab
+//   switch is played back into the extension's own world: see `setHidden`),
+//   of two players only the one shared last shows, the song comes back when
+//   the extension's background is stopped and starts again,
+//   and the popup beside music (or the Default Activity) still offers the
+//   site's own Activity.
 // - The dashboard: switches, icons and their fallback, site access in
 //   Settings only ("all websites" off), and the layout from phone to
 //   ultrawide.
@@ -313,7 +321,7 @@ try {
     `listed once, as the native one (${guideCards})`,
   );
   assert(
-    (await dashboard.textContent(`[data-activity="${GUIDE_NATIVE}"]`))?.includes("multi"),
+    (await dashboard.textContent(`[data-activity="${GUIDE_NATIVE}"]`))?.includes("2 sources"),
     "and marked as in both sources",
   );
   await openDashboard(`#activities/${GUIDE_NATIVE}`);
@@ -437,7 +445,7 @@ try {
   assert(!injected, "its script never ran there");
   let popup = await popupFor(jummbox);
   await popup.locator("#suggestion-view:not([hidden])").waitFor();
-  assert(await popup.isHidden("#activity-view"), "the popup hides Current activity");
+  assert(await popup.isHidden("#activity-view"), "the popup hides Now sharing");
   assert((await popup.textContent("#suggestion-name")) === "Jummbox", "and names the Activity");
   assert(
     (await popup.textContent("#suggestion-note"))?.includes("access to jummb.us"),
@@ -523,14 +531,14 @@ try {
     "native: Tunes is off until the popup turns it on in one click; then the collector reads the page's Media Session, and the site's logo instead of the artwork once thumbnails are off",
   );
 
-  // --- The popup while sharing: Configure activity ---
+  // --- The popup while sharing: Configure Activity ---
   const example = await context.newPage();
   await serve(example, "https://example.site", "<!doctype html><title>Docs</title>");
   await example.goto(EXAMPLE_PAGE);
   await shown((a) => a?.details === "Reading Docs", "Example Site, with its default prefix");
   popup = await popupFor(example);
   await popup.locator("#activity-view:not([hidden])").waitFor();
-  assert(await popup.isHidden("#suggestion-view"), "the popup shows Current activity alone");
+  assert(await popup.isHidden("#suggestion-view"), "the popup shows Now sharing alone");
   await popup.click("#configure-button");
   const prefix = popup.locator("#configure-view input.text-field");
   await prefix.waitFor();
@@ -540,7 +548,7 @@ try {
   await example.bringToFront();
   await shown((a) => a?.details === "Browsing Docs", "the new prefix, set from the popup");
   log(
-    "the popup shows Current activity only while sharing, and changes the Activity's settings in place",
+    "the popup shows Now sharing only while sharing, and changes the Activity's settings in place",
   );
 
   // --- The Default Activity ---
@@ -738,7 +746,7 @@ try {
   await bulk("Enable all").click();
   const question = (await dashboard.textContent('[data-slot="bulk-body"]')) ?? "";
   assert(
-    question.includes("None of them needs access to a new site"),
+    question.includes("None needs access to a new site"),
     `enabling ones whose sites are granted says it will not ask (${question})`,
   );
   await dashboard.locator('[data-slot="bulk-body"] button', { hasText: /^Enable \d/ }).click();

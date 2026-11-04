@@ -18,22 +18,21 @@
 
 ## What is Parousia?
 
-Parousia is an open-source Rich Presence platform that brings your browser activity to your favourite Rich Presence platform, starting with Discord.
+Parousia is an open-source Rich Presence platform. It shows what you're doing in your browser on Discord, and on other platforms as they're supported.
 
-Parousia consists of a lightweight browser extension and native desktop application, with no account or sign-in required.
+It has two parts: a browser extension and a small native desktop app. No account or sign-in is needed.
 
 ## Features
 
-- **Rich Presence** for supported websites and web applications
-- **Activities** for native and PreMiD integrations
-- **Local-first architecture** with browser-to-desktop communication over loopback
-- **No account or sign-in required**
-- **No analytics or telemetry**
-- **Minimal permissions** with website access requested only when an Activity needs it
-- **Discord integration** through the official local RPC interface
-- **Cross-platform Desktop** support for Windows and Linux, with macOS planned
-- **Developer-friendly Activity API** built with TypeScript
-- **Lightweight native Desktop** application written in Rust
+- **Rich Presence** for supported websites and web apps
+- **Activities** from Parousia and PreMiD
+- **Local only**: the browser talks to the desktop app over loopback
+- **No account, no analytics, no telemetry**
+- **Minimal permissions**: website access is requested only when an Activity needs it
+- **Discord** through its official local RPC interface
+- **Windows and Linux** desktop support, with macOS planned
+- **A TypeScript API** for writing Activities
+- **A lightweight desktop app** written in Rust
 
 ## Get Parousia
 
@@ -50,27 +49,24 @@ Parousia consists of a lightweight browser extension and native desktop applicat
 | ---------- | ----------- | ---------------------------------------------------------- |
 | Windows    | Available   | [GitHub Releases](https://github.com/Abadima/RPC/releases) |
 | Linux      | Available   | [GitHub Releases](https://github.com/Abadima/RPC/releases) |
-| macOS      | Coming soon | —                                                          |
+| macOS      | Coming soon | Not yet                                                    |
 | Userscript | Available   | [GitHub Releases](https://github.com/Abadima/RPC/releases) |
-|            |
 
 ## Activity Ecosystem
 
-Activities are maintained separately from the core Parousia repository and use a shared Activity API.
+Activities live in their own repositories and share one API:
 
 **[parousia-project/activities](https://github.com/parousia-project/activities)**
 
 **[premid/activities](https://github.com/premid/activities)**
 
-Activities are organized by website and can provide their own settings, page data requirements, site access, Discord applications, and Rich Presence details.
+Each Activity covers a website. It sets its own settings, page data, site access, Discord application, and Rich Presence details.
 
-Parousia currently includes the native Activity ecosystem alongside a large selection of compatible PreMiD Activities.
+Parousia includes the native Activities and a large set of compatible PreMiD Activities.
 
 ## Documentation
 
-Full documentation covering installation, configuration, Activities, compatibility, privacy, security, and development is available at:
-
-**[parousia.abadima.dev](https://parousia.abadima.dev)** (Maintained in **[parousia-project/website](https://github.com/parousia-project/website)**)
+Installation, configuration, Activities, compatibility, privacy, security, and development are covered at **[parousia.abadima.dev](https://parousia.abadima.dev)**. The site is built from **[parousia-project/website](https://github.com/parousia-project/website)**.
 
 ## Roadmap
 
@@ -86,16 +82,12 @@ See [`project/roadmap.md`](project/roadmap.md) for the current roadmap.
 
 ## Contributing
 
-Contributions, issues, and discussions are welcome.
+Issues, discussions, and pull requests are welcome. Start with [`CONTRIBUTING.md`](.github/CONTRIBUTING.md).
 
-See [`CONTRIBUTING.md`](.github/CONTRIBUTING.md) to get started.
-
-Security vulnerabilities should be reported privately according to [`SECURITY.md`](.github/SECURITY.md).
+Report security vulnerabilities privately, as [`SECURITY.md`](.github/SECURITY.md) describes.
 
 ## License
 
 Parousia is licensed under the [Apache License 2.0](LICENSE).
 
-The repository also contains third-party components under their respective licenses, including PreMiD Activities under the Mozilla Public License 2.0, a font under the SIL Open Font License, and icons under CC BY 4.0.
-
-Each extension release includes `THIRD-PARTY-NOTICES.txt`, and Desktop releases include `parousia-desktop-notices.txt` for statically linked Rust dependencies.
+Third-party components keep their own licenses: PreMiD Activities are under the Mozilla Public License 2.0, the font under the SIL Open Font License, and the icons under CC BY 4.0. Each extension release includes `THIRD-PARTY-NOTICES.txt`. Desktop releases include `parousia-desktop-notices.txt`, which lists the statically linked Rust dependencies.

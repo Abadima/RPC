@@ -78,13 +78,13 @@ export function renderOffline(
   label.textContent =
     state.status === "incompatible" ? t("Update Parousia Desktop") : t("Get Parousia Desktop");
   retry.disabled = checking;
-  retry.textContent = checking ? t("Checking…") : t("Retry Connection");
+  retry.textContent = checking ? t("Checking…") : t("Retry connection");
 }
 
 /** Under the not-found screen: Discord can still work without Desktop when Discord-RPC-Extension's app is running. */
 export function renderDiscordAside(aside: HTMLElement, discord: BridgeState): void {
   aside.hidden = discord.status !== "connected";
   aside.textContent = t(
-    "Discord-RPC-Extension is running, so Discord can still show your activity without Parousia Desktop.",
+    "Discord-RPC-Extension is running, so Discord can still show your presence without Parousia Desktop.",
   );
 }

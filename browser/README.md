@@ -1,46 +1,46 @@
 # browser
 
-Parousia's browser extension, built with [Bun](https://bun.com) + strict TypeScript.
+Parousia's browser extension and userscript, built with [Bun](https://bun.com) and strict TypeScript.
 
 ## Setup
 
 ```bash
 bun install
-bun run activities:fetch   # the Activity sources, at the newest commit on each one's main
+bun run activities:fetch   # Activity sources, at the newest commit on each main branch
 ```
 
 ## Commands
 
 ```bash
-bun run build         # build all targets into dist/
+bun run build         # build every target into dist/
 bun run dev           # build, then rebuild on change
-bun run typecheck      # tsc --noEmit
-bun run lint           # oxlint
-bun run format         # oxfmt
-bun run format:check   # oxfmt --check
-bun test               # bun test
+bun run typecheck     # tsc --noEmit
+bun run lint          # oxlint
+bun run format        # oxfmt
+bun run format:check  # oxfmt --check
+bun test              # unit tests
 
-bun run activities:fetch   # move each Activity source to the newest commit on its main now (every build does this itself; a failed fetch keeps the copy it has)
-bun run activities:check   # check and compile every Activity; list PreMiD ones left out, and why
+bun run activities:fetch   # move each Activity source to the newest commit on its main (builds do this too; a failed fetch keeps the copy it has)
+bun run activities:check   # check and compile every Activity; list the PreMiD ones left out, and why
 
-bun run firefox:setup   # one-time: fetch an isolated automation Firefox build
-bun run firefox:lint    # web-ext lint against dist/firefox
-bun run firefox:verify  # lint + actually install & run dist/firefox in real Firefox
-bun run chromium:setup  # one-time: fetch an isolated automation Chromium build
-bun run desktop:verify  # the Browser <-> Desktop link, end to end, in automation Chromium (Linux, Windows)
-bun run real:verify     # the same against installed browsers: Firefox, Flatpak Chromium, Violentmonkey
-bun run discord:verify  # a real Activity on a real Discord (opt-in, see below)
-bun run activities:verify # Activities, the popup, and the dashboard, end to end (Linux, Windows)
-bun run activities:firefox # the same features in installed Firefox Developer Edition
-bun run languages:verify # every language in the popup and dashboard, Automatic, and a change reaching an open view (automation Chromium)
-bun run bench          # sizes, memory, CPU, and latency, as JSON
-bun run contrast       # WCAG 2.2 AA contrast of every theme's tokens, as a table
-bun run themes:verify  # the themes on every popup and dashboard view, in automation Chromium
+bun run firefox:setup      # once: fetch an isolated automation Firefox
+bun run firefox:lint       # web-ext lint of dist/firefox
+bun run firefox:verify     # lint, then install and run dist/firefox in real Firefox
+bun run chromium:setup     # once: fetch an isolated automation Chromium
+bun run desktop:verify     # the browser-to-Desktop link, end to end, in automation Chromium (Linux, Windows)
+bun run real:verify        # the same against installed browsers: Firefox, Flatpak Chromium, Violentmonkey
+bun run discord:verify     # one Activity on a real Discord (opt-in, see below)
+bun run activities:verify  # Activities, the popup, and the dashboard, end to end (Linux, Windows)
+bun run activities:firefox # the same features in an installed Firefox Developer Edition
+bun run languages:verify   # every language in the popup and dashboard, and a change reaching an open view
+bun run bench              # sizes, memory, CPU, and latency, as JSON
+bun run contrast           # WCAG 2.2 AA contrast of each theme's tokens, as a table
+bun run themes:verify      # each theme on every popup and dashboard view
 ```
 
 ## Build Targets
 
-`bun run build` produces one folder per target under `dist/`, each a self-contained, minified bundle plus its `manifest.json`:
+`bun run build` writes one folder per target under `dist/`. Each is a self-contained, minified bundle with its `manifest.json`:
 
 | Target       | Output             | Distribution                                                                                                                            |
 | ------------ | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |

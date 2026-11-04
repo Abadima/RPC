@@ -223,7 +223,7 @@ try {
   );
   assert(
     card.action === "Allow access" && card.current,
-    "offers to ask again, with no empty Current activity",
+    "offers to ask again, with no empty Now sharing",
   );
   await firefox.closeTab(popup);
   log(

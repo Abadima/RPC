@@ -43,15 +43,18 @@ function sitesText(origins: readonly string[]): string {
 /** What turning it on means, next to its switch. */
 function switchNote(info: ActivityInfo): string {
   if (!needsAccess(info)) {
-    return t("Reads only the address and title of its pages, so it needs no site access.");
+    return t("Reads only page addresses and titles, so it needs no site access.");
   }
   const sites = sitesText(info.origins ?? []);
   return info.source === "premid"
-    ? t("Its own code reads its pages. Turning it on asks your browser for access to {sites}.", {
-        sites,
-      })
+    ? t(
+        "Its code reads the pages it runs on. Turning it on asks your browser for access to {sites}.",
+        {
+          sites,
+        },
+      )
     : t(
-        "Parousia reads what's playing on its pages. Turning it on asks your browser for access to {sites}.",
+        "Parousia reads what's playing on those pages. Turning it on asks your browser for access to {sites}.",
         { sites },
       );
 }
@@ -117,16 +120,16 @@ export function activityView(context: ViewContext, id: string): View {
     const missing = missingSites(activity, grants);
     let text = "";
     if (refused && status === "off") {
-      text = t("It stays off: your browser didn't allow access to {sites}.", {
+      text = t("It stays off: your browser declined access to {sites}.", {
         sites: sitesText(missing),
       });
     } else if (refused && status === "needs-access") {
-      text = t("Your browser didn't allow access to {sites}, so it still doesn't run there.", {
+      text = t("Your browser declined access to {sites}, so it still doesn't run there.", {
         sites: sitesText(missing),
       });
     } else if (status === "needs-access") {
       text = t(
-        "It's on, but can't read {sites}, so it doesn't run there. Access was declined or taken back.",
+        "It's on, but can't read {sites}, so it doesn't run there. Access was declined or revoked.",
         { sites: sitesText(missing) },
       );
     }

@@ -145,7 +145,7 @@ export function connectionHelp(state: ConnectionState, origin: string): Connecti
     case "disconnected":
       return {
         title: t("Parousia Desktop couldn't be found"),
-        detail: t("Launch Parousia Desktop to share your browser activity."),
+        detail: t("Launch Parousia Desktop to share your presence."),
       };
     default:
       return null;
@@ -167,7 +167,7 @@ export function desktopPlatformLabel(
     case "showing":
       return adapter.activity
         ? t("Showing {activity}", { activity: adapter.activity })
-        : t("Showing your activity");
+        : t("Showing your presence");
     case "connected":
     case "idle":
       return t("Ready");

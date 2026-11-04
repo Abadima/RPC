@@ -53,8 +53,8 @@ function renderEmpty(root: HTMLElement, options: PresenceViewOptions): void {
   const wrapper = element("div", "presence-empty");
   wrapper.append(
     element("div", "presence-empty-visual"),
-    element("p", "presence-empty-title", t("No activity detected")),
-    element("p", "presence-empty-subtitle", t("Browse a supported site and it shows up here.")),
+    element("p", "presence-empty-title", t("No Activity detected")),
+    element("p", "presence-empty-subtitle", t("Visit a supported site and it appears here.")),
   );
   wrapper.firstElementChild?.append(...iconFor(options, "empty"));
   root.append(wrapper);

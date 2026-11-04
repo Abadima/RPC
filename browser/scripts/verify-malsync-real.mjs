@@ -382,7 +382,7 @@ try {
         "while Discord-RPC-Extension's route still names the series, which Parousia can't limit",
       );
       t.say(
-        "Share Media Details off limits Parousia's route; Discord-RPC-Extension's still shows the title",
+        "Share media details off limits Parousia's route; Discord-RPC-Extension's still shows the title",
       );
 
       // MAL-Sync's own Discord setting off ends the duplicate; Parousia still gets it.
