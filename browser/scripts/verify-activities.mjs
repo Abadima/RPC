@@ -748,18 +748,26 @@ try {
   {
     const session = await context.newCDPSession(nothing);
     await session.send("ServiceWorker.enable");
-    const before = discord.activities.length;
+    const stopped = worker;
     await session.send("ServiceWorker.stopAllWorkers");
-    // Desktop sees its connection go, and Discord is cleared: the background really stopped.
+    // The old worker is really gone. Waiting for Discord to clear would race a
+    // kept page script waking a new worker before Desktop sees the disconnect.
     await waitUntil(
-      () => discord.activities.slice(before).includes(null),
-      "Discord to be cleared as the background stops",
+      () =>
+        stopped
+          .evaluate(() => true)
+          .then(
+            () => false,
+            () => true,
+          ),
+      "the background to stop",
     );
     // A tab event wakes it.
     await jummboxAgain.bringToFront();
     await nothing.bringToFront();
     worker = await waitUntil(async () => {
       for (const candidate of context.serviceWorkers()) {
+        if (candidate === stopped) continue;
         if (await candidate.evaluate(() => true).catch(() => false)) return candidate;
       }
       return false;
