@@ -47,11 +47,12 @@ const log = logger("desktop-link");
 /** What Desktop calls this OS in a browser's name ("Chromium on Linux"). */
 const os = windows ? "Windows" : "Linux";
 /**
- * The browser's name as Desktop shows it, from the user agent (client-name.ts).
- * Playwright's Chromium says "Chromium"; a browser that doesn't identify itself
- * in its brands (Helium, headless) is named "Chrome", which is what it is named.
+ * The browser's name as Desktop shows it, from the user agent (client-name.ts):
+ * "Chromium" for Playwright's build, "Chrome" for one that doesn't identify
+ * itself in its brands (Helium, headless). The check accepts either, since it
+ * is about Desktop accepting this browser's connection, not about its brand.
  */
-const browserName = process.env.PAROUSIA_CHROMIUM_BINARY ? "Chrome" : "Chromium";
+const browserName = "(?:Chrome|Chromium)";
 const extensionDir = resolve(browserDir, process.env.PAROUSIA_BUILD_DIR ?? "dist", "chromium");
 const escape = (text) => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 
