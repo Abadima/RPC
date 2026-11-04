@@ -150,6 +150,26 @@ Where supported, content scripts cannot access extension storage. Firefox cannot
 
 Activities can still do what their granted content-script access permits on the target site.
 
+### Disabled Activities
+
+An Activity that's off is meant to run nothing, not to run and be hidden. In the Chromium and Firefox extensions, this holds:
+
+- **No Activity code runs.** A native Activity's `detect` is reached only through the registry, after the Activity is on and, if it reads pages, its site is granted. The tab being shared, the tabs "Show media presence" looks at, and every refresh go through the same check. Matching reads manifest data (patterns and regular expressions), not Activity code.
+- **Nothing is injected.** A page script, an iframe script, or the collector is injected into a tab only for an Activity that is on, matches the page, and has its site. The extension declares no content scripts of its own.
+- **Nothing runs before the switches are read.** Until the stored switches are in, every Activity would be at its default. The page host does not answer, and so nothing resolves or injects, until they are (`PageHost`, `ready`).
+- **Turning it off stops what is running.** Every page script and collector of that Activity, in every tab, is told to stop and disconnected; what it reported is dropped. The same happens when its site is taken back, and a collector also stops when the page data it reads is switched off (a PreMiD script has what it reports withheld instead). A script that connects afterwards is refused at its first message.
+- **Private tabs that are paused run nothing.** With private windows set to pause, no Activity code is called for a private tab and nothing is injected into it. MAL-Sync is not asked about it either.
+- **Media presence adds no exception.** A tab only counts if its Activity was on and shared when it was last looked at, and it is checked again, with the same switches, every time it could be shown. It reads what scripts already running there reported (`PageHost.peek`) and injects nothing. Those scripts, already allowed to run, are told to keep reading while their tab is in the background, and only for the tabs being kept; turning the Activity off stops them like any other. The tabs being kept are written to `storage.session` as tab numbers and nothing else, which only the extension's own pages can read and the browser drops when it closes.
+
+What is not guaranteed:
+
+- **Native modules load at startup.** Native Activities are compiled into the background bundle, so their module-level code runs when the background starts, on or off. It holds declarations: nothing calls into the Activity until it is on. That is reviewed in the Activities repository, not enforced by the build.
+- **A PreMiD script already running in an open tab.** Parousia stops its updates and its reports. Timers, listeners, and requests the Activity's own code started in that page continue until the tab is reloaded, because Parousia cannot remove what an Activity registered itself. A script that was being injected at the moment it was turned off runs its top-level code once.
+- **Orphaned scripts.** After an extension update or reload, the browser leaves content scripts running in open tabs until they reload. They cannot reach the extension any more.
+- **Unreadable switches.** If the stored switches cannot be read at startup, Activities run at their defaults, as on a new install.
+- **The userscript.** It has no switches: every built-in Activity runs there, on the address and title only. It reads no page data and starts no collector.
+- **An enabled Activity's script outlives a matching page.** After in-tab navigation to a page the Activity doesn't match, its script keeps running until reload. What it reports is ignored.
+
 ### Page-world access
 
 Page-world helpers only expose explicitly requested paths and reject prototype-related paths such as:
@@ -170,7 +190,7 @@ Activities do not run on sites for which they lack permission.
 
 ### The update check
 
-The extension makes one request to anyone but the computer it runs on: `GET https://api.github.com/repos/Abadima/RPC/releases/latest`, from a popup or dashboard that is about to say "update Desktop". It is the only address besides Desktop and Discord-RPC-Extension's app that the extension's Content Security Policy allows. It carries no cookies, credentials, referrer, or identifier, and nothing about the user's browsing; GitHub sees an IP address and the browser's user agent, as for any request. The response is untrusted: it is size-limited, parsed as JSON, and only a `x.y.z` number inside the exact `<!-- parousia-desktop: … -->` comment is read from it. A forged answer can show or hide an "update Desktop" notice, and nothing else; the link it offers is a fixed address. It is made at most once a day, and only when a connected Desktop and the extension differ in minor or patch version.
+Apart from the Activity icons the dashboard loads from remote URLs (with no referrer), the extension makes one request to anyone but the computer it runs on: `GET https://api.github.com/repos/Abadima/RPC/releases/latest`, from a popup or dashboard that is about to say "update Desktop". It is the only address besides Desktop and Discord-RPC-Extension's app that the extension's Content Security Policy allows. It carries no cookies, credentials, referrer, or identifier, and nothing about the user's browsing; GitHub sees an IP address and the browser's user agent, as for any request. The response is untrusted: it is size-limited, parsed as JSON, and only a `x.y.z` number inside the exact `<!-- parousia-desktop: … -->` comment is read from it. A forged answer can show or hide an "update Desktop" notice, and nothing else; the link it offers is a fixed address. It is made at most once a day, and only when a connected Desktop and the extension differ in minor or patch version.
 
 ### Permissions
 
@@ -231,6 +251,8 @@ Rejected because it provides no required security property beyond the existing o
 - Any web page can determine whether Desktop is listening on port `57179`.
 - Firefox extension origins must be manually allowed because they are random per installation.
 - Firefox cannot enforce content-script storage isolation at the browser level; the PreMiD runtime provides the current mitigation.
+- A switch stops Parousia's side of an Activity at once, but not what a PreMiD script already running in an open tab started itself, and the userscript has no switches. See Disabled Activities.
+- With several browsers connected, Desktop shows the presence that changed most recently. A music or video presence kept by one browser, which changes track in the background, can replace a presence from another. Stopping that needs Desktop to tell kept presence from live presence.
 - Same-OS-user processes are out of scope and can access local configuration and IPC.
 - MAL-Sync can't be asked only about tabs it recognizes: Parousia can't see which sites MAL-Sync runs on (including a person's own custom domains), so a tab it has nothing for is asked a few times per page, which wakes MAL-Sync's background that often. A list of its sites built from its source would cut that, and miss custom domains.
 
