@@ -746,32 +746,29 @@ try {
 
   // The background restarts (MV3 stops and starts it), with the music still kept in a tab nobody is looking at.
   {
+    // The dashboard holds a UI port that keeps the worker alive; let it go.
+    await dashboard.goto("about:blank");
     const session = await context.newCDPSession(nothing);
     await session.send("ServiceWorker.enable");
-    const stopped = worker;
+    // An in-memory mark, gone when the worker really stops. MV3 may restart it
+    // before Desktop sees the disconnect, so wait for a fresh global instead.
+    const mark = `before-restart-${Date.now()}`;
+    await worker.evaluate((value) => {
+      globalThis.__parousiaRestart = value;
+    }, mark);
     await session.send("ServiceWorker.stopAllWorkers");
-    // The old worker is really gone. Waiting for Discord to clear would race a
-    // kept page script waking a new worker before Desktop sees the disconnect.
-    await waitUntil(
-      () =>
-        stopped
-          .evaluate(() => true)
-          .then(
-            () => false,
-            () => true,
-          ),
-      "the background to stop",
-    );
-    // A tab event wakes it.
+    // A tab event wakes it, if it hasn't started again already.
     await jummboxAgain.bringToFront();
     await nothing.bringToFront();
     worker = await waitUntil(async () => {
       for (const candidate of context.serviceWorkers()) {
-        if (candidate === stopped) continue;
-        if (await candidate.evaluate(() => true).catch(() => false)) return candidate;
+        const seen = await candidate
+          .evaluate(() => globalThis.__parousiaRestart)
+          .catch(() => false);
+        if (seen !== false && seen !== mark) return candidate;
       }
       return false;
-    }, "the background to be running again");
+    }, "a fresh background after the restart");
     await session.detach();
     await shown((a) => a?.details === "Song 4", "the song again, once the background is back");
   }
