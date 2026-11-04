@@ -2,7 +2,7 @@
 
 ## V1.2.0 - IN DEVELOPMENT
 
-This release carries the browser extension and userscript **1.2.0** and Parousia Desktop **1.0.2**. Version numbers in the manifests, `package.json`, and `desktop/Cargo.toml` change when the release is cut.
+This release carries the browser extension and userscript **1.2.0** and Parousia Desktop **1.0.2**. Versions are set in the manifests, `package.json`, and `desktop/Cargo.toml`; `scripts/release-check.mjs` checks they agree with the tag.
 
 ### ✨ New Features
 
