@@ -162,7 +162,7 @@ function requestSites(origins: string[]): Promise<boolean> {
 }
 
 /**
- * "Access your data for all websites": off by default, and only ever asked
+ * "Allow access to all websites": off by default, and only ever asked
  * for by its own switch. Turning it off leaves `scripting` for any site
  * still granted on its own.
  */

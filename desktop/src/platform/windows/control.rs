@@ -148,7 +148,7 @@ fn request(name: &str, request: &ControlRequest) -> io::Result<ControlResponse> 
     if !pipe.server_process_id().is_some_and(is_this_user) {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
-            "Desktop's pipe is held by a process of another Windows user, so nothing was sent to it",
+            "Another Windows user's process holds Desktop's pipe, so nothing was sent",
         ));
     }
     let mut io = pipe.io_until(Instant::now() + Duration::from_secs(5));

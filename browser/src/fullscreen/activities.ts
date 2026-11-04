@@ -166,7 +166,8 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
       pills.append(el("span", "pill pill-warn", t("Access declined")));
     }
     if (info.source === "premid") pills.append(el("span", "pill pill-quiet", "PreMiD"));
-    if ((info.variants?.length ?? 0) > 1) pills.append(el("span", "pill pill-quiet", t("multi")));
+    if ((info.variants?.length ?? 0) > 1)
+      pills.append(el("span", "pill pill-quiet", t("2 sources")));
     link.append(activityIcon(info), text, pills);
 
     const toggle = el("input", "switch");
@@ -267,12 +268,12 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
         for (const id of declined) refused.add(id);
         if (declined.length === 0) return t("Enabled {count}.", { count: count(changed) });
         if (changed === 0) {
-          return t("Nothing was enabled: your browser didn't grant access to their sites.");
+          return t("Nothing was enabled. Your browser declined access to their sites.");
         }
         return tn(
           declined.length,
           "Enabled {count}. {n} Activity stayed off because its sites weren't granted.",
-          "Enabled {count}. {n} Activities stayed off because their sites weren't granted.",
+          "Enabled {count}. {n} Activities stayed off because access to their sites was declined.",
           { count: count(changed) },
         );
       })
@@ -308,8 +309,8 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
       "p",
       "bulk-scope",
       arranged.length === 0
-        ? t("No Activities match, so there is nothing to change.")
-        : t("This applies to the {count} matching your search and filters, on every page.", {
+        ? t("No Activities match, so there's nothing to change.")
+        : t("This applies to all {count} matching your search and filters, not only this page.", {
             count: count(arranged.length),
           }),
     );
@@ -326,9 +327,9 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
             ? `${tn(readers, "{n} Activity reads pages.", "{n} Activities read pages.")} ${tn(
                 sites,
                 "Your browser will ask for access to {n} site in one prompt, which can be long. Anything you decline stays off.",
-                "Your browser will ask for access to {n} sites in one prompt, which can be long. Anything you decline stays off.",
+                "Your browser asks for access to {n} sites in one prompt. Anything you decline stays off.",
               )}`
-            : t("None of them needs access to a new site, so your browser won't ask for anything."),
+            : t("None needs access to a new site, so your browser won't ask."),
         ),
       );
       const actions = el("div", "bulk-actions");
@@ -363,7 +364,7 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
       );
       bulkBody.replaceChildren(
         el("p", "bulk-question", t("Disable {count}?", { count: count(plan.disable.length) })),
-        el("p", "bulk-scope", t("Sites only they used are given back to your browser.")),
+        el("p", "bulk-scope", t("Sites only they use are given back to your browser.")),
         actions,
       );
       if (moveFocus) cancel.focus();

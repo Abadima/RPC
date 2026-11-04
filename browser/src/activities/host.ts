@@ -184,6 +184,8 @@ export class PageHost {
   private readonly again = new Set<number>();
   /** The URL each tab's scripts were last injected for. */
   private readonly visited = new Map<number, string>();
+  /** Tabs whose music or video is kept: their scripts read even while the tab isn't shown. */
+  private readonly background = new Set<number>();
   /** Settles once the first states are in, so a page connecting right after a restart isn't turned away. */
   private readonly ready = Promise.withResolvers<void>();
 
@@ -304,13 +306,33 @@ export class PageHost {
    * Injects what the Activity needs there, if it isn't already. An Activity
    * that reads pages is found here only where its site is granted.
    */
-  async page(tabId: number, url: URL): Promise<Pick<Page, "granted" | "data" | "reported">> {
+  page(tabId: number, url: URL): Promise<Pick<Page, "granted" | "data" | "reported">> {
+    return this.read(tabId, url, true);
+  }
+
+  /**
+   * The same for a tab that isn't the one being shared, for music or video
+   * kept from it: what its scripts last reported, and nothing injected.
+   */
+  peek(tabId: number, url: URL): Promise<Pick<Page, "granted" | "data" | "reported">> {
+    return this.read(tabId, url, false);
+  }
+
+  private async read(
+    tabId: number,
+    url: URL,
+    inject: boolean,
+  ): Promise<Pick<Page, "granted" | "data" | "reported">> {
     await this.grants();
+    // Not before the stored states are in: until then every Activity is at its
+    // default, and one someone turned off would run once. The runtime resolves
+    // only after this, so nothing of an Activity runs ahead of its switch.
+    await this.ready.promise;
     const resolved = this.registry.resolve(url, (info) => this.usable(info, url));
     const manifest = resolved && this.running.get(resolved.info.id);
     if (!manifest) return {};
     const granted = allowedData(manifest.info, this.pageData);
-    this.visit(tabId, url, manifest, granted);
+    if (inject) this.visit(tabId, url, manifest, granted);
     const report = this.reports.get(tabId);
     if (report?.manifest !== manifest) return { granted };
     if (report.kind === "collector") return { granted, data: report.data };
@@ -353,14 +375,54 @@ export class PageHost {
     this.visited.delete(tabId);
   }
 
+  /**
+   * The tabs whose music or video is kept (see core/media-presence.ts). A
+   * script in a tab that isn't shown reads nothing, so a skipped song would
+   * never reach Discord: these are told to keep reading, and the rest to read
+   * only while their tab is shown, as ever.
+   */
+  keepReading(tabs: Iterable<number>): void {
+    const next = new Set(tabs);
+    for (const tabId of this.background) {
+      if (next.has(tabId)) continue;
+      this.background.delete(tabId);
+      this.tellBackground(tabId, false);
+    }
+    for (const tabId of next) {
+      if (this.background.has(tabId)) continue;
+      this.background.add(tabId);
+      this.tellBackground(tabId, true);
+    }
+  }
+
+  private tellBackground(tabId: number, on: boolean): void {
+    for (const live of this.live.get(tabId) ?? []) this.post(live.port, { type: "background", on });
+  }
+
   /** The tab closed. */
   forget(tabId: number): void {
+    this.background.delete(tabId);
     this.visited.delete(tabId);
     this.reports.delete(tabId);
     this.live.delete(tabId);
     clearTimeout(this.pending.get(tabId));
     this.pending.delete(tabId);
     this.again.delete(tabId);
+  }
+
+  /**
+   * Stops every script running in these tabs, and drops what they reported:
+   * a private tab under "Pause activity" runs nothing, even scripts that were
+   * already running there before the setting changed.
+   */
+  stopTabs(tabs: Iterable<number>): void {
+    for (const tabId of tabs) {
+      this.background.delete(tabId);
+      this.visited.delete(tabId);
+      for (const live of this.live.get(tabId) ?? []) this.refuse(live.port);
+      this.live.delete(tabId);
+      if (this.reports.delete(tabId)) this.changed(tabId);
+    }
   }
 
   /** Access was granted or taken back: what runs on sites no longer granted stops now. */
@@ -493,6 +555,9 @@ export class PageHost {
       lives.add(live);
       this.live.set(tabId, lives);
       this.tell(live);
+      // Where it stands, whichever way: a script keeps what it was last told when the background
+      // restarts, and the background doesn't remember who it told.
+      this.post(port, { type: "background", on: this.background.has(tabId) });
     };
 
     const handle = async (raw: unknown): Promise<void> => {

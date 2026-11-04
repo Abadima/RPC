@@ -233,12 +233,15 @@ describe("an Activity in a page", () => {
     const location = { href: "https://music.example/" };
     scope.window = window;
     scope.location = location;
-    scope.document = {
+    const documentListeners = new Map<string, () => void>();
+    const document = {
       hidden: false,
       readyState: "complete",
-      addEventListener: () => {},
+      addEventListener: (type: string, listener: () => void) =>
+        documentListeners.set(type, listener),
       getElementsByTagName: () => [],
     };
+    scope.document = document;
     scope.chrome = {
       runtime: {
         connect: () => ({
@@ -259,6 +262,13 @@ describe("an Activity in a page", () => {
       location,
       posted,
       reports: () => posted.filter((message) => message.type === "activity"),
+      /** Hides or shows the page, as a tab switch does. */
+      setHidden: (hidden: boolean) => {
+        document.hidden = hidden;
+        documentListeners.get("visibilitychange")?.();
+      },
+      /** A message from the background. */
+      receive: (message: object) => receivers.forEach((receive) => receive(message)),
       stop: () => receivers.forEach((receive) => receive({ type: "stop" })),
     };
   }
@@ -309,6 +319,49 @@ describe("an Activity in a page", () => {
     setSystemTime(Date.now() + STALE_AFTER_MOVE_MS + 1000);
     await tick();
     expect(reports().at(-1)?.data).toBeNull();
+    stop();
+  }, 15_000);
+
+  test("in a tab that is not shown it reads again only while the background asks it to", async () => {
+    const { bridge, setHidden, receive, stop } = page();
+    const api = bound(bridge, "premid:Music");
+    if (!api) throw new Error("the Activity wasn't bound");
+    const [Presence] = api;
+    const presence = new Presence({ clientId: "1" }) as {
+      on: (event: string, listener: () => void) => void;
+    };
+    let updates = 0;
+    presence.on("UpdateData", () => {
+      updates++;
+    });
+    await tick();
+    expect(updates).toBeGreaterThan(0);
+
+    // A tab nobody is looking at reads nothing: that is why a skipped song went unnoticed.
+    setHidden(true);
+    await tick();
+    const quiet = updates;
+    await tick();
+    expect(updates).toBe(quiet);
+
+    // Its music is being kept: it reads again, at once and then every second, while hidden.
+    receive({ type: "background", on: true });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(updates).toBeGreaterThan(quiet);
+    const reading = updates;
+    await tick();
+    expect(updates).toBeGreaterThan(reading);
+
+    // Kept no more: quiet again.
+    receive({ type: "background", on: false });
+    const stopped = updates;
+    await tick();
+    expect(updates).toBe(stopped);
+
+    // Shown again, it reads as ever.
+    setHidden(false);
+    await tick();
+    expect(updates).toBeGreaterThan(stopped);
     stop();
   }, 15_000);
 

@@ -15,7 +15,7 @@
   },
   "url": ["example.com", "www.example.com"],
   "regExp": "^https?[:][/][/](www[.])?example[.]com[/]",
-  "version": "1.0.0",
+  "version": "2.0.5",
   "logo": "https://cdn.example/example.png",
   "thumbnail": "https://cdn.example/example-thumb.png",
   "color": "#000000",

@@ -116,9 +116,7 @@ pub fn run(hub: Arc<Hub>) -> Exit {
                     && message.reply_serial == register_serial
                     && hub.debug() =>
             {
-                println!(
-                    "Parousia Desktop: no system tray is running yet; the icon appears when one starts"
-                );
+                println!("Parousia Desktop: no system tray yet. The icon appears when one starts.");
             }
             _ => {}
         }

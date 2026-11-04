@@ -28,6 +28,7 @@ import {
   QUIET_DISCORD,
   assert,
   browserDir,
+  chromiumLaunch,
   command,
   control,
   logger,
@@ -45,6 +46,13 @@ import {
 const log = logger("desktop-link");
 /** What Desktop calls this OS in a browser's name ("Chromium on Linux"). */
 const os = windows ? "Windows" : "Linux";
+/**
+ * The browser's name as Desktop shows it, from the user agent (client-name.ts):
+ * "Chromium" for Playwright's build, "Chrome" for one that doesn't identify
+ * itself in its brands (Helium, headless). The check accepts either, since it
+ * is about Desktop accepting this browser's connection, not about its brand.
+ */
+const browserName = "(?:Chrome|Chromium)";
 const extensionDir = resolve(browserDir, process.env.PAROUSIA_BUILD_DIR ?? "dist", "chromium");
 const escape = (text) => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 
@@ -52,7 +60,7 @@ async function launch(userDataDir, dir = extensionDir) {
   // channel "chromium" runs the full build in new headless mode, which
   // (unlike the headless shell) can load extensions.
   const context = await chromium.launchPersistentContext(userDataDir, {
-    channel: "chromium",
+    ...chromiumLaunch(),
     headless: true,
     args: [`--disable-extensions-except=${dir}`, `--load-extension=${dir}`],
   });
@@ -139,8 +147,11 @@ try {
   assert(saved.allowedOrigins.includes(a.origin), "and persists it to config.json");
   popupA = await reopen(a, popupA);
   await popup.waitForStatus(popupA, /^Connected to Parousia Desktop$/);
-  await desktop.waitFor(new RegExp(`Chromium on ${os} connected from ${escape(a.origin)}`), since);
-  await desktop.waitFor(new RegExp(`presence from Chromium on ${os}: none`), since);
+  await desktop.waitFor(
+    new RegExp(`${browserName} on ${os} connected from ${escape(a.origin)}`),
+    since,
+  );
+  await desktop.waitFor(new RegExp(`presence from ${browserName} on ${os}: none`), since);
   log("allowed from the CLI: connects, Presence arrives; saved to config.json");
 
   // --- A second browser, at the same time ---

@@ -54,11 +54,19 @@ describe("ui-port messages", () => {
         activity: { id: "jena", name: "Jena Hub", configurable: true },
       }),
     ).toEqual({ type: "activity", activity: { id: "jena", name: "Jena Hub", configurable: true } });
+    expect(
+      parseUiEvent({ type: "activity", activity: { id: "tunes", name: "Tunes", kept: true } }),
+    ).toEqual({ type: "activity", activity: { id: "tunes", name: "Tunes", kept: true } });
+    // Left out unless it is so.
+    expect(
+      parseUiEvent({ type: "activity", activity: { id: "tunes", name: "Tunes", kept: false } }),
+    ).toEqual({ type: "activity", activity: { id: "tunes", name: "Tunes" } });
     expect(parseUiEvent({ type: "activity", activity: null })).toEqual({
       type: "activity",
       activity: null,
     });
     for (const value of [
+      { type: "activity", activity: { id: "a", name: "A", kept: "yes" } },
       { type: "activity", activity: { name: "No id" } },
       { type: "activity", activity: { id: "x".repeat(257), name: "Long id" } },
       { type: "activity", activity: { id: "a", name: "A", configurable: "yes" } },

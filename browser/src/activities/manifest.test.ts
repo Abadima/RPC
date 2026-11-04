@@ -207,6 +207,7 @@ describe("one manifest for both sources", () => {
   test("the catalog lists an Activity without what only its own page needs", () => {
     const entry = catalogEntry({
       ...native.info,
+      version: "1.2.3",
       settings: [{ id: "a", title: "A", type: "boolean", default: true }],
       data: ["media"],
       origins: ["https://tunes.example/*"],

@@ -42,7 +42,7 @@ export function updateNotice(
       key: `${pair}:${latestDesktop}`,
       title: t("A newer Parousia Desktop is available"),
       detail: t(
-        "This extension is newer than Parousia Desktop {version}. They still work together; update Desktop to get everything the extension offers.",
+        "This extension is newer than Parousia Desktop {version}. They still work together. Update Desktop to get everything the extension offers.",
         { version: state.desktopVersion },
       ),
       href: DESKTOP_DOWNLOAD,
@@ -53,7 +53,7 @@ export function updateNotice(
     key: pair,
     title: t("A newer Parousia extension is available"),
     detail: t(
-      "Parousia Desktop {version} is newer than this extension. They still work together; update the extension from your browser's extension page.",
+      "Parousia Desktop {version} is newer than this extension. They still work together. Update the extension from your browser's extension page.",
       { version: state.desktopVersion },
     ),
   };

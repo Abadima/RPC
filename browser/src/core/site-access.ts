@@ -11,7 +11,7 @@ import { needsAccess } from "./activity-state";
 export const ALL_SITES = "*://*/*";
 
 export interface Grants {
-  /** "Access your data for all websites" is on. */
+  /** "Allow access to all websites" is on. */
   all: boolean;
   /** Each site granted on its own, as origin patterns (`*://www.youtube.com/*`). */
   origins: readonly string[];

@@ -17,6 +17,7 @@ import {
   hostOrigin,
   keywordsFrom,
   manifestFrom,
+  versionFrom,
 } from "./metadata";
 
 /**
@@ -331,6 +332,7 @@ async function readActivity(
     id: premidId(service),
     name: service,
     ...(isObject(description) && isString(description.en) && { description: description.en }),
+    version: versionFrom(metadata.version),
     hosts,
     match: { regExp: pattern },
     icon: logo,

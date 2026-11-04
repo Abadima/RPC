@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { collect, loadedImages, unchanged } from "./collector";
+import { afterEach, describe, expect, test } from "bun:test";
+import { collect, loadedImages, startCollector, unchanged } from "./collector";
 
 /** Enough of a document: its media elements, and an og:image. */
 function page(
@@ -192,4 +192,102 @@ describe("the page-data collector", () => {
         .media,
     ).toBeUndefined();
   });
+});
+
+describe("the collector in a tab that is not shown", () => {
+  const scope = globalThis as Record<string, unknown>;
+  const globals = ["window", "document", "chrome", "location"] as const;
+  const before = new Map<string, PropertyDescriptor | undefined>(
+    [...globals, "navigator"].map((key) => [key, Object.getOwnPropertyDescriptor(scope, key)]),
+  );
+  afterEach(() => {
+    for (const [key, descriptor] of before) {
+      if (descriptor) Object.defineProperty(scope, key, descriptor);
+      else delete scope[key];
+    }
+  });
+
+  /** A page playing a song, started for one Activity, with the messages it sends and gets through its port. */
+  function playing() {
+    const posted: Array<{ type: string; data?: { media?: { title?: string } } }> = [];
+    const receivers: Array<(message: unknown) => void> = [];
+    const documentListeners = new Map<string, () => void>();
+    const metadata = { title: "Song A" };
+    const document = {
+      hidden: false,
+      querySelectorAll: () => [],
+      querySelector: () => null,
+      addEventListener: (type: string, listener: () => void) =>
+        documentListeners.set(type, listener),
+      removeEventListener: () => {},
+    };
+    const define = (key: string, value: unknown): void => {
+      Object.defineProperty(scope, key, { value, configurable: true, writable: true });
+    };
+    define("window", { addEventListener: () => {}, removeEventListener: () => {} });
+    define("location", { pathname: "/play", search: "" });
+    define("document", document);
+    define("navigator", { mediaSession: { metadata, playbackState: "playing" } });
+    define("chrome", {
+      runtime: {
+        connect: () => ({
+          postMessage: (message: (typeof posted)[number]) => posted.push(message),
+          onMessage: { addListener: (l: (message: unknown) => void) => receivers.push(l) },
+          onDisconnect: { addListener: () => {} },
+          disconnect: () => {},
+        }),
+      },
+    });
+    startCollector("tunes");
+    const receive = (message: object): void => receivers.forEach((l) => l(message));
+    return {
+      receive,
+      titles: () =>
+        posted.filter((m) => m.type === "data").map((m) => m.data?.media?.title ?? null),
+      setTitle: (title: string) => {
+        metadata.title = title;
+      },
+      setHidden: (hidden: boolean) => {
+        document.hidden = hidden;
+        documentListeners.get("visibilitychange")?.();
+      },
+    };
+  }
+
+  const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 1200));
+
+  test("reads a new song only while the background keeps its music or video", async () => {
+    const { receive, titles, setTitle, setHidden } = playing();
+    receive({ type: "collect", kinds: ["media"] });
+    expect(titles()).toEqual(["Song A"]);
+
+    setTitle("Song B");
+    await tick();
+    expect(titles()).toEqual(["Song A", "Song B"]);
+
+    // Left in the background, it reads nothing: a skipped song wasn't news.
+    setHidden(true);
+    setTitle("Song C");
+    await tick();
+    expect(titles()).toEqual(["Song A", "Song B"]);
+
+    // Kept: it reads now, and again every second, while hidden.
+    receive({ type: "background", on: true });
+    expect(titles()).toEqual(["Song A", "Song B", "Song C"]);
+    setTitle("Song D");
+    await tick();
+    expect(titles()).toEqual(["Song A", "Song B", "Song C", "Song D"]);
+
+    // No longer kept: quiet again.
+    receive({ type: "background", on: false });
+    setTitle("Song E");
+    await tick();
+    expect(titles()).toEqual(["Song A", "Song B", "Song C", "Song D"]);
+
+    // Shown again, it catches up.
+    setHidden(false);
+    await tick();
+    expect(titles().at(-1)).toBe("Song E");
+    receive({ type: "stop" });
+  }, 15_000);
 });

@@ -6,6 +6,7 @@ import { hostIds, manifestShard, parseCatalog, parseShard } from "../../src/acti
 import type { ActivityInfo } from "../../src/core/activity";
 import { buildActivities, type ActivitiesBuild } from "./build";
 import { activityId, folderLetter, websiteFolders } from "./discover";
+import { versionFrom } from "./metadata";
 import { discover, linkVariants, websiteKey } from "./pipeline";
 import {
   descriptionFiles,
@@ -84,6 +85,7 @@ describe("one pipeline for both sources", () => {
         id: "tunes",
         name: "Tunes",
         description: "What's playing on tunes.example, for tests.",
+        version: "1.2.3",
         hosts: ["tunes.example"],
         source: "parousia",
         icon: "https://tunes.example/icon.png",
@@ -96,6 +98,7 @@ describe("one pipeline for both sources", () => {
       id: "premid:Example",
       name: "Example",
       description: "Example, for tests.",
+      version: "2.0.5",
       hosts: ["example.com", "www.example.com"],
       source: "premid",
       icon: "https://cdn.example/example.png",
@@ -153,6 +156,7 @@ describe("native Activities (parousia-project/activities)", () => {
       await place("U/Unknown", { ...valid, id: "unknown", permissions: ["tabs"] });
       await place("C/Creators", { ...valid, id: "creators", data: ["creatorIcons"] });
       await place("I/Icon", { ...valid, id: "icon", icon: "http://site.example/icon.png" });
+      await place("V/Version", { ...valid, id: "version", version: "1.0" });
       const { native, problems } = await discover("parousia", root);
       expect(native.map((found) => found.manifest.info.id)).toEqual(["site"]);
       expect(problems).toEqual([
@@ -160,12 +164,24 @@ describe("native Activities (parousia-project/activities)", () => {
         'websites/E/Everywhere: matches: "*://*/*" isn\'t a match pattern for particular sites',
         "websites/I/Icon: icon must be an https image URL of at most 256 characters",
         'websites/U/Unknown: unknown key "permissions"',
+        "websites/V/Version: version must be MAJOR.MINOR.PATCH",
         'websites/W/Wrong Id: id must be "wrong-id", the folder\'s name in lowercase words joined by "-"',
         "websites/X/Misfiled: it goes in websites/M/",
       ]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe("an Activity's version", () => {
+  test("is MAJOR.MINOR.PATCH from its metadata.json, and anything else is no version", () => {
+    expect(versionFrom("1.2.3")).toBe("1.2.3");
+    expect(versionFrom("10.0.12")).toBe("10.0.12");
+    for (const other of ["1.2", "v1.2.3", "1.2.3-beta", "1.2.3.4", " 1.2.3", "", 1.2, null]) {
+      expect(versionFrom(other)).toBeUndefined();
+    }
+    expect(versionFrom(undefined)).toBeUndefined();
   });
 });
 
@@ -404,6 +420,12 @@ describe("the packaged build", () => {
     expect(full?.keywords).toBeUndefined();
     expect(example?.description).toBeDefined();
     expect((await shard("tunes"))?.info.data).toEqual(["media", "thumbnails"]);
+    // Only an Activity's own page shows its version, so the manifest has it and the catalog doesn't.
+    expect(catalog.activities.some((info) => info.version !== undefined)).toBe(false);
+    expect(full?.version).toBe("2.0.5");
+    expect((await shard("tunes"))?.info.version).toBe("1.2.3");
+    // A service with a folder per API version shows the one that runs (v1), not the newest.
+    expect((await shard("premid:Versioned"))?.info.version).toBe("1.0.0");
     // Manifests share a file by first letter, so there's no file per Activity and no index of them.
     expect(Object.keys((await read("activities/manifests/t.json")) as object).sort()).toEqual([
       "premid:Tunes",

@@ -19,10 +19,18 @@
 // - Native: an Activity that reads pages is off until turned on, which the
 //   popup does in one click; the collector reads the page's Media Session.
 // - Settings > Privacy: what Activities may read, for all of them at once.
-// - The popup: "Current activity" only while something's shared, "Configure
+// - The popup: "Now sharing" only while something's shared, "Configure
 //   activity" for an Activity with settings, and a quiet line otherwise.
 // - The Default Activity: written in the dashboard, shared where no Activity
 //   is, and gone once it's off.
+// - Show media presence, with a tab that really makes sound: the song stays on
+//   Discord on a site without an Activity, a song skipped in a tab nobody is
+//   looking at reaches Discord (headless Chromium never hides a tab, so the tab
+//   switch is played back into the extension's own world: see `setHidden`),
+//   of two players only the one shared last shows, the song comes back when
+//   the extension's background is stopped and starts again,
+//   and the popup beside music (or the Default Activity) still offers the
+//   site's own Activity.
 // - The dashboard: switches, icons and their fallback, site access in
 //   Settings only ("all websites" off), and the layout from phone to
 //   ultrawide.
@@ -49,6 +57,7 @@ import {
   STEP_TIMEOUT_MS,
   assert,
   browserDir,
+  chromiumLaunch,
   control,
   logger,
   sleep,
@@ -91,10 +100,12 @@ const flatpak = process.env.ACTIVITIES_BROWSER === "flatpak";
 async function launchBrowser(profileDir, extensionDir) {
   const args = [`--disable-extensions-except=${extensionDir}`, `--load-extension=${extensionDir}`];
   if (!flatpak) {
+    // Not muted, and free to play without a click: a tab with a tone in it is really audible.
     const context = await chromium.launchPersistentContext(profileDir, {
-      channel: "chromium",
+      ...chromiumLaunch(),
       headless: true,
-      args,
+      ignoreDefaultArgs: ["--mute-audio"],
+      args: [...args, "--autoplay-policy=no-user-gesture-required"],
     });
     return { context, name: "playwright-core's Chromium", close: () => context.close() };
   }
@@ -228,7 +239,7 @@ try {
   launched = await launchBrowser(join(ws.dir, "profile"), extensionDir);
   context = launched.context;
   log(`in ${launched.name}`);
-  const worker =
+  let worker =
     context.serviceWorkers()[0] ??
     (await context.waitForEvent("serviceworker", { timeout: STEP_TIMEOUT_MS }));
   const id = new URL(worker.url()).host;
@@ -313,7 +324,7 @@ try {
     `listed once, as the native one (${guideCards})`,
   );
   assert(
-    (await dashboard.textContent(`[data-activity="${GUIDE_NATIVE}"]`))?.includes("multi"),
+    (await dashboard.textContent(`[data-activity="${GUIDE_NATIVE}"]`))?.includes("2 sources"),
     "and marked as in both sources",
   );
   await openDashboard(`#activities/${GUIDE_NATIVE}`);
@@ -437,7 +448,7 @@ try {
   assert(!injected, "its script never ran there");
   let popup = await popupFor(jummbox);
   await popup.locator("#suggestion-view:not([hidden])").waitFor();
-  assert(await popup.isHidden("#activity-view"), "the popup hides Current activity");
+  assert(await popup.isHidden("#activity-view"), "the popup hides Now sharing");
   assert((await popup.textContent("#suggestion-name")) === "Jummbox", "and names the Activity");
   assert(
     (await popup.textContent("#suggestion-note"))?.includes("access to jummb.us"),
@@ -523,14 +534,14 @@ try {
     "native: Tunes is off until the popup turns it on in one click; then the collector reads the page's Media Session, and the site's logo instead of the artwork once thumbnails are off",
   );
 
-  // --- The popup while sharing: Configure activity ---
+  // --- The popup while sharing: Configure Activity ---
   const example = await context.newPage();
   await serve(example, "https://example.site", "<!doctype html><title>Docs</title>");
   await example.goto(EXAMPLE_PAGE);
   await shown((a) => a?.details === "Reading Docs", "Example Site, with its default prefix");
   popup = await popupFor(example);
   await popup.locator("#activity-view:not([hidden])").waitFor();
-  assert(await popup.isHidden("#suggestion-view"), "the popup shows Current activity alone");
+  assert(await popup.isHidden("#suggestion-view"), "the popup shows Now sharing alone");
   await popup.click("#configure-button");
   const prefix = popup.locator("#configure-view input.text-field");
   await prefix.waitFor();
@@ -540,7 +551,7 @@ try {
   await example.bringToFront();
   await shown((a) => a?.details === "Browsing Docs", "the new prefix, set from the popup");
   log(
-    "the popup shows Current activity only while sharing, and changes the Activity's settings in place",
+    "the popup shows Now sharing only while sharing, and changes the Activity's settings in place",
   );
 
   // --- The Default Activity ---
@@ -551,12 +562,12 @@ try {
   popup = await popupFor(nothing);
   await popup.locator("#idle-view:not([hidden])").waitFor();
   assert(
-    (await popup.textContent("#idle-view")) === "Nothing to share on this page.",
+    (await popup.textContent("#idle-view")) === "Nothing to share here.",
     "the popup says so in one line",
   );
   assert(
     (await popup.isHidden("#activity-view")) && (await popup.isHidden("#suggestion-view")),
-    "without an empty Current activity",
+    "without an empty Now sharing",
   );
   await popup.done();
 
@@ -606,12 +617,192 @@ try {
     "the Default Activity: its own tab, a name required and links checked, shared where no Activity is, and gone once off",
   );
 
+  // --- The popup beside the Default Activity, and beside music kept from another tab ---
+  const setPreferences = (patch) =>
+    worker.evaluate(async (next) => {
+      const { preferences = {} } = await chrome.storage.local.get("preferences");
+      await chrome.storage.local.set({ preferences: { ...preferences, ...next } });
+    }, patch);
+  const setDefault = (activity) =>
+    worker.evaluate((next) => chrome.storage.local.set({ defaultActivity: next }), activity);
+  const detailsSent = () => discord.activities.map((a) => a?.details ?? null);
+  /** A music page that really plays a tone, with `skipTo` to change song as a player does and `stopTone` to end the sound. */
+  const player = async (title) => {
+    const page = await context.newPage();
+    await serve(
+      page,
+      "https://tunes.example",
+      `<!doctype html><title>Tunes</title><audio></audio><script>
+        const play = (name) => {
+          navigator.mediaSession.metadata = new MediaMetadata({ title: name, artist: "Rick Astley" });
+          navigator.mediaSession.playbackState = "playing";
+        };
+        play(${JSON.stringify(title)});
+        const context = new AudioContext();
+        const tone = context.createOscillator();
+        tone.connect(context.destination);
+        tone.start();
+        context.resume();
+        window.skipTo = play;
+        window.stopTone = () => tone.stop();
+      </script>`,
+    );
+    await page.goto(TUNES_PAGE);
+    return page;
+  };
+  const audibleTabs = () =>
+    worker.evaluate(async () => (await chrome.tabs.query({ audible: true })).length);
+  /**
+   * Headless Chromium never hides a tab (every page stays "visible", even with
+   * another in front), so the one thing a real browser does on a tab switch is
+   * played back into the extension's own world in `page`: `document.hidden`
+   * and a `visibilitychange`. That world is where the collector and PreMiD
+   * scripts run; the page's own world, its sound, and everything else are real.
+   */
+  async function setHidden(page, hidden) {
+    const session = await context.newCDPSession(page);
+    const worlds = [];
+    session.on("Runtime.executionContextCreated", ({ context: world }) => worlds.push(world));
+    await session.send("Runtime.enable");
+    const ours = worlds.filter((world) => world.origin === extension);
+    assert(ours.length > 0, "the extension has a script running in the page");
+    for (const world of ours) {
+      await session.send("Runtime.evaluate", {
+        contextId: world.id,
+        expression: `Object.defineProperty(document, "hidden", { get: () => ${hidden}, configurable: true });
+          document.dispatchEvent(new Event("visibilitychange"));`,
+      });
+    }
+    await session.detach();
+  }
+
+  // Jummbox is on, and its site isn't granted: an Activity the site has, which can't run.
+  await setDefault({ enabled: true, name: "Studying", elapsed: false });
+  const jummboxAgain = await context.newPage();
+  await serve(jummboxAgain, "https://jummb.us", "<!doctype html><title>JummBox</title><p>Beep</p>");
+  await jummboxAgain.goto("https://jummb.us/");
+  await shown(
+    (a) => a?.name === "Studying",
+    "the Default Activity, on a site whose Activity can't run",
+  );
+  popup = await popupFor(jummboxAgain);
+  await popup.locator("#activity-view:not([hidden])").waitFor();
+  await popup.locator("#suggestion-view:not([hidden])").waitFor();
+  assert(
+    (await popup.textContent("#content"))?.includes("Studying"),
+    "the popup shows what's being shared",
+  );
+  assert(
+    (await popup.textContent("#suggestion-name")) === "Jummbox" &&
+      (await popup.textContent("#suggestion-action"))?.trim() === "Allow access",
+    "and, beside it, the site's own Activity, which it offers to allow",
+  );
+  await popup.done();
+  await setDefault({ enabled: false, name: "Studying" });
+  await shown((a) => a === null, "nothing, once the Default Activity is off");
+
+  await setPreferences({ showMediaPresence: true });
+  const songTab = await player("Song 1");
+  await songTab.bringToFront();
+  await shown((a) => a?.details === "Song 1", "the first song");
+  await waitUntil(async () => (await audibleTabs()) === 1, "sound in the first tab");
+  await nothing.bringToFront();
+  await setHidden(songTab, true);
+  await sleep(1500);
+  const kept = detailsSent();
+  assert(kept.at(-1) === "Song 1", `the song stays on a site without an Activity (${kept})`);
+  assert(
+    !kept.slice(kept.lastIndexOf("Song 1")).includes(null),
+    "and Discord was never cleared on the way",
+  );
+
+  // The tab nobody is looking at reads on: a skipped song is news.
+  await songTab.evaluate(() => window.skipTo("Song 2"));
+  await shown(
+    (a) => a?.details === "Song 2",
+    "the next song, skipped in a tab nobody is looking at",
+  );
+  await songTab.evaluate(() => window.skipTo("Song 3"));
+  await shown((a) => a?.details === "Song 3", "and the one after");
+
+  // Of two players, the one shared last: the other moving on doesn't take over.
+  const otherTab = await player("Other 1");
+  await otherTab.bringToFront();
+  await shown((a) => a?.details === "Other 1", "the second player, shared last");
+  await waitUntil(async () => (await audibleTabs()) === 2, "sound in both tabs");
+  await nothing.bringToFront();
+  await setHidden(otherTab, true);
+  await sleep(1500);
+  await songTab.evaluate(() => window.skipTo("Song 4"));
+  await sleep(3000);
+  const both = detailsSent();
+  assert(!both.includes("Song 4"), `the other player moving on takes nothing over (${both})`);
+  assert(both.at(-1) === "Other 1", "the one shared last stays");
+  await otherTab.evaluate(() => window.stopTone());
+  await shown(
+    (a) => a?.details === "Song 4",
+    "the first player's current song, once the other stops",
+  );
+
+  // The background restarts (MV3 stops and starts it), with the music still kept in a tab nobody is looking at.
+  {
+    // The dashboard holds a UI port that keeps the worker alive; let it go.
+    await dashboard.goto("about:blank");
+    const session = await context.newCDPSession(nothing);
+    await session.send("ServiceWorker.enable");
+    // An in-memory mark, gone when the worker really stops. MV3 may restart it
+    // before Desktop sees the disconnect, so wait for a fresh global instead.
+    const mark = `before-restart-${Date.now()}`;
+    await worker.evaluate((value) => {
+      globalThis.__parousiaRestart = value;
+    }, mark);
+    await session.send("ServiceWorker.stopAllWorkers");
+    // A tab event wakes it, if it hasn't started again already.
+    await jummboxAgain.bringToFront();
+    await nothing.bringToFront();
+    worker = await waitUntil(async () => {
+      for (const candidate of context.serviceWorkers()) {
+        const seen = await candidate
+          .evaluate(() => globalThis.__parousiaRestart)
+          .catch(() => false);
+        if (seen !== false && seen !== mark) return candidate;
+      }
+      return false;
+    }, "a fresh background after the restart");
+    await session.detach();
+    await shown((a) => a?.details === "Song 4", "the song again, once the background is back");
+  }
+
+  // The popup beside kept music: what's shown, and the site's own Activity, not one hiding the other.
+  popup = await popupFor(jummboxAgain);
+  await popup.locator("#activity-view:not([hidden])").waitFor();
+  await popup.locator("#suggestion-view:not([hidden])").waitFor();
+  assert(
+    (await popup.textContent("#content"))?.includes("Song 4"),
+    "the popup shows the music being kept",
+  );
+  assert(
+    (await popup.textContent("#suggestion-name")) === "Jummbox" &&
+      (await popup.textContent("#suggestion-action"))?.trim() === "Allow access",
+    "and the site's own Activity, with the setting still on",
+  );
+  await popup.done();
+
+  await setPreferences({ showMediaPresence: false });
+  await shown((a) => a === null, "nothing, once the setting is off");
+  await songTab.close();
+  await otherTab.close();
+  await jummboxAgain.close();
+  log(
+    "media presence in a real browser: the song stays on a site without an Activity, a skipped song in a hidden tab reaches Discord, of two players the one shared last shows, the song comes back when the background restarts, and the popup beside it (and beside the Default Activity) still offers the site's own Activity",
+  );
+
   // --- Site access lives in Settings: only "all websites", off by default ---
   await openDashboard("#settings/access");
   await dashboard.waitForSelector("#setting-allSites");
   assert(
     !(await dashboard.isChecked("#setting-allSites")),
-    '"Access your data for all websites" is off by default',
+    '"Allow access to all websites" is off by default',
   );
   assert(
     (await dashboard.locator("#granted-sites, [data-site]").count()) === 0,
@@ -738,7 +929,7 @@ try {
   await bulk("Enable all").click();
   const question = (await dashboard.textContent('[data-slot="bulk-body"]')) ?? "";
   assert(
-    question.includes("None of them needs access to a new site"),
+    question.includes("None needs access to a new site"),
     `enabling ones whose sites are granted says it will not ask (${question})`,
   );
   await dashboard.locator('[data-slot="bulk-body"] button', { hasText: /^Enable \d/ }).click();

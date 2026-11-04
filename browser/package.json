@@ -1,6 +1,6 @@
 {
   "name": "@abadima/rpc-browser",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -37,9 +37,9 @@
   "devDependencies": {
     "@fortawesome/free-solid-svg-icons": "^7.3.1",
     "@types/bun": "^1.4.4",
-    "@types/chrome": "^0.3.6",
-    "oxfmt": "^0.74.0",
-    "oxlint": "^1.89.0",
+    "@types/chrome": "^0.3.7",
+    "oxfmt": "^0.76.0",
+    "oxlint": "^1.91.0",
     "playwright-core": "^1.64.1",
     "web-ext": "^10.8.0"
   },

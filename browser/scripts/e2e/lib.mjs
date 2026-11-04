@@ -56,6 +56,17 @@ export function assert(condition, message) {
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Where a Chromium-based browser comes from: `PAROUSIA_CHROMIUM_BINARY` (for
+ * example Helium's `/usr/bin/helium`, or any Chromium build), or else the one
+ * playwright-core installed. Set explicitly, never a silent fallback: a run
+ * says which browser it used.
+ */
+export function chromiumLaunch() {
+  const binary = process.env.PAROUSIA_CHROMIUM_BINARY;
+  return binary ? { executablePath: binary } : { channel: "chromium" };
+}
+
 /** Polls `check` (which returns a truthy value when done) until it passes. Test-side only. */
 export async function waitUntil(check, description, timeoutMs = STEP_TIMEOUT_MS) {
   const deadline = Date.now() + timeoutMs;

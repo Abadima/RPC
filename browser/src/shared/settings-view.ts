@@ -73,7 +73,7 @@ export const SETTINGS_PAGES: readonly PageInfo[] = [
   {
     id: "privacy",
     title: msg("Privacy"),
-    subtitle: msg("What's shared, what Activities read, incognito"),
+    subtitle: msg("What's shared, what Activities read, private windows"),
     icon: faLock,
   },
   {
@@ -112,7 +112,7 @@ export const DATA_LABELS: Record<PageDataKind, { title: string; detail: string }
   thumbnails: {
     title: msg("Thumbnails"),
     detail: msg(
-      "Images of what you're watching or reading, such as a video's thumbnail or an album cover.",
+      "Images of what you're watching or reading, like a video thumbnail or album cover.",
     ),
   },
   creatorIcons: {
@@ -325,7 +325,7 @@ function generalPage(actions: SettingsActions): SettingsPageView {
   const userscripts = switchRow(
     t("Allow userscripts"),
     t(
-      "Any web page can connect while this is on. Userscripts can only publish presence, never read status or change settings.",
+      "Any web page can connect while this is on. Userscripts can only send presence, not read status or change settings.",
     ),
     (checked) => actions.setDesktopSetting("allowUserscripts", checked),
     "setting-allowUserscripts",
@@ -334,7 +334,7 @@ function generalPage(actions: SettingsActions): SettingsPageView {
     "p",
     "settings-note",
     t(
-      "Parousia Desktop couldn't confirm this connection is yours, so these can't be changed from here. Use the Parousia-Desktop set command or Desktop's own console instead.",
+      "Parousia Desktop couldn't confirm this connection is yours, so you can't change these here. Use the Parousia-Desktop set command or Desktop's console instead.",
     ),
   );
   note.id = "settings-note";
@@ -346,7 +346,11 @@ function generalPage(actions: SettingsActions): SettingsPageView {
   element.append(
     sectionLabel(t("Language")),
     group(
-      controlRow(t("Language"), t("Changing it reloads any open Parousia page."), language.wrapper),
+      controlRow(
+        t("Language"),
+        t("Open Parousia pages reload when you change it."),
+        language.wrapper,
+      ),
     ),
     sectionLabel(t("Parousia Desktop")),
     offline,
@@ -422,9 +426,16 @@ function appearancePage(): SettingsPageView {
 
 function privacyPage(actions: SettingsActions): SettingsPageView {
   const media = switchRow(
-    t("Share Media Details"),
-    t("Include what you're watching or reading, not just the site's name."),
+    t("Share media details"),
+    t("Include what you're watching or reading, not only the site's name."),
     (checked) => actions.savePreferences({ shareMediaDetails: checked }),
+  );
+  const mediaPresence = switchRow(
+    t("Show media presence"),
+    t(
+      "Keep showing music and video activity when switching to websites without an enabled Activity.",
+    ),
+    (checked) => actions.savePreferences({ showMediaPresence: checked }),
   );
 
   const stepper = el("div", "stepper");
@@ -452,8 +463,8 @@ function privacyPage(actions: SettingsActions): SettingsPageView {
   );
   const incognitoRow = el("div", "setting setting-stacked");
   const incognitoText = settingText(
-    t("Incognito Behaviour"),
-    t("What to do in private windows, if you've allowed Parousia there."),
+    t("Private windows"),
+    t("What to do in private windows you've allowed Parousia in."),
   );
   incognitoText.firstElementChild?.setAttribute("id", "setting-incognito");
   incognito.input.setAttribute("aria-labelledby", "setting-incognito");
@@ -476,11 +487,10 @@ function privacyPage(actions: SettingsActions): SettingsPageView {
     sectionLabel(t("What leaves your browser")),
     group(
       media.row,
+      mediaPresence.row,
       controlRow(
-        t("Idle Timeout"),
-        t(
-          "Keep sharing this long after you switch away from the browser. Sound playing keeps it going.",
-        ),
+        t("Idle timeout"),
+        t("Keep sharing this long after you leave the browser. Sound keeps it going."),
         stepper,
       ),
       incognitoRow,
@@ -490,7 +500,7 @@ function privacyPage(actions: SettingsActions): SettingsPageView {
       "p",
       "settings-hint",
       t(
-        "On sites you've granted, Activities that read pages may take these. Switched off, Parousia doesn't read them, and doesn't show what an Activity's own code read.",
+        "On sites you've allowed, Activities that read pages may use these. When switched off, Parousia reads none of them and shows no page data from Activities.",
       ),
     ),
     group(...kinds.map(({ row }) => row)),
@@ -501,6 +511,7 @@ function privacyPage(actions: SettingsActions): SettingsPageView {
       pageData = preferences.pageData;
       for (const { kind, input } of kinds) input.checked = preferences.pageData[kind];
       media.input.checked = preferences.shareMediaDetails;
+      mediaPresence.input.checked = preferences.showMediaPresence;
       minutes = preferences.idleTimeoutMinutes;
       value.textContent = formatIdleTimeout(minutes);
       minus.disabled = stepIdleTimeout(minutes, -1) === minutes;
@@ -519,7 +530,7 @@ function platformsPage(actions: SettingsActions): SettingsPageView {
     const name = PLATFORM_NAMES[id];
     const { row, input } = switchRow(
       t("{name} Rich Presence", { name }),
-      t("Show your activity on {name}.", { name }),
+      t("Show your presence on {name}.", { name }),
       (checked) => {
         const platforms = { ...currentPlatforms, [id]: checked };
         actions.savePreferences({ platforms });
@@ -539,14 +550,14 @@ function platformsPage(actions: SettingsActions): SettingsPageView {
     "p",
     "info-note",
     t(
-      "Parousia Desktop shows your activity on these apps. Discord works now. Fluxer doesn't yet let other apps show activity on your profile, and Stoat is still being built, so those choices are saved for when they arrive.",
+      "Parousia Desktop shows your presence on these apps. Discord works now. Fluxer doesn't let other apps show presence yet, and Stoat is still being built. Choices for them are saved until they arrive.",
     ),
   );
 
   const bridge = switchRow(
     t("Discord-RPC-Extension"),
     t(
-      "Show Discord presence through Discord-RPC-Extension's app (discord_rpc_ext) on this computer, when it's running. Rich Presence only: nothing else is sent to it or accepted from it.",
+      "Use Discord-RPC-Extension's app (discord_rpc_ext) on this computer when it's running. Only Rich Presence is sent to it or accepted from it.",
     ),
     (checked) => actions.savePreferences({ discordRpcExtension: checked }),
   );
@@ -556,7 +567,7 @@ function platformsPage(actions: SettingsActions): SettingsPageView {
   const malSync = switchRow(
     t("MAL-Sync"),
     t(
-      "Show what MAL-Sync recognizes on anime and manga sites as your activity there, in place of the site's own. Parousia asks the MAL-Sync extension about the tab you're on and takes only Rich Presence from it. Turn off MAL-Sync's own Discord Rich Presence setting so it isn't shown twice.",
+      "Show what MAL-Sync recognizes on anime and manga sites in place of the site's own. Parousia takes only Rich Presence from MAL-Sync. Turn off MAL-Sync's Discord Rich Presence setting so it isn't shown twice.",
     ),
     (checked) => actions.savePreferences({ malSync: checked }),
   );
@@ -598,7 +609,7 @@ function platformsPage(actions: SettingsActions): SettingsPageView {
 }
 
 /**
- * Site access: "Access your data for all websites", off by default and only
+ * Site access: "Allow access to all websites", off by default and only
  * ever turned on here. Individual sites are the browser's to grant and take
  * back (its prompt when an Activity is turned on, its extension settings
  * after), so they aren't listed or revoked from here: a browser won't let an
@@ -609,9 +620,9 @@ function platformsPage(actions: SettingsActions): SettingsPageView {
  */
 function accessPage(inPopup: boolean): SettingsPageView {
   const all = switchRow(
-    t("Access your data for all websites"),
+    t("Allow access to all websites"),
     t(
-      "Off by default. With it on, Activities that read pages can read any site, without asking site by site. Parousia never turns it on by itself.",
+      "Off by default. With it on, Activities that read pages can read any site without asking for each one. Parousia never turns it on by itself.",
     ),
     (on) => {
       all.input.disabled = true;
@@ -627,7 +638,7 @@ function accessPage(inPopup: boolean): SettingsPageView {
       "p",
       "info-note",
       t(
-        "Otherwise your browser asks before an Activity reads a site, when you turn the Activity on. Sites you allowed are managed in your browser's settings for this extension.",
+        "Otherwise, your browser asks before an Activity reads a site, when you turn the Activity on. Manage the sites you've allowed in your browser's settings for this extension.",
       ),
     ),
   );
@@ -640,11 +651,7 @@ function accessPage(inPopup: boolean): SettingsPageView {
       window.close();
     });
     element.prepend(
-      el(
-        "p",
-        "info-note",
-        t("Your browser asks before granting access, which it does from the dashboard."),
-      ),
+      el("p", "info-note", t("Your browser asks for access from the dashboard.")),
       open,
     );
   }

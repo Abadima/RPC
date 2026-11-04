@@ -25,7 +25,7 @@ describe("finding the strings", () => {
 
   test("the code and the pages hold the strings the dictionaries are checked against", () => {
     expect(keys.strings.size).toBeGreaterThan(200);
-    expect(keys.strings.has("Retry Connection")).toBe(true);
+    expect(keys.strings.has("Retry connection")).toBe(true);
     expect(keys.strings.has("Settings")).toBe(true);
     expect(keys.plurals.has("{n} Activities")).toBe(true);
     // Written with `tn`, so they're plural forms, not plain strings.

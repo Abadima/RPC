@@ -102,6 +102,18 @@ describe("PreMiD page messages", () => {
     expect(parseToPage({ type: "page-result", nonce: -1, value: 1 })).toBeNull();
   });
 
+  test("a page is told to keep reading in the background with a real boolean, and nothing else", () => {
+    expect(parseToPage({ type: "background", on: true })).toEqual({ type: "background", on: true });
+    expect(parseToPage({ type: "background", on: false })).toEqual({
+      type: "background",
+      on: false,
+    });
+    for (const on of ["true", 1, null, undefined]) {
+      expect(parseToPage({ type: "background", on })).toBeNull();
+    }
+    expect(parseToPage({ type: "background" })).toBeNull();
+  });
+
   test("page images are bounded: https only, a short list, short text", () => {
     const parsed = parsePageData({
       images: [
@@ -153,5 +165,10 @@ describe("PreMiD page messages", () => {
       type: "collect",
       kinds: ["media"],
     });
+    expect(parseToCollector({ type: "background", on: true })).toEqual({
+      type: "background",
+      on: true,
+    });
+    expect(parseToCollector({ type: "background", on: "yes" })).toBeNull();
   });
 });

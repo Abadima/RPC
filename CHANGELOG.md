@@ -1,5 +1,23 @@
 # VERSION 1
 
+## V1.2.0 - IN DEVELOPMENT
+
+This release carries the browser extension and userscript **1.2.0** and Parousia Desktop **1.0.2**. Versions are set in the manifests, `package.json`, and `desktop/Cargo.toml`; `scripts/release-check.mjs` checks they agree with the tag.
+
+### ✨ New Features
+
+- **Activity Versions:** Every Activity's page in the dashboard shows its version, taken from its own `metadata.json`: Parousia's native Activities and the bundled PreMiD ones alike. Only each Activity's manifest carries it, so the catalog the dashboard lists and searches doesn't grow.
+- **Site Activity Beside the Default Activity:** While the Default Activity is shared, the popup still shows the tab's own Activity when its site has one. Turn it on there, or see why it can't run (access not granted, or nothing to share yet).
+- **Show Media Presence:** A new switch in `Settings > Privacy`, off by default. With it on, music or video you were playing stays on your profile when you move to a site that has no Activity (or a browser page), until the sound stops, its tab closes, or its Activity is turned off. Only an Activity that presents as listening or watching, or that has an end time, counts, and only while the tab is making sound. An Activity on the tab you're looking at comes first, and the Default Activity only shows when no music or video is kept. With several players, the one you looked at last is shown. Private windows follow their own setting. Nothing is injected into the tab it comes from. A song skipped in a tab you left reaches Discord, the music stays when the extension's background restarts, and the popup still offers the current site's own Activity beside it, so you can turn it on or allow it without turning this off.
+- **Plainer Wording:** Shorter, more direct text across the popup, dashboard, settings, and every translation. Terms are consistent: "Activity" for a site's integration, "presence" for what's shown on Discord. Parousia Desktop's port, pipe, and tray messages are shorter too (Desktop 1.0.2).
+
+### 🛡️ Stability & Privacy
+
+- **Discord Connection (Linux and macOS):** A Discord that stops reading its socket no longer holds Desktop's Discord connection forever. A write it doesn't take within 5 seconds ends the connection, and Desktop retries as it does after a Discord restart. Windows already did this. This is a Desktop change, so it ships in Parousia Desktop **1.0.2**. Update Desktop with the extension: with Show media presence on, the connection to Discord stays open for hours, so on Desktop 1.0.1 a Discord that stops listening is much easier to hit.
+- **Switches Are Read Before Anything Runs:** When the extension started, an Activity ran on its default until its stored switch loaded, so one you had turned off could run once on the first tab. The extension now waits for the stored switches before any Activity is run or injected.
+- **Paused Private Tabs Run Nothing:** With `Settings > Privacy > Private windows` on "Pause activity", no Activity runs for a private tab: its code isn't called and its page scripts aren't injected. Scripts already running there stop when you change the setting. Before, they ran and the result was dropped.
+- **What a Switch Guarantees:** `project/threat-model.md` (Disabled Activities) lists exactly what stops when an Activity is off, and what doesn't.
+
 ## [V1.1.0](https://github.com/Abadima/RPC/releases/tag/v1.1.0) - V1 FIRST STABLE RELEASE
 
 This release carries the browser extension and userscript **1.1.0** (the Firefox build is **1.1.0.1**) and Parousia Desktop **1.0.1**. It is the first stable release, with everything since the first public beta.

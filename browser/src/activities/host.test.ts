@@ -231,7 +231,10 @@ describe("PageHost: PreMiD Activities", () => {
     const port = page();
     port.send({ type: "hello", activity: PREMID, clientId: DEFAULT_CLIENT });
     await settle();
-    expect(port.posted).toEqual([{ type: "settings", values: { lang: "en", buttons: true } }]);
+    expect(port.posted).toEqual([
+      { type: "settings", values: { lang: "en", buttons: true } },
+      { type: "background", on: false },
+    ]);
 
     port.send({
       type: "activity",
@@ -401,7 +404,10 @@ describe("PageHost: native Activities that take page data", () => {
     const port = collector(open);
     port.send({ type: "hello", activity: "tunes" });
     await settle();
-    expect(port.posted).toEqual([{ type: "collect", kinds: ["media"] }]);
+    expect(port.posted).toEqual([
+      { type: "collect", kinds: ["media"] },
+      { type: "background", on: false },
+    ]);
     port.send({
       type: "data",
       data: { media: { title: "Song", playing: true, start: 1_700_000_000_000 } },
@@ -443,5 +449,216 @@ describe("PageHost: native Activities that take page data", () => {
     port.send({ type: "hello", activity: "tunes" });
     await settle();
     expect(port.posted).toEqual([{ type: "stop" }]);
+  });
+});
+
+describe("PageHost: what runs for an Activity that's off", () => {
+  test("it doesn't answer before the first stored states are in, so defaults never decide for an Activity someone turned off", async () => {
+    const { host, injected, started } = setup();
+    let answered = false;
+    const pending = host.page(9, TUNES).then((result) => {
+      answered = true;
+      return result;
+    });
+    await settle(20);
+    expect(answered).toBe(false);
+
+    await host.setStates({ tunes: { on: false } });
+    expect(await pending).toEqual({});
+    expect(injected).toEqual([]);
+    expect(started).toEqual([]);
+  });
+
+  test("once the states are in, an Activity that's on is looked at as before", async () => {
+    const { host, started } = setup();
+    const pending = host.page(9, TUNES);
+    await host.setStates({ tunes: { on: true } });
+    expect(await pending).toEqual({ granted: ["media", "thumbnails"] });
+    await settle();
+    expect(started).toEqual([[9, "tunes"]]);
+  });
+
+  test("peek reads what a tab last reported and injects nothing", async () => {
+    const { host, injected, started, open } = setup();
+    await host.setStates({ tunes: { on: true } });
+    expect(await host.page(9, TUNES)).toEqual({ granted: ["media", "thumbnails"] });
+    await settle();
+    const port = open(PAGE_DATA_PORT, { id: "self", url: TUNES.href, frameId: 0, tab: { id: 9 } });
+    port.send({ type: "hello", activity: "tunes" });
+    port.send({ type: "data", data: { media: { title: "Song", playing: true } } });
+    await settle(250);
+
+    injected.length = 0;
+    started.length = 0;
+    expect(await host.peek(9, TUNES)).toEqual({
+      granted: ["media", "thumbnails"],
+      data: { media: { title: "Song", playing: true } },
+    });
+    // A tab nobody has looked at: what it may read, and no script put into it.
+    expect(await host.peek(12, TUNES)).toEqual({ granted: ["media", "thumbnails"] });
+    expect(injected).toEqual([]);
+    expect(started).toEqual([]);
+  });
+
+  test("peek finds nothing for an Activity that's off or whose site was taken back", async () => {
+    const off = setup();
+    await off.host.setStates({ tunes: { on: false } });
+    expect(await off.host.peek(9, TUNES)).toEqual({});
+
+    const denied = setup(NO_GRANTS);
+    await denied.host.setStates({ tunes: { on: true } });
+    expect(await denied.host.peek(9, TUNES)).toEqual({});
+    expect(denied.injected).toEqual([]);
+  });
+
+  test("turning an Activity off stops its collector in every tab, and what it read is gone", async () => {
+    const { host, open, changed } = setup();
+    await host.setStates({ tunes: { on: true } });
+    const ports = [9, 10].map((tab) => {
+      const port = open(PAGE_DATA_PORT, {
+        id: "self",
+        url: TUNES.href,
+        frameId: 0,
+        tab: { id: tab },
+      });
+      port.send({ type: "hello", activity: "tunes" });
+      port.send({ type: "data", data: { media: { title: `Song ${tab}`, playing: true } } });
+      return port;
+    });
+    await settle(250);
+    changed.length = 0;
+
+    await host.setStates({ tunes: { on: false } });
+    for (const port of ports) {
+      expect(port.posted.at(-1)).toEqual({ type: "stop" });
+      expect(port.disconnected).toBe(true);
+    }
+    expect(changed.toSorted((a, b) => a - b)).toEqual([9, 10]);
+    expect(await host.peek(9, TUNES)).toEqual({});
+    expect(await host.peek(10, TUNES)).toEqual({});
+  });
+});
+
+describe("PageHost: tabs whose music or video is kept", () => {
+  const background = (port: { posted: unknown[] }) =>
+    port.posted.filter((message) => (message as { type?: string }).type === "background");
+
+  test("their scripts are told to keep reading while the tab is in the background, and only theirs", async () => {
+    const { host, open, page } = setup();
+    await host.setStates({ ...on, tunes: { on: true } });
+    const premidPort = page();
+    premidPort.send({ type: "hello", activity: PREMID, clientId: DEFAULT_CLIENT });
+    const kept = open(PAGE_DATA_PORT, { id: "self", url: TUNES.href, frameId: 0, tab: { id: 9 } });
+    kept.send({ type: "hello", activity: "tunes" });
+    const other = open(PAGE_DATA_PORT, {
+      id: "self",
+      url: TUNES.href,
+      frameId: 0,
+      tab: { id: 10 },
+    });
+    other.send({ type: "hello", activity: "tunes" });
+    await settle();
+
+    host.keepReading([9, 7]);
+    // Told where each stands when it connected, and the tabs kept told again.
+    const told = [
+      { type: "background", on: false },
+      { type: "background", on: true },
+    ];
+    expect(background(kept)).toEqual(told);
+    expect(background(premidPort)).toEqual(told);
+    expect(background(other)).toEqual([{ type: "background", on: false }]);
+
+    // Told once: the same tabs again change nothing.
+    host.keepReading([7, 9]);
+    expect(background(kept)).toHaveLength(2);
+    expect(background(premidPort)).toHaveLength(2);
+  });
+
+  test("a tab no longer kept is told to read only while shown again", async () => {
+    const { host, open } = setup();
+    await host.setStates({ tunes: { on: true } });
+    const kept = open(PAGE_DATA_PORT, { id: "self", url: TUNES.href, frameId: 0, tab: { id: 9 } });
+    kept.send({ type: "hello", activity: "tunes" });
+    await settle();
+    host.keepReading([9]);
+    host.keepReading([]);
+    expect(background(kept)).toEqual([
+      { type: "background", on: false },
+      { type: "background", on: true },
+      { type: "background", on: false },
+    ]);
+  });
+
+  test("a script that connects later in a kept tab is told at once, and an iframe's too", async () => {
+    const { host, open } = setup({ all: true, origins: [] });
+    await host.setStates(on);
+    host.keepReading([7]);
+    const late = open(PREMID_PORT, {
+      id: "self",
+      url: WATCH.href,
+      frameId: 0,
+      tab: { id: 7 },
+    });
+    late.send({ type: "hello", activity: PREMID, clientId: DEFAULT_CLIENT });
+    const frame = open(PREMID_FRAME_PORT, {
+      id: "self",
+      url: "https://player.example/embed",
+      frameId: 3,
+      tab: { id: 7 },
+    });
+    frame.send({ type: "hello", activity: PREMID });
+    await settle();
+    expect(background(late)).toEqual([{ type: "background", on: true }]);
+    expect(background(frame)).toEqual([{ type: "background", on: true }]);
+  });
+
+  test("a script that connects is always told where it stands, so none stays stuck reading in the background", async () => {
+    const { host, open } = setup();
+    await host.setStates({ tunes: { on: true } });
+    const plain = open(PAGE_DATA_PORT, { id: "self", url: TUNES.href, frameId: 0, tab: { id: 9 } });
+    plain.send({ type: "hello", activity: "tunes" });
+    await settle();
+    // Not kept: told so, in case it was told otherwise before the background restarted.
+    expect(background(plain)).toEqual([{ type: "background", on: false }]);
+  });
+
+  test("a closed tab is forgotten, so a page opened under its number reads only while shown", async () => {
+    const { host, open } = setup();
+    await host.setStates({ tunes: { on: true } });
+    host.keepReading([9]);
+    host.forget(9);
+    const reused = open(PAGE_DATA_PORT, {
+      id: "self",
+      url: TUNES.href,
+      frameId: 0,
+      tab: { id: 9 },
+    });
+    reused.send({ type: "hello", activity: "tunes" });
+    await settle();
+    expect(background(reused)).toEqual([{ type: "background", on: false }]);
+  });
+});
+
+describe("PageHost: stopping a tab's scripts", () => {
+  test("stops the scripts running in that tab, drops what they reported, and leaves other tabs alone", async () => {
+    const { host, page } = setup();
+    await host.setStates(on);
+    const stopped = page();
+    stopped.send({ type: "hello", activity: PREMID, clientId: DEFAULT_CLIENT });
+    const kept = page(WATCH.href, { tab: { id: 8 } });
+    kept.send({ type: "hello", activity: PREMID, clientId: DEFAULT_CLIENT });
+    stopped.send({ type: "activity", clientId: DEFAULT_CLIENT, data: { details: "Watching" } });
+    await settle(250);
+    expect((await host.peek(7, WATCH)).reported).toBeDefined();
+
+    host.stopTabs([7]);
+    expect(stopped.posted.at(-1)).toEqual({ type: "stop" });
+    expect(stopped.disconnected).toBe(true);
+    expect(kept.posted.some((message) => (message as { type?: string }).type === "stop")).toBe(
+      false,
+    );
+    expect(kept.disconnected).toBe(false);
+    expect((await host.peek(7, WATCH)).reported).toBeUndefined();
   });
 });

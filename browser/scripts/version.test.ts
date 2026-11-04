@@ -52,11 +52,11 @@ describe("the extension's version", () => {
     expect(firefox === release || firefox.startsWith(`${release}.`)).toBe(true);
   });
 
-  test("is the 1.1.0 release", async () => {
+  test("is the 1.2.0 release", async () => {
     // Bump this with the manifests and package.json when the next release is cut.
     // Desktop versions on its own (desktop/Cargo.toml); the tag is the extension's.
-    expect((await read("chromium.json")).version).toBe("1.1.0");
-    expect((await read("firefox.json")).version).toBe("1.1.0.1");
+    expect((await read("chromium.json")).version).toBe("1.2.0");
+    expect((await read("firefox.json")).version).toBe("1.2.0");
   });
 
   test("is the userscript's version too", async () => {
