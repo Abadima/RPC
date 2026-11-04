@@ -10,6 +10,7 @@ export default {
     return {
       id: "tunes",
       name: "Tunes",
+      type: "listening" as const,
       url: `${page.url.origin}${page.url.pathname}`,
       details: page.media?.title ?? page.title,
       ...(page.thumbnail && { assets: { largeImage: page.thumbnail } }),
