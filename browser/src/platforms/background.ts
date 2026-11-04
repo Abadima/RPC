@@ -93,7 +93,8 @@ function parseMediaTabs(value: unknown): number[] {
  * Returns a switch: `true` while there's something to share.
  */
 export function backgroundKeepalive(
-  ping: () => void = () => void chrome.runtime.getPlatformInfo(),
+  // Best-effort: a test double, or a context without the API, keeps running.
+  ping: () => void = () => void globalThis.chrome?.runtime?.getPlatformInfo?.(),
   intervalMs: number = KEEPALIVE_MS,
 ): (active: boolean) => void {
   let timer: ReturnType<typeof setInterval> | null = null;

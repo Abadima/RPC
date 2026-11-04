@@ -280,6 +280,8 @@ function installChromeMock(
     runtime: {
       id: EXTENSION_ID,
       getURL: (path: string) => `chrome-extension://${EXTENSION_ID}/${path}`,
+      // The keepalive interval outlives a test that leaves an Activity shared.
+      getPlatformInfo: async () => ({ os: "linux", arch: "x64" }),
       onConnect: {
         addListener: (listener: (port: unknown) => void) => connectListeners.push(listener),
       },

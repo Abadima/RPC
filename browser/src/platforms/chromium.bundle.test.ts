@@ -42,6 +42,7 @@ describe("chromium bundle", () => {
         lastError: undefined,
         getURL: (path: string) => `chrome-extension://self/${path}`,
         getManifest: () => ({ version: "1.0.0" }),
+        getPlatformInfo: async () => ({ os: "linux", arch: "x64" }),
         onConnect: {
           addListener: (listener: (port: unknown) => void) => connectListeners.push(listener),
         },
