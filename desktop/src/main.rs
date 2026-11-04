@@ -111,12 +111,12 @@ fn bind_failure(err: &std::io::Error, holder: platform::Owner) -> String {
     let address = server::ADDRESS;
     if err.kind() == std::io::ErrorKind::AddrInUse && holder == platform::Owner::OtherUser {
         format!(
-            "port {} is held by a program another user on this computer runs, so Parousia Desktop can't start, and Parousia in your browsers may be sending it what you're doing instead. Find out what's using {address}, or ask an administrator, before using Parousia here.",
+            "port {} is held by a program run by another user on this computer. Parousia Desktop can't start, and browsers running Parousia may send it what you're doing instead. Find out what's using {address}, or ask an administrator, before using Parousia here.",
             server::DEFAULT_PORT
         )
     } else if err.kind() == std::io::ErrorKind::AddrInUse {
         format!(
-            "port {} is already in use, so Parousia Desktop can't start. Close whatever is using {address} (often another copy of Parousia Desktop that a previous run left behind), then start it again.",
+            "port {} is already in use, so Parousia Desktop can't start. Close what's using {address} (often an earlier copy of Parousia Desktop), then start it again.",
             server::DEFAULT_PORT
         )
     } else {
@@ -240,7 +240,7 @@ mod tests {
         );
         assert!(message.contains("57179"));
         assert!(message.contains("already in use"));
-        assert!(message.contains("Close whatever is using 127.0.0.1:57179"));
+        assert!(message.contains("Close what's using 127.0.0.1:57179"));
     }
 
     #[test]

@@ -1,10 +1,10 @@
-**# desktop**
+# desktop
 
-Parousia Desktop is the native app that receives Presence from the browser and publishes it to Discord. It is written in Rust with no async runtime.
+Parousia Desktop is the native app that receives presence from the browser and publishes it to Discord. It's written in Rust, with no async runtime.
 
-See `project/architecture.md` for the Platform Adapter Architecture, Communication Protocol, and Desktop Tray, and `project/threat-model.md` for security details.
+See `project/architecture.md` for the Platform Adapter Architecture, the Communication Protocol, and the Desktop Tray. See `project/threat-model.md` for security details.
 
-**## Build and Run**
+## Build and Run
 
 ```bash
 cargo build
@@ -17,17 +17,17 @@ cargo fmt --check
 ./target/debug/Parousia-Desktop --headless
 ```
 
-On Windows, `cargo test` runs against the real thing: named pipes (the control pipe and a fake Discord, including Discord quitting and restarting), the loopback owner check against the TCP table, the registry, and the process tokens of the running machine. `scripts/verify-windows.ps1` then runs the release build (`cargo build --release`) and drives the real notification-area icon and its menu: a second launch, the CLI from a terminal, the control pipe's access list, the port, Settings > Start at login against the real `Run` key, Quit, and a port something else holds. It never touches your own config, Discord, or port 57179 (stop your own Desktop first); the Browser <-> Desktop link on Windows is `bun run desktop:verify` in `browser/`.
+On Windows, `cargo test` runs against the real thing: named pipes (the control pipe, and a fake Discord that quits and restarts), the loopback owner check against the TCP table, the registry, and the process tokens of the running machine. `scripts/verify-windows.ps1` then runs the release build and drives the real notification-area icon and its menu. It covers a second launch, the CLI from a terminal, the control pipe's access list, the port, Settings > Start at login against the real `Run` key, Quit, and a port held by something else. It never touches your own config, your Discord, or port 57179, so stop your own Desktop first. The browser-to-Desktop link on Windows is checked by `bun run desktop:verify` in `browser/`.
 
-Release builds are produced by the `Release` workflow when a `vX.Y.Z` tag is pushed to `main`. They are standalone, stripped, and size-optimized (`opt-level = "z"`, LTO), at about 1 MB.
+Release builds come from the `Release` workflow, which runs when a `vX.Y.Z` tag is pushed to `main`. They're standalone, stripped, and size-optimized (`opt-level = "z"`, LTO), at about 1 MB.
 
 - **Linux:** x86_64 and aarch64, built for `*-unknown-linux-musl`
-- **Windows:** x86_64 and aarch64, built with MSVC, no console window
+- **Windows:** x86_64 and aarch64, built with MSVC, with no console window
 - **macOS:** not available yet
 
-Only one Desktop instance runs per user (a second launch says so and exits). Port `57179` must be available; if something else holds it, Desktop says so and exits.
+Only one Desktop runs per user. A second launch says so and exits. Port `57179` must be free. If something else holds it, Desktop says so and exits.
 
-**## Browser Connection**
+## Browser Connection
 
 Browsers connect to:
 
@@ -38,28 +38,28 @@ ws://127.0.0.1:57179/ws
 Desktop identifies browser clients by their `Origin`.
 
 - The Chrome Web Store build is recognized automatically.
-- Development builds and every Firefox install (the Add-ons listing included, since Firefox gives each install its own origin) must be allowed once with `Parousia-Desktop allow <origin>`.
+- Development builds and every Firefox install must be allowed once with `Parousia-Desktop allow <origin>`. Firefox gives each install its own origin, the Add-ons listing included.
 - Refused extensions can also be allowed from the tray's Diagnostics menu.
-- Userscripts are disabled by default and require **Allow userscripts**.
+- Userscripts are off by default. Turn them on with **Allow userscripts**.
 - On Linux and Windows, connections from other OS users are refused before anything is read.
 
-There is no pairing step for browser extensions.
+Browser extensions have no pairing step.
 
-**## Discord**
+## Discord
 
-Desktop publishes the active browser Presence through the Discord app running on the same computer.
+Desktop publishes the active browser presence through the Discord app on the same computer.
 
-It supports Discord installed normally through its local IPC socket (a named pipe on Windows), including Flatpak and Snap installations. Only IPC owned by the current user is used: a socket owned by another user, or a pipe whose server process runs as another user, is never connected to.
+It works with Discord installed normally, through its local IPC socket (a named pipe on Windows), including Flatpak and Snap installs. Only IPC owned by the current user is used. A socket owned by another user, or a pipe whose server runs as another user, is never connected to.
 
-When multiple browsers are connected, the most recently changed Activity is shown. When it clears, another connected browser can take over.
+When several browsers are connected, the most recently changed Activity is shown. When it clears, another connected browser can take over.
 
-Desktop only connects to Discord while there is something to show. Changes within one Activity (the next video, a new track) show at once, unless something was shown less than 2 seconds before: then only the newest waits for those 2 seconds to pass, so a burst shows its first and its last, and a steady stream is never more than 2 seconds behind. Moving to another Activity, or clearing, always shows at once. Discord's own update limit is kept to on top of that.
+Desktop connects to Discord only while there's something to show. Changes within one Activity (the next video, a new track) show at once, unless something was shown less than 2 seconds earlier. Then only the newest change waits for those 2 seconds to pass. A burst shows its first and last changes, and a steady stream is never more than 2 seconds behind. Moving to another Activity, or clearing, always shows at once. Discord's own update limit still applies on top of this.
 
-`PAROUSIA_DISCORD_IPC_DIR` can override the directory used to find Discord's IPC socket on Linux and macOS, and `PAROUSIA_DISCORD_IPC_PIPE` the pipe name (up to its number, default `\\.\pipe\discord-ipc-`) on Windows. Discord quitting or restarting is noticed at once on every platform.
+`PAROUSIA_DISCORD_IPC_DIR` overrides the directory of Discord's IPC socket on Linux and macOS. `PAROUSIA_DISCORD_IPC_PIPE` overrides the pipe name on Windows (up to its number, default `\\.\pipe\discord-ipc-`). Discord quitting or restarting is noticed at once on every platform.
 
-**## Commands**
+## Commands
 
-These commands communicate with the running Desktop:
+These commands talk to the running Desktop:
 
 | Command                                    | Description                                                                       |
 | ------------------------------------------ | --------------------------------------------------------------------------------- |
@@ -71,23 +71,15 @@ These commands communicate with the running Desktop:
 
 Add `--json` for machine-readable output.
 
-On Windows the commands talk to the running Desktop over a named pipe that only this user can open, and print into the terminal they were typed in (the release exe has no console window of its own). The tray menu has the same controls.
+On Windows, the commands talk to the running Desktop over a named pipe that only this user can open. They print into the terminal they were typed in, since the release exe has no console window of its own. The tray menu has the same controls.
 
-**## Logging**
+## Logging
 
 Desktop is silent by default and keeps no event history.
 
-Debug logging can be enabled for the current run with:
+Debug logging can be turned on for the current run with `Parousia-Desktop --debug`, or from the tray, the `status` interface, or the console. Startup errors are always reported.
 
-```bash
-Parousia-Desktop --debug
-```
-
-or through the tray, `status` interface, or console.
-
-Startup errors are always reported.
-
-**## Files**
+## Files
 
 Configuration is stored in:
 
@@ -99,30 +91,28 @@ Example:
 
 ```json
 {
-	"allowedOrigins": ["chrome-extension://<id>", "moz-extension://<uuid>"],
-	"allowUserscripts": false,
-	"discordClientId": "<Discord Application id>"
+  "allowedOrigins": ["chrome-extension://<id>", "moz-extension://<uuid>"],
+  "allowUserscripts": false,
+  "discordClientId": "<Discord Application id>"
 }
 ```
 
-All keys are optional. Unknown keys or invalid values cause Desktop to stop at startup rather than silently applying a bad configuration.
+All keys are optional. Unknown keys and invalid values stop Desktop at startup, so a bad configuration is never applied silently.
 
-The command socket is stored under `$XDG_RUNTIME_DIR/parousia/desktop.sock` on Linux, or in the data directory when no runtime directory is available, with `desktop.lock` beside it: whichever Desktop holds the lock is the one that runs. On Windows it is the named pipe `\\.\pipe\parousia-desktop-<your SID>`, whose access list names only you. Browsers never use it.
+The command socket is `$XDG_RUNTIME_DIR/parousia/desktop.sock` on Linux, or in the data directory when no runtime directory exists. `desktop.lock` sits beside it, and whichever Desktop holds the lock is the one that runs. On Windows, the socket is the named pipe `\\.\pipe\parousia-desktop-<your SID>`, whose access list names only you. Browsers never use it.
 
-`PAROUSIA_DATA_DIR` replaces the data directory (the end-to-end checks use it so a test run never touches a real config).
+`PAROUSIA_DATA_DIR` replaces the data directory. The end-to-end checks use it, so a test run never touches a real config.
 
-**## Tray**
+## Tray
 
 The tray is optional.
 
 - **Linux:** StatusNotifierItem
-- **Windows:** notification-area icon, with Settings > **Start at login** (an entry under your own `Run` key, the one Task Manager's Startup tab lists; Windows starts it with the tray, and nothing else is installed)
+- **Windows:** notification-area icon. Settings > **Start at login** adds an entry under your own `Run` key, the one Task Manager's Startup tab lists. Windows then starts Desktop with the tray, and nothing else is installed.
 - **macOS:** not available yet
 
-The tray provides status, Discord Presence, connected browsers, diagnostics, settings, notifications, and quit controls.
+The tray shows status, Discord presence, connected browsers, diagnostics, settings, and notifications, and it has a quit control.
 
-Desktop continues working without a tray host. The command interface and browser dashboard provide the same functionality.
-
-`--headless` disables the tray.
+Desktop works without a tray host. The command interface and the browser dashboard offer the same functions. `--headless` turns the tray off.
 
 Tray icons are generated from `assets/brand/parousia-rounded.webp` into `assets/tray-{32,48}.rgba`.
