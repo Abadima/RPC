@@ -43,6 +43,7 @@ import {
   type SettingsPageId,
   type SettingsPageView,
 } from "../shared/settings-view";
+import { siteOffer, type Sharing } from "../shared/site-offer";
 import { updateBanner } from "../shared/update-notice";
 import {
   presenceIcons,
@@ -130,12 +131,12 @@ const background = connectToBackground(
       !activity?.configurable && activity?.id !== DEFAULT_ACTIVITY_ID;
     renderBadge(byId("status-badge"), state, sharing);
     renderHome();
-    if (!activity) void findForTab();
+    if (sharingNow() !== "activity") void findForTab();
   },
 );
 
-// Home: what's shared; or else the tab's Activity that isn't running, and
-// why; or else a line saying there's nothing to share here.
+// Home: what's shared, with the tab's site Activity under it when it has one
+// (see shared/site-offer.ts for when that's offered or noted).
 
 interface Found {
   info: ActivityInfo;
@@ -149,19 +150,25 @@ let busy = false;
 /** The browser declined the last request; the card says so until the next click or tab. */
 let declined = false;
 
+/** What's being shared: nothing, the Default Activity, or a site's Activity (or `undefined` until the background says). */
+function sharingNow(): Sharing {
+  if (shared === null) return "nothing";
+  return shared?.id === DEFAULT_ACTIVITY_ID ? "default" : "activity";
+}
+
 function renderHome(): void {
   const offline = isOffline(state);
+  const sharing = sharingNow();
+  const offer = offline || !found ? "none" : siteOffer(sharing, found.status);
   byId("offline-view").hidden = !offline;
   byId("activity-view").hidden = offline || !shared;
-  const idle = !offline && shared === null;
-  const offer = idle && found !== null && found.status !== "on" ? found : null;
-  byId("suggestion-view").hidden = offer === null;
-  byId("idle-view").hidden = !idle || offer !== null;
+  byId("suggestion-view").hidden = offer !== "offer";
+  byId("idle-view").hidden = offline || sharing !== "nothing" || offer === "offer";
   byId("idle-view").textContent =
     found?.status === "on"
-      ? t("{name} is on. Nothing to share on this page yet.", { name: found.info.name })
-      : t("Nothing to share on this page.");
-  if (offer) renderOffer(offer);
+      ? t("{name} is on. Nothing to share here yet.", { name: found.info.name })
+      : t("Nothing to share here.");
+  if (found && offer === "offer") renderOffer(found);
 }
 
 function renderOffer({ info, status }: Found): void {
@@ -172,20 +179,26 @@ function renderOffer({ info, status }: Found): void {
   const sites = [...new Set(missingSites(info, grants).map(siteName))].join(", ");
   const note = byId("suggestion-note");
   const action = buttonById("suggestion-action");
+  if (status === "on") {
+    note.textContent = t("{name} is on. Nothing to share here yet.", { name: info.name });
+    action.hidden = true;
+    return;
+  }
+  action.hidden = false;
   if (status === "off") {
     note.textContent = declined
-      ? t("Your browser didn't allow access to its sites, so it stays off.")
+      ? t("Your browser declined access to its sites, so it stays off.")
       : sites
         ? t(
-            "An Activity for this site, turned off. Turning it on asks your browser for access to {sites}.",
+            "There's an Activity for this site, and it's off. Turning it on asks your browser for access to {sites}.",
             { sites },
           )
-        : t("An Activity for this site, turned off.");
+        : t("There's an Activity for this site, and it's off.");
     action.textContent = t("Turn on");
   } else {
     note.textContent = declined
-      ? t("Your browser didn't allow access to {sites}, so it still can't run here.", { sites })
-      : t("It's on, but your browser hasn't given it access to {sites}, so it can't run here.", {
+      ? t("Your browser declined access to {sites}, so it still can't run here.", { sites })
+      : t("It's on, but it has no access to {sites}, so it can't run here.", {
           sites,
         });
     action.textContent = t("Allow access");
@@ -235,7 +248,7 @@ byId("suggestion-action").addEventListener("click", () => {
 
 watchActivityStates((next) => {
   states = next;
-  if (shared === null) void findForTab();
+  if (sharingNow() !== "activity") void findForTab();
 });
 watchGrants(() => {
   void readGrants().then((next) => {
@@ -249,7 +262,7 @@ void Promise.all([
 ]).then(([stored, granted]) => {
   states = stored;
   grants = granted;
-  if (shared === null) void findForTab();
+  if (sharingNow() !== "activity") void findForTab();
 });
 
 // Views: home, the settings list, one settings page, and the shared Activity's settings.

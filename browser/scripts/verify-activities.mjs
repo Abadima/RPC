@@ -559,12 +559,12 @@ try {
   popup = await popupFor(nothing);
   await popup.locator("#idle-view:not([hidden])").waitFor();
   assert(
-    (await popup.textContent("#idle-view")) === "Nothing to share on this page.",
+    (await popup.textContent("#idle-view")) === "Nothing to share here.",
     "the popup says so in one line",
   );
   assert(
     (await popup.isHidden("#activity-view")) && (await popup.isHidden("#suggestion-view")),
-    "without an empty Current activity",
+    "without an empty Now sharing",
   );
   await popup.done();
 
