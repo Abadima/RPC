@@ -278,7 +278,8 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
     (restoring ??= (async () => {
       try {
         const written = (await chrome.storage.session.get(MEDIA_TABS_KEY))[MEDIA_TABS_KEY];
-        mediaTabs.restore(parseMediaTabs(written));
+        // Switched off while this was being read: nothing comes back.
+        if (preferences.showMediaPresence) mediaTabs.restore(parseMediaTabs(written));
       } catch {
         // No session store here, or nothing written.
       }
@@ -443,7 +444,7 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
    * has nothing of its own, finds the music or video to keep from another
    * tab. Off, nothing is noted and nothing is kept.
    */
-  async function keepMedia(
+  async function keptFor(
     tabId: number,
     tab: chrome.tabs.Tab,
     own: Activity | null,
@@ -455,7 +456,12 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
     return own === null ? ((await mediaTabs.pick(tabId, mediaOf))?.media ?? null) : null;
   }
 
+  /** Counts refreshes, so one overtaken by a newer refresh or a preference change publishes nothing. */
+  let passes = 0;
+
   async function refresh(): Promise<void> {
+    const pass = ++passes;
+    const overtaken = (tabId: number): boolean => pass !== passes || tabId !== activeTabId;
     if (activeTabId === null) {
       stopIdleTimer();
       malSync.watch(null);
@@ -466,7 +472,7 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
     try {
       const tabId = activeTabId;
       const tab = await chrome.tabs.get(tabId);
-      if (tabId !== activeTabId) return;
+      if (overtaken(tabId)) return;
       const share = (activity: Activity | null): Activity | null =>
         applyPreferences(
           activity,
@@ -487,10 +493,9 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
       if (!sharingWhileAway(tab)) {
         malSync.watch(null);
         // Away, the tab shared says nothing; sound in a tab whose music or video is kept does.
-        watchingMedia = preferences.showMediaPresence;
-        if (watchingMedia) await restoreMediaTabs();
-        kept = watchingMedia ? ((await mediaTabs.pick(tabId, mediaOf))?.media ?? null) : null;
-        if (tabId !== activeTabId) return;
+        const found = await keptFor(tabId, tab, null);
+        if (overtaken(tabId)) return;
+        kept = found;
         if (kept) update(null, share);
         else controller.clear();
         return;
@@ -498,8 +503,9 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
       if (!tab.url) {
         // A page the extension can't see (a browser page): only music or video kept, or the Default Activity, if one is set up.
         malSync.watch(null);
-        kept = await keepMedia(tabId, tab, null);
-        if (tabId !== activeTabId) return;
+        const found = await keptFor(tabId, tab, null);
+        if (overtaken(tabId)) return;
+        kept = found;
         update(null, share);
         return;
       }
@@ -507,7 +513,7 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
       malSync.watch(/^https?:$/.test(url.protocol) ? { id: tabId, url } : null);
       // Site access, the page data it's granted, and what the page gave, for an Activity that reads pages.
       const page = await pages.page(tabId, url);
-      if (tabId !== activeTabId) return;
+      if (overtaken(tabId)) return;
       const detail: Page = {
         url,
         title: tab.title ?? "",
@@ -515,15 +521,17 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
         ...page,
       };
       // Detected here too only for the setting, which is off until someone turns it on.
-      kept = await keepMedia(
+      const found = await keptFor(
         tabId,
         tab,
         preferences.showMediaPresence ? runtime.detect(detail) : null,
       );
-      if (tabId !== activeTabId) return;
+      if (overtaken(tabId)) return;
+      kept = found;
       update(detail, share);
     } catch {
-      // Tab vanished between the event firing and this lookup running.
+      // Tab vanished between the event firing and this lookup running. A newer refresh has the say.
+      if (pass !== passes) return;
       malSync.watch(null);
       watchingMedia = false;
       controller.clear();

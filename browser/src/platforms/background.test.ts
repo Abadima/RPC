@@ -189,6 +189,8 @@ function installChromeMock(
   ) => void;
   /** Closes a tab. */
   remove: (tabId: number) => void;
+  /** How long lookups of one tab take from now on, so a refresh can be overtaken while it waits on it. */
+  slowTab: (tabId: number, ms: number) => void;
   /** What `storage.session` holds now. */
   session: () => Record<string, unknown>;
   /** Opens a tab in `windowId`, where it becomes that window's active tab. */
@@ -213,6 +215,7 @@ function installChromeMock(
   const stored = { ...initial };
   const removedTabListeners: Array<(tabId: number) => void> = [];
   const closed = new Set<number>(running.closed ?? []);
+  const slowTabs = new Map<number, number>();
   let current = tab;
   let tabLookups = 0;
   globalThis.chrome = {
@@ -227,6 +230,8 @@ function installChromeMock(
       },
       get: (async (tabId: number) => {
         tabLookups++;
+        const delay = slowTabs.get(tabId) ?? 0;
+        if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
         if (closed.has(tabId)) throw new Error(`No tab with id: ${tabId}`);
         return others.get(tabId) ?? current;
       }) as unknown as typeof chrome.tabs.get,
@@ -285,6 +290,9 @@ function installChromeMock(
       storageListeners.forEach((l) => l({ activities: { newValue: value } }, "local"));
     },
     session: () => ({ ...sessionStore }),
+    slowTab: (tabId, ms) => {
+      slowTabs.set(tabId, ms);
+    },
     remove: (tabId) => {
       closed.add(tabId);
       for (const listener of removedTabListeners) listener(tabId);
@@ -1433,6 +1441,22 @@ describe("Show media presence", () => {
       expect(shown()).toBeNull();
     });
   });
+
+  test("turning Show media presence off while a lookup is in flight publishes nothing afterwards", async () => {
+    const { chromeMock, shown } = await open(song("Song A"));
+    chromeMock.activate(2, NOWHERE, 1);
+    await tick();
+    expect(shown()?.id).toBe("tunes");
+
+    // The next refresh waits on its lookups; the setting goes off while it does.
+    chromeMock.slowTab(1, 60);
+    chromeMock.activate(3, NOWHERE, 1);
+    // Let the refresh reach the lookup of the remembered player, then switch the feature off.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    chromeMock.savePreferences({ showMediaPresence: false });
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(shown()).toBeNull();
+  });
 });
 
 describe("Show media presence: a tab that is not shown", () => {
@@ -1467,8 +1491,8 @@ describe("Show media presence: a tab that is not shown", () => {
     return port;
   }
 
-  async function open(stored: Record<string, unknown> = MEDIA_ON) {
-    const chromeMock = installChromeMock(song("Song A"), {
+  async function open(stored: Record<string, unknown> = MEDIA_ON, first: FakeTab = song("Song A")) {
+    const chromeMock = installChromeMock(first, {
       ...stored,
       activities: { tunes: { on: true } },
     });
@@ -1581,4 +1605,5 @@ describe("Show media presence: a tab that is not shown", () => {
     await tick();
     expect(shown()).toMatchObject({ id: "tunes", details: "Song B" });
   });
+
 });
