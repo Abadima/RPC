@@ -424,6 +424,11 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
    */
   async function mediaOf(tabId: number): Promise<Activity | null> {
     const tab = await chrome.tabs.get(tabId);
+    if (tab.incognito && preferences.incognito === "pause") {
+      // Under "Pause activity" a private tab runs nothing, not even to look for its music.
+      mediaTabs.forget(tabId);
+      return null;
+    }
     if (tab.audible !== true || !tab.url) return null;
     const url = new URL(tab.url);
     if (!/^https?:$/.test(url.protocol)) return null;
@@ -487,6 +492,7 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
         malSync.watch(null);
         watchingMedia = false;
         mediaTabs.forget(tabId);
+        pages.stopTabs([tabId]);
         controller.clear();
         return;
       }
@@ -538,8 +544,19 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
     }
   }
 
+  /** Under "Pause activity", private tabs run nothing: their music is forgotten, and scripts already running there stop. */
+  async function stopPrivateTabs(): Promise<void> {
+    const tabs: chrome.tabs.Tab[] = await chrome.tabs.query({});
+    const privateTabs = tabs.flatMap((tab) =>
+      tab.incognito && tab.id !== undefined ? [tab.id] : [],
+    );
+    for (const tabId of privateTabs) mediaTabs.forget(tabId);
+    pages.stopTabs(privateTabs);
+  }
+
   const usePreferences = (next: Preferences): void => {
     preferences = next;
+    if (next.incognito === "pause") void stopPrivateTabs().catch(() => {});
     if (!next.showMediaPresence) {
       mediaTabs.clear();
       watchingMedia = false;

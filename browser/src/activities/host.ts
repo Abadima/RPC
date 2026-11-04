@@ -410,6 +410,21 @@ export class PageHost {
     this.again.delete(tabId);
   }
 
+  /**
+   * Stops every script running in these tabs, and drops what they reported:
+   * a private tab under "Pause activity" runs nothing, even scripts that were
+   * already running there before the setting changed.
+   */
+  stopTabs(tabs: Iterable<number>): void {
+    for (const tabId of tabs) {
+      this.background.delete(tabId);
+      this.visited.delete(tabId);
+      for (const live of this.live.get(tabId) ?? []) this.refuse(live.port);
+      this.live.delete(tabId);
+      if (this.reports.delete(tabId)) this.changed(tabId);
+    }
+  }
+
   /** Access was granted or taken back: what runs on sites no longer granted stops now. */
   private async accessChanged(): Promise<void> {
     this.grantsNow = null;

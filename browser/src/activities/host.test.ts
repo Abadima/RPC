@@ -639,3 +639,26 @@ describe("PageHost: tabs whose music or video is kept", () => {
     expect(background(reused)).toEqual([{ type: "background", on: false }]);
   });
 });
+
+describe("PageHost: stopping a tab's scripts", () => {
+  test("stops the scripts running in that tab, drops what they reported, and leaves other tabs alone", async () => {
+    const { host, page } = setup();
+    await host.setStates(on);
+    const stopped = page();
+    stopped.send({ type: "hello", activity: PREMID, clientId: DEFAULT_CLIENT });
+    const kept = page(WATCH.href, { tab: { id: 8 } });
+    kept.send({ type: "hello", activity: PREMID, clientId: DEFAULT_CLIENT });
+    stopped.send({ type: "activity", clientId: DEFAULT_CLIENT, data: { details: "Watching" } });
+    await settle(250);
+    expect((await host.peek(7, WATCH)).reported).toBeDefined();
+
+    host.stopTabs([7]);
+    expect(stopped.posted.at(-1)).toEqual({ type: "stop" });
+    expect(stopped.disconnected).toBe(true);
+    expect(kept.posted.some((message) => (message as { type?: string }).type === "stop")).toBe(
+      false,
+    );
+    expect(kept.disconnected).toBe(false);
+    expect((await host.peek(7, WATCH)).reported).toBeUndefined();
+  });
+});

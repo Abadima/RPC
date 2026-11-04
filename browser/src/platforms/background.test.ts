@@ -235,7 +235,13 @@ function installChromeMock(
         if (closed.has(tabId)) throw new Error(`No tab with id: ${tabId}`);
         return others.get(tabId) ?? current;
       }) as unknown as typeof chrome.tabs.get,
-      query: (async (query: { windowId?: number }) => {
+      query: (async (query: { windowId?: number; active?: boolean }) => {
+        // Every tab, when asked for no particular window or state (as for private tabs).
+        if (query.windowId === undefined && query.active === undefined) {
+          const every = [{ id: 1, windowId: 1, ...current }];
+          for (const [id, other] of others) every.push({ id, windowId: 1, ...other });
+          return every.filter((candidate) => !closed.has(candidate.id));
+        }
         const windowId = query.windowId ?? 1;
         const id = activeIn.get(windowId) ?? 1;
         return [{ id, windowId, ...(others.get(id) ?? current) }];
@@ -1442,6 +1448,29 @@ describe("Show media presence", () => {
     });
   });
 
+  test("a private player kept under Share as usual is not looked at again once Pause activity is set", async () => {
+    const { chromeMock, shown, detected } = await open(
+      { ...song("Song A"), incognito: true },
+      { preferences: { showMediaPresence: true, incognito: "share" } },
+    );
+    chromeMock.activate(2, NOWHERE, 1);
+    await tick();
+    expect(shown()).toMatchObject({ id: "tunes", details: "Song A" });
+
+    chromeMock.savePreferences({ showMediaPresence: true, incognito: "pause" });
+    await tick();
+    expect(shown()).toBeNull();
+    const runs = detected.length;
+
+    // Its song changes, and it's visited again: its Activity isn't run, and nothing is shown.
+    chromeMock.update({ title: "Song B" }, { ...song("Song B"), incognito: true }, 1);
+    await tick();
+    chromeMock.activate(3, NOWHERE, 1);
+    await tick();
+    expect(detected.length).toBe(runs);
+    expect(shown()).toBeNull();
+  });
+
   test("turning Show media presence off while a lookup is in flight publishes nothing afterwards", async () => {
     const { chromeMock, shown } = await open(song("Song A"));
     chromeMock.activate(2, NOWHERE, 1);
@@ -1606,4 +1635,15 @@ describe("Show media presence: a tab that is not shown", () => {
     expect(shown()).toMatchObject({ id: "tunes", details: "Song B" });
   });
 
+  test("turning Pause activity on stops the scripts already running in a private tab", async () => {
+    const { chromeMock, port } = await open(
+      { preferences: { showMediaPresence: true, incognito: "share" } },
+      { ...song("Song A"), incognito: true },
+    );
+    expect(port.posted.some((message) => message.type === "stop")).toBe(false);
+
+    chromeMock.savePreferences({ showMediaPresence: true, incognito: "pause" });
+    await tick();
+    expect(port.posted.at(-1)).toEqual({ type: "stop" });
+  });
 });
