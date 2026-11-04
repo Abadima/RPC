@@ -383,7 +383,7 @@ export class PageHost {
    */
   keepReading(tabs: Iterable<number>): void {
     const next = new Set(tabs);
-    for (const tabId of [...this.background]) {
+    for (const tabId of this.background) {
       if (next.has(tabId)) continue;
       this.background.delete(tabId);
       this.tellBackground(tabId, false);
