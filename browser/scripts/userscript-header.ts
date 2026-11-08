@@ -1,4 +1,3 @@
-/** The manifest fields the userscript's metadata block repeats. */
 export interface HeaderSource {
   version: string;
   description: string;

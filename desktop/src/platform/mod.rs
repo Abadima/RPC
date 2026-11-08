@@ -1,11 +1,6 @@
-//! Everything that differs by operating system, behind one set of names the
-//! rest of Desktop uses: who owns a loopback connection, the tray, Desktop's
-//! local control socket, where Discord listens, file permissions, and the
-//! Windows console. Each build compiles only its own operating system's
-//! directory (`linux`, `windows`, `macos`) plus `unix` on Linux and macOS.
-//!
-//! "Platform" here means the operating system. The presence platforms
-//! (Discord and the rest) are `adapters`.
+//! Everything that differs by operating system, behind one set of names. Each
+//! build compiles its own OS's directory, plus `unix` on Linux and macOS.
+//! "Platform" here is the OS; presence platforms are `adapters`.
 
 #[cfg(not(any(unix, windows)))]
 compile_error!("Parousia Desktop builds for Linux, macOS (and other Unix), and Windows only");
@@ -35,7 +30,6 @@ pub use windows::{
     loopback_owner, run_tray,
 };
 
-/// Which OS user is on the other end of a loopback connection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(
     not(any(target_os = "linux", windows)),
@@ -50,7 +44,6 @@ pub enum Owner {
     Unknown,
 }
 
-/// How the tray ended, where there is one.
 #[cfg_attr(
     not(any(target_os = "linux", windows)),
     allow(dead_code, reason = "no tray on this operating system yet")

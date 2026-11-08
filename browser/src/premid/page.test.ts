@@ -10,7 +10,7 @@ import {
   runUpdates,
   serializePresenceData,
   withholdStorage,
-  type PremidArgs,
+  type PremidApi,
   type PremidBridge,
 } from "./page";
 
@@ -22,7 +22,6 @@ describe("the world PreMiD Activities run in", () => {
     withholdStorage({ browser: deletable, chrome: fixed });
     expect(Reflect.get(deletable, "storage")).toBeUndefined();
     expect(Reflect.get(fixed, "storage")).toBeUndefined();
-    // Everything else stays: the runtime still reaches the background.
     expect(deletable.runtime).toEqual({});
     expect(Reflect.get(fixed, "runtime")).toEqual({});
   });
@@ -142,7 +141,6 @@ describe("updates that never finish", () => {
     const first = runUpdates(runs, running, 30);
     await new Promise((resolve) => setTimeout(resolve, 0));
     await runUpdates(runs, running, 30);
-    // While it's under way, the stuck one isn't started again; the healthy one isn't held up.
     expect([hung, fine]).toEqual([1, 2]);
     await first;
     expect(running.size).toBe(0);
@@ -224,7 +222,6 @@ describe("an Activity in a page", () => {
     for (const [key, value] of before) scope[key] = value;
   });
 
-  /** A page with the runtime installed, and the messages it sends and receives through its ports. */
   function page() {
     const posted: Array<{ type: string; data?: unknown; ids?: string[]; hidden?: boolean }> = [];
     const receivers: Array<(message: unknown) => void> = [];
@@ -262,12 +259,10 @@ describe("an Activity in a page", () => {
       location,
       posted,
       reports: () => posted.filter((message) => message.type === "activity"),
-      /** Hides or shows the page, as a tab switch does. */
       setHidden: (hidden: boolean) => {
         document.hidden = hidden;
         documentListeners.get("visibilitychange")?.();
       },
-      /** A message from the background. */
       receive: (message: object) => receivers.forEach((receive) => receive(message)),
       stop: () => receivers.forEach((receive) => receive({ type: "stop" })),
     };
@@ -275,20 +270,19 @@ describe("an Activity in a page", () => {
 
   const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 1100));
 
-  /** The API `bind` runs a script with, or `null` when it doesn't run it. */
-  function bound(bridge: PremidBridge, activity: string): PremidArgs | null {
-    let api: PremidArgs | null = null;
-    bridge.bind(activity, (...args) => {
-      api = args;
+  function bound(bridge: PremidBridge, name: string): PremidApi | null {
+    let api: PremidApi | null = null;
+    bridge.bind(name, (given) => {
+      api = given;
     });
     return api;
   }
 
   test("that stops reporting while its page is shown has its last report dropped, and is shown again when it resumes", async () => {
     const { bridge, location, reports, stop } = page();
-    const api = bound(bridge, "premid:Music");
+    const api = bound(bridge, "Music");
     if (!api) throw new Error("the Activity wasn't bound");
-    const [Presence] = api;
+    const { Presence } = api;
     const presence = new Presence({ clientId: "1" }) as {
       on: (event: string, listener: () => void) => void;
       setActivity: (data: object) => void;
@@ -300,7 +294,6 @@ describe("an Activity in a page", () => {
     await tick();
     expect(reports().at(-1)?.data).toEqual({ details: "Browsing home" });
 
-    // Silent, as YouTube Music is in a layout its script doesn't know: not stale yet.
     reporting = false;
     setSystemTime(Date.now() + STALE_MS - 2000);
     await tick();
@@ -313,7 +306,6 @@ describe("an Activity in a page", () => {
     await tick();
     expect(reports().at(-1)?.data).toEqual({ details: "Browsing home" });
 
-    // Sooner once the page has moved on without the Activity noticing.
     reporting = false;
     location.href = "https://music.example/watch?v=1";
     setSystemTime(Date.now() + STALE_AFTER_MOVE_MS + 1000);
@@ -324,9 +316,9 @@ describe("an Activity in a page", () => {
 
   test("in a tab that is not shown it reads again only while the background asks it to", async () => {
     const { bridge, setHidden, receive, stop } = page();
-    const api = bound(bridge, "premid:Music");
+    const api = bound(bridge, "Music");
     if (!api) throw new Error("the Activity wasn't bound");
-    const [Presence] = api;
+    const { Presence } = api;
     const presence = new Presence({ clientId: "1" }) as {
       on: (event: string, listener: () => void) => void;
     };
@@ -337,14 +329,12 @@ describe("an Activity in a page", () => {
     await tick();
     expect(updates).toBeGreaterThan(0);
 
-    // A tab nobody is looking at reads nothing: that is why a skipped song went unnoticed.
     setHidden(true);
     await tick();
     const quiet = updates;
     await tick();
     expect(updates).toBe(quiet);
 
-    // Its music is being kept: it reads again, at once and then every second, while hidden.
     receive({ type: "background", on: true });
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(updates).toBeGreaterThan(quiet);
@@ -352,13 +342,11 @@ describe("an Activity in a page", () => {
     await tick();
     expect(updates).toBeGreaterThan(reading);
 
-    // Kept no more: quiet again.
     receive({ type: "background", on: false });
     const stopped = updates;
     await tick();
     expect(updates).toBe(stopped);
 
-    // Shown again, it reads as ever.
     setHidden(false);
     await tick();
     expect(updates).toBeGreaterThan(stopped);
@@ -367,15 +355,14 @@ describe("an Activity in a page", () => {
 
   test("tells the background of a setting it hides or shows once, however often it asks", () => {
     const { bridge, posted, stop } = page();
-    const api = bound(bridge, "premid:Music");
+    const api = bound(bridge, "Music");
     if (!api) throw new Error("the Activity wasn't bound");
-    const [Presence] = api;
+    const { Presence } = api;
     const presence = new Presence({ clientId: "1" }) as {
       hideSetting: (ids: unknown) => Promise<void>;
       showSetting: (ids: unknown) => Promise<void>;
     };
     const hides = () => posted.filter((message) => message.type === "hide");
-    // Some Activities do this on every update, once a second.
     for (let n = 0; n < 5; n++) void presence.hideSetting("listeners");
     expect(hides()).toEqual([{ type: "hide", ids: ["listeners"], hidden: true }]);
     void presence.hideSetting(["listeners", "cover"]);
@@ -392,18 +379,17 @@ describe("an Activity in a page", () => {
 
   test("is bound once per document, and again once the background has stopped it", () => {
     const { bridge, stop } = page();
-    const first = bound(bridge, "premid:Music");
+    const first = bound(bridge, "Music");
     expect(first).not.toBeNull();
-    // Nothing opened yet, so nothing to tell it apart from one still starting.
-    expect(bound(bridge, "premid:Music")).toBeNull();
+    expect(bound(bridge, "Music")).toBeNull();
     if (!first) return;
-    new first[0]({ clientId: "1" });
-    expect(bound(bridge, "premid:Music")).toBeNull();
+    new first.Presence({ clientId: "1" });
+    expect(bound(bridge, "Music")).toBeNull();
     stop();
-    const again = bound(bridge, "premid:Music");
+    const again = bound(bridge, "Music");
     expect(again).not.toBeNull();
-    expect(bound(bridge, "premid:Music")).toBeNull();
-    if (again) new again[0]({ clientId: "1" });
+    expect(bound(bridge, "Music")).toBeNull();
+    if (again) new again.Presence({ clientId: "1" });
     stop();
   });
 });

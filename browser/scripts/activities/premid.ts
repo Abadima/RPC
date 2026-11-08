@@ -1,15 +1,17 @@
-import { existsSync } from "node:fs";
-import { join, relative } from "node:path";
+import { existsSync, realpathSync } from "node:fs";
+import { dirname, join, relative, sep } from "node:path";
 import { PAGE_DATA_KINDS, type ActivitySetting, type SettingValue } from "../../src/core/activity";
 import { LANGUAGES, type Language } from "../../src/core/i18n";
 import {
   BRIDGE_KEY,
+  PREMID_ID_PREFIX,
   descriptionsPath,
   premidId,
   type ActivityManifest,
   type PageScript,
 } from "../../src/activities/manifest";
 import { activityId, type WebsiteFolder } from "./discover";
+import { isCatastrophic } from "./redos";
 import {
   CLIENT_ID,
   LIMITS,
@@ -36,13 +38,9 @@ export interface Exclusion {
 }
 
 export interface PremidFound {
-  /** Its website, as the folder's id: the same website in Parousia's repository has the same one. */
   site: string;
-  /** Its script's `file` is set when it's compiled. */
   manifest: ActivityManifest & { script: PageScript };
-  /** The folder its sources are in: the website's, or its `v1/`. */
   dir: string;
-  /** Its own English strings (`<service>.json`), by key, for `getStrings`. */
   strings: Record<string, string>;
   /** Its description in each language Parousia's views have besides English, where PreMiD's metadata.json has one. */
   descriptions: Partial<Record<Language, string>>;
@@ -182,7 +180,6 @@ export function readDescriptions(description: unknown): Partial<Record<Language,
   return found;
 }
 
-/** `activities/descriptions/<language>.json` for each language some Activity has a description in. */
 export function descriptionFiles(activities: readonly PremidFound[]): Map<string, string> {
   const byLanguage = new Map<Language, Record<string, string>>();
   for (const { manifest, descriptions } of activities) {
@@ -197,7 +194,6 @@ export function descriptionFiles(activities: readonly PremidFound[]): Map<string
   );
 }
 
-/** English messages from a PreMiD strings file (`general.json`, `<service>.json`). */
 export async function readStrings(path: string): Promise<Record<string, string>> {
   const value = existsSync(path) ? await readJson(path) : null;
   const strings: Record<string, string> = {};
@@ -272,7 +268,6 @@ export function originsFor(hosts: readonly string[], regExp: string): string[] {
   return [...new Set(origins)];
 }
 
-/** One metadata.json and its folder, as a PreMiD Activity for the extension, or why it's left out. */
 async function readActivity(
   folder: string,
   site: string,
@@ -295,6 +290,8 @@ async function readActivity(
     return `Activity API ${String(metadata.apiVersion)} isn't supported yet`;
   const pattern = testRegExp(regExp);
   if (!pattern) return `its regExp isn't a regular expression of at most ${MAX_REGEXP} characters`;
+  if (isCatastrophic(pattern))
+    return "its regExp can take seconds or more to fail on a crafted URL (see scripts/activities/redos.ts)";
   const hosts = [
     ...new Set(
       (Array.isArray(url) ? url : [url]).filter(
@@ -321,6 +318,9 @@ async function readActivity(
   const iframeRegExp = iFrameRegExp === undefined ? null : testRegExp(iFrameRegExp);
   if (hasIframe && iFrameRegExp !== undefined && !iframeRegExp) {
     return `its iFrameRegExp isn't a regular expression of at most ${MAX_REGEXP} characters`;
+  }
+  if (hasIframe && iframeRegExp && isCatastrophic(iframeRegExp)) {
+    return "its iFrameRegExp can take seconds or more to fail on a crafted URL (see scripts/activities/redos.ts)";
   }
 
   const clientIds = extractClientIds(await sourcesOf(folder));
@@ -409,7 +409,6 @@ export async function adaptPremid(
   return isString(result) ? { service, reason: result } : result;
 }
 
-/** A file name for an Activity's scripts: readable, and unique among `taken`. */
 function fileName(service: string, taken: Set<string>): string {
   const slug =
     service
@@ -425,10 +424,15 @@ function fileName(service: string, taken: Set<string>): string {
   return name;
 }
 
+const PREMID_API = ["Presence", "iFrame", "Slideshow", "SlideshowSlide", "MIN_SLIDE_TIME"];
+
 /**
  * An Activity's compiled script, wrapped so its `Presence` and `iFrame` are
  * Parousia's, bound to it (src/premid/page.ts). It does nothing if the
- * runtime isn't there or already ran it in this document.
+ * runtime isn't there or already ran it in this document. The wrapper is in
+ * every packaged script, so it names only the parts of the API the script
+ * uses (minified code keeps a name it doesn't declare as written) and leaves
+ * the runtime to add the `premid:` its id starts with.
  */
 export function wrapScript(
   code: string,
@@ -437,9 +441,12 @@ export function wrapScript(
   frame: boolean,
 ): string {
   const bind = frame ? "bindFrame" : "bind";
+  if (!id.startsWith(PREMID_ID_PREFIX)) throw new Error(`${id} isn't a PreMiD Activity's id`);
+  const name = id.slice(PREMID_ID_PREFIX.length);
+  const uses = PREMID_API.filter((api) => new RegExp(`\\b${api}\\b`).test(code));
   const given = Object.keys(strings).length > 0 ? `,${JSON.stringify(strings)}` : "";
   return [
-    `globalThis.${BRIDGE_KEY}?.${bind}(${JSON.stringify(id)},(Presence,iFrame,Slideshow,SlideshowSlide,MIN_SLIDE_TIME)=>{`,
+    `globalThis.${BRIDGE_KEY}?.${bind}(${JSON.stringify(name)},({${uses.join(",")}})=>{`,
     code,
     `}${given});`,
     "",
@@ -464,6 +471,30 @@ async function compile(entrypoint: string, plugin: Bun.BunPlugin): Promise<strin
 }
 
 /**
+ * What an Activity's build may read: its own folder, and PreMiD's helper
+ * package as `premid`. Bun would bundle any file on the build machine an
+ * import names, a symlink's target included (`import s from "/proc/self/environ"
+ * with { type: "text" }`), into a script that ships; such an Activity
+ * doesn't build.
+ */
+function confined(dir: string, helper: string): Bun.BunPlugin {
+  const roots = [dir, dirname(helper)].map((path) => realpathSync(path));
+  return {
+    name: "premid-confined",
+    setup(build) {
+      build.onResolve({ filter: /^premid$/ }, () => ({ path: helper }));
+      build.onLoad({ filter: /.*/ }, ({ path }) => {
+        const real = realpathSync(path);
+        if (!roots.some((root) => real === root || real.startsWith(root + sep))) {
+          throw new Error(`it loads ${path}, outside its folder`);
+        }
+        return undefined;
+      });
+    },
+  };
+}
+
+/**
  * Compiles every found Activity (its `premid` imports from PreMiD's own
  * helper package in the same checkout), returning the scripts by file name
  * under `premid/`, the catalog entries, and any that failed to build.
@@ -477,12 +508,6 @@ export async function compilePremid(
   excluded: Exclusion[];
 }> {
   const helper = join(root, "premid", "src", "index.ts");
-  const plugin: Bun.BunPlugin = {
-    name: "premid-helpers",
-    setup(build) {
-      build.onResolve({ filter: /^premid$/ }, () => ({ path: helper }));
-    },
-  };
   const activities: PremidFound[] = [];
   const scripts = new Map<string, string>();
   const excluded: Exclusion[] = [];
@@ -490,6 +515,7 @@ export async function compilePremid(
 
   for (const entry of found) {
     const { manifest, dir, strings } = entry;
+    const plugin = confined(dir, helper);
     const page = await compile(join(dir, "presence.ts"), plugin);
     const frame = manifest.script.iframe ? await compile(join(dir, "iframe.ts"), plugin) : null;
     const failure = page instanceof Error ? page : frame instanceof Error ? frame : null;

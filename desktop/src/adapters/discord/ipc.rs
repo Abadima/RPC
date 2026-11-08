@@ -1,8 +1,5 @@
 //! The Discord app's local RPC framing: an 8-byte header (opcode, then body
-//! length, both little-endian `u32`) and a JSON body. That's the whole
-//! format, so there's no crate for it. The transport it travels over (a Unix
-//! socket or a named pipe called `discord-ipc-0` to `discord-ipc-9`) is the
-//! operating system's: see `platform::discord`.
+//! length, little-endian `u32`s) and a JSON body. The transport is `platform::discord`.
 
 use std::io::{self, Read};
 
@@ -15,6 +12,9 @@ pub const OP_PONG: u32 = 4;
 /// Discord's replies are a few KiB at most (`READY` carries the user); a
 /// bigger frame isn't worth reading.
 pub const MAX_FRAME: usize = 64 * 1024;
+
+/// Discord writes a frame in one piece, so one read gets header and body.
+pub const READ_BUFFER: usize = 4 * 1024;
 
 pub fn encode(op: u32, body: &[u8]) -> io::Result<Vec<u8>> {
     let len = u32::try_from(body.len())
@@ -45,7 +45,6 @@ pub fn read_frame(reader: &mut impl Read) -> io::Result<(u32, Vec<u8>)> {
     Ok((op, body))
 }
 
-/// What arrives from Discord, delivered to the adapter's queue.
 #[derive(Debug)]
 pub enum Incoming {
     Frame(u32, Vec<u8>),

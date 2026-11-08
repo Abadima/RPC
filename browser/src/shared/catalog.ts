@@ -33,7 +33,6 @@ export function indexActivities(activities: readonly ActivityInfo[]): IndexedAct
     .sort((a, b) => collator.compare(a.info.name, b.info.name));
 }
 
-/** Every word of `query` has to appear somewhere in the name, description, sites, or keywords. */
 export function searchActivities(index: readonly IndexedActivity[], query: string): ActivityInfo[] {
   const words = fold(query).split(/\s+/).filter(Boolean);
   return index
@@ -43,11 +42,9 @@ export function searchActivities(index: readonly IndexedActivity[], query: strin
 
 export interface Page<T> {
   items: T[];
-  /** 1-based, clamped into range. */
   page: number;
   pageCount: number;
   total: number;
-  /** 1-based positions of the first and last item shown; 0 when empty. */
   first: number;
   last: number;
 }
@@ -92,6 +89,10 @@ export function pageNumbers(page: number, pageCount: number): Array<number | "ga
 export function rowsThatFit(room: number, rowHeight: number, gap: number, minRows = 3): number {
   if (rowHeight <= 0) return minRows;
   return Math.max(minRows, Math.floor((room + gap) / (rowHeight + gap)));
+}
+
+export function fittedSize(columns: number, room: number, cardHeight: number, gap: number): number {
+  return Math.max(1, columns) * rowsThatFit(room, cardHeight, gap);
 }
 
 /** The page that shows item `index` (0-based) at `size` per page, so resizing keeps your place. */

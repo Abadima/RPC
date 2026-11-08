@@ -1,12 +1,8 @@
-//! HTTP on the shared port: each connection's request head is read and
-//! parsed once, then either answered here (the one real route, `GET /health`,
-//! or an error) or, for a WebSocket upgrade, handed to `ws.rs` with what the
-//! handshake needs. Everything else happens over the WebSocket.
-//!
-//! The upgrade is RFC 6455's, checked here rather than by tungstenite's
-//! handshake, which would parse the request a second time into the `http`
-//! crate's types (and bring that crate and three more along). tungstenite
-//! still runs the WebSocket itself.
+//! HTTP on the shared port: each request head is parsed once, then answered here
+//! (`GET /health`, or an error) or handed to `ws.rs` as a WebSocket upgrade. The
+//! RFC 6455 upgrade is checked here rather than by tungstenite's handshake, which
+//! would parse the request again into the `http` crate's types (and three more
+//! crates).
 
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
@@ -17,12 +13,9 @@ use std::time::{Duration, Instant};
 const HEAD_BUFFER_SIZE: usize = 8192;
 const MAX_HEADERS: usize = 32;
 
-/// What a connection asked for.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Request {
-    /// A well-formed WebSocket upgrade.
     Upgrade(Upgrade),
-    /// Anything else, answered and closed.
     Http(Answer),
 }
 
@@ -31,7 +24,6 @@ pub struct Upgrade {
     pub path: String,
     /// The browser-set `Origin`; empty when there's none, or more than one.
     pub origin: String,
-    /// `Sec-WebSocket-Accept`, for the `101` response.
     pub accept: String,
 }
 

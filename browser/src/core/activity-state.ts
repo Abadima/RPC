@@ -18,7 +18,7 @@ export interface ActivityState {
 
 export type ActivityStates = Readonly<Record<string, ActivityState>>;
 
-const STORAGE_KEY = "activities";
+export const ACTIVITY_STATES_KEY = "activities";
 const MAX_ID = 256;
 const MAX_TEXT = 256;
 const MAX_HIDDEN = 64;
@@ -64,12 +64,10 @@ export function parseActivityStates(value: unknown): ActivityStates {
   return states;
 }
 
-/** Whether `info` reads pages, so it runs only on sites someone granted it. */
 export function needsAccess(info: ActivityInfo): boolean {
   return (info.origins?.length ?? 0) > 0;
 }
 
-/** Which of a website's implementations runs: the one chosen, or the first (native) one. */
 export function chosenVariant(info: ActivityInfo, states: ActivityStates): string {
   const [first] = info.variants ?? [];
   if (first === undefined) return info.id;
@@ -88,7 +86,6 @@ export function isActivityOn(info: ActivityInfo, states: ActivityStates): boolea
   return states[info.id]?.on ?? !needsAccess(info);
 }
 
-/** The page data kinds `info` declares that Settings > Privacy allows (before site access). */
 export function allowedData(info: ActivityInfo, pageData: PageDataPreferences): PageDataKind[] {
   return (info.data ?? []).filter((kind) => pageData[kind]);
 }
@@ -135,7 +132,7 @@ export function settingShown(
 export async function loadActivityStates(
   area: PreferenceArea = chrome.storage.local,
 ): Promise<ActivityStates> {
-  return parseActivityStates((await area.get(STORAGE_KEY))[STORAGE_KEY]);
+  return parseActivityStates((await area.get(ACTIVITY_STATES_KEY))[ACTIVITY_STATES_KEY]);
 }
 
 /**
@@ -158,11 +155,10 @@ export async function saveActivityStates(
     merged[id] = next;
   }
   const next = parseActivityStates(merged);
-  await area.set({ [STORAGE_KEY]: next });
+  await area.set({ [ACTIVITY_STATES_KEY]: next });
   return next;
 }
 
-/** Merges `patch` into one Activity's state; `settings` merge setting by setting. */
 export function saveActivityState(
   id: string,
   patch: ActivityState,
@@ -171,13 +167,9 @@ export function saveActivityState(
   return saveActivityStates({ [id]: patch }, area);
 }
 
-/**
- * Calls `listener` with every Activity's state whenever any view or the
- * background saves one. Returns a function that stops it.
- */
 export function watchActivityStates(listener: (states: ActivityStates) => void): () => void {
   const onChanged = (changes: Record<string, chrome.storage.StorageChange>, area: string): void => {
-    const change = changes[STORAGE_KEY];
+    const change = changes[ACTIVITY_STATES_KEY];
     if (area === "local" && change) listener(parseActivityStates(change.newValue));
   };
   chrome.storage.onChanged.addListener(onChanged);

@@ -1,0 +1,13 @@
+{
+  "summary": "Twoje Rich Presence na Discordzie i nie tylko.",
+  "description": [
+    "Twój Rich Presence na Discordzie i nie tylko.",
+    "Parousia przenosi aktywność z twojej przeglądarki do Discord Rich Presence. Rozszerzenie automatycznie wykrywa obsługiwane strony i może wyświetlać bezpośrednio w twoim profilu na Discordzie to, co oglądasz, czego słuchasz, w co grasz lub co przeglądasz.",
+    "Do obsługi stron i aplikacji internetowych używamy Aktywności. Aktywności mogą dostarczać bogate szczegóły, takie jak tytuły, artyści, twórcy, miniatury, stan odtwarzania, znaczniki czasu i linki. Dzięki temu twój status na Discordzie zyskuje znacznie więcej kontekstu niż zwykły tytuł karty.",
+    "Parousia jest zgodna z open-sourcowym ekosystemem Aktywności PreMiD, a jednocześnie ma własny ekosystem Aktywności dla programistów i użytkowników.",
+    "To rozszerzenie jest open-source i opiera się na przyjaznym programistom systemie Aktywności. Programiści TypeScriptu mogą tworzyć Aktywności dla stron, publikować je w ekosystemie Aktywności i budować integracje bez modyfikowania Parousii.",
+    "Parousia powstała z myślą o prywatności i tam, gdzie to możliwe, przetwarza informacje o aktywności lokalnie. Rozszerzenie komunikuje się z naszą aplikacją desktopową, która odpowiada za integrację z platformami. Do korzystania nie trzeba konta ani logowania, a Parousia nie używa analityki ani telemetrii do śledzenia twojego przeglądania.",
+    "Chcesz ożywić aktywność ze swojej przeglądarki? Zainstaluj Parousię i spraw, by to, co robisz w przeglądarce, stało się częścią twojego Discord Rich Presence.",
+    "Parousia to niezależny projekt open-source, który nie jest w żaden sposób powiązany, wspierany ani sponsorowany przez Discord Inc."
+  ]
+}

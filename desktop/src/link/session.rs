@@ -28,12 +28,13 @@ pub const MAX_MESSAGE_SIZE: usize = 16 * 1024;
 const MESSAGE_BURST: u32 = 20;
 const MESSAGES_PER_SECOND: u32 = 5;
 
-/// A message-oriented, bidirectional link to one client.
 pub trait Channel {
+    /// A message as received: the WebSocket's own buffer, not a copy of it.
+    type Text: std::ops::Deref<Target = str>;
     /// The next text message; `Ok(None)` once the peer has gone.
     /// `ErrorKind::TimedOut` when a read timeout elapses.
-    fn recv(&mut self) -> io::Result<Option<String>>;
-    fn send(&mut self, text: &str) -> io::Result<()>;
+    fn recv(&mut self) -> io::Result<Option<Self::Text>>;
+    fn send(&mut self, text: String) -> io::Result<()>;
     fn set_read_timeout(&mut self, timeout: Option<Duration>) -> io::Result<()>;
     /// Something another thread can call to end this connection.
     fn closer(&self) -> io::Result<Closer>;
@@ -53,7 +54,7 @@ pub fn run(channel: &mut impl Channel, peer: &Peer, hub: &Hub) {
         protocol_version: PROTOCOL_VERSION,
         version: VERSION,
     };
-    if channel.send(&protocol::encode(&welcome)).is_ok() && channel.set_read_timeout(None).is_ok() {
+    if channel.send(protocol::encode(&welcome)).is_ok() && channel.set_read_timeout(None).is_ok() {
         serve(channel, peer, hub, id);
     }
     hub.disconnect(id);
@@ -86,7 +87,7 @@ fn handshake(channel: &mut impl Channel) -> Option<String> {
 }
 
 fn reject<C: Channel>(channel: &mut C, reason: RejectReason) -> Option<String> {
-    let _ = channel.send(&protocol::encode(&ServerMessage::Reject { reason }));
+    let _ = channel.send(protocol::encode(&ServerMessage::Reject { reason }));
     channel.close();
     None
 }
@@ -140,7 +141,7 @@ fn serve(channel: &mut impl Channel, peer: &Peer, hub: &Hub, id: u64) {
             Ok(ClientMessage::Hello { .. }) | Err(_) => Some(malformed),
         };
         if let Some(reply) = reply
-            && channel.send(&protocol::encode(&reply)).is_err()
+            && channel.send(protocol::encode(&reply)).is_err()
         {
             return;
         }
@@ -194,12 +195,14 @@ pub mod tests {
     }
 
     impl Channel for ScriptedChannel {
+        type Text = String;
+
         fn recv(&mut self) -> io::Result<Option<String>> {
             self.incoming.pop_front().unwrap_or(Ok(None))
         }
 
-        fn send(&mut self, text: &str) -> io::Result<()> {
-            self.outgoing.push(serde_json::from_str(text).unwrap());
+        fn send(&mut self, text: String) -> io::Result<()> {
+            self.outgoing.push(serde_json::from_str(&text).unwrap());
             Ok(())
         }
 

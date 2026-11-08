@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use tungstenite::protocol::frame::coding::CloseCode;
 use tungstenite::protocol::{CloseFrame, Role, WebSocketConfig};
-use tungstenite::{Message, WebSocket};
+use tungstenite::{Message, Utf8Bytes, WebSocket};
 
 use crate::app::hub::{Closer, Gate, Hub};
 use crate::link::http::Upgrade;
@@ -62,7 +62,7 @@ pub fn handle_connection(mut stream: TcpStream, upgrade: Upgrade, hub: &Hub, sam
             let reject = ServerMessage::Reject {
                 reason: RejectReason::OriginNotAllowed,
             };
-            let _ = channel.send(&protocol::encode(&reject));
+            let _ = channel.send(protocol::encode(&reject));
             channel.close();
         }
         Gate::Forbidden => {}
@@ -74,10 +74,12 @@ struct WsChannel {
 }
 
 impl Channel for WsChannel {
-    fn recv(&mut self) -> io::Result<Option<String>> {
+    type Text = Utf8Bytes;
+
+    fn recv(&mut self) -> io::Result<Option<Utf8Bytes>> {
         loop {
             match self.socket.read() {
-                Ok(Message::Text(text)) => return Ok(Some(text.as_str().to_string())),
+                Ok(Message::Text(text)) => return Ok(Some(text)),
                 Ok(Message::Close(_)) => return Ok(None),
                 Ok(
                     Message::Ping(_) | Message::Pong(_) | Message::Binary(_) | Message::Frame(_),
@@ -95,7 +97,7 @@ impl Channel for WsChannel {
         }
     }
 
-    fn send(&mut self, text: &str) -> io::Result<()> {
+    fn send(&mut self, text: String) -> io::Result<()> {
         self.socket
             .send(Message::Text(text.into()))
             .map_err(io::Error::other)

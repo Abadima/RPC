@@ -131,7 +131,6 @@ describe("Activity state", () => {
     const picked = { ...states, [native.id]: { use: premid.id } };
     expect(isActivityOn(mine, picked)).toBe(false);
     expect(isActivityOn(theirs, picked)).toBe(true);
-    // A choice that isn't one of its variants falls back to the first.
     expect(chosenVariant(theirs, { [native.id]: { use: "premid:Elsewhere" } })).toBe(native.id);
     expect(parseActivityStates({ [native.id]: { use: 3 } })).toEqual({ [native.id]: {} });
   });
@@ -145,7 +144,6 @@ describe("a website in both sources", () => {
 
   function registry(): ActivityRegistry {
     const registry = new ActivityRegistry();
-    // Native ones are registered first, as the background does.
     for (const info of [mine, theirs]) {
       registry.register({ info, matcher: () => true, detect: () => null });
     }
@@ -162,7 +160,6 @@ describe("a website in both sources", () => {
   test("PreMiD's runs only once someone picks it, and then the native one doesn't", () => {
     const states = { [native.id]: { use: premid.id }, [premid.id]: { on: true } };
     expect(registry().resolve(page, (info) => isActivityOn(info, states))?.info.id).toBe(premid.id);
-    // Picked but not turned on: neither runs, rather than falling back to the other.
     const off = { [native.id]: { use: premid.id } };
     expect(registry().resolve(page, (info) => isActivityOn(info, off))).toBeNull();
   });
@@ -182,7 +179,6 @@ describe("a website in both sources", () => {
           });
           const running = [mine, theirs].filter((info) => isActivityOn(info, states));
           expect(running.length).toBeLessThanOrEqual(1);
-          // What runs is the chosen implementation, and only that one.
           for (const info of running) expect(chosenVariant(info, states)).toBe(info.id);
         }
       }

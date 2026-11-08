@@ -111,7 +111,6 @@ function measureText() {
   return results;
 }
 
-/** Tabs through the page; every focused control must show a ring (its own, or its field's). */
 async function checkFocusRings(page, label) {
   await page.evaluate(() => document.activeElement?.blur());
   const seen = new Set();

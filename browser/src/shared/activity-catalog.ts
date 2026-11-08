@@ -29,14 +29,27 @@ import {
   type Grants,
 } from "../core/site-access";
 
-async function fetchJson(path: string): Promise<unknown> {
-  try {
-    const response = await fetch(chrome.runtime.getURL(path));
-    return response.ok ? await response.json() : null;
-  } catch {
-    return null;
-  }
+/** Activity files are fixed at build time, so each path is read once per page. A failed read isn't kept. */
+const reading = new Map<string, Promise<unknown>>();
+
+export function resetActivityReads(): void {
+  reading.clear();
 }
+
+function readOnce(path: string, body: (response: Response) => Promise<unknown>): Promise<unknown> {
+  const pending = reading.get(path);
+  if (pending) return pending;
+  const promise = fetch(chrome.runtime.getURL(path))
+    .then((response) => (response.ok ? body(response) : null))
+    .catch(() => null);
+  reading.set(path, promise);
+  void promise.then((value) => {
+    if (value === null) reading.delete(path);
+  });
+  return promise;
+}
+
+const fetchJson = (path: string): Promise<unknown> => readOnce(path, (response) => response.json());
 
 let descriptions: { language: string; texts: Promise<Record<string, string>> } | null = null;
 
@@ -63,13 +76,11 @@ function translatedDescriptions(): Promise<Record<string, string>> {
   return descriptions.texts;
 }
 
-/** `info` with its description in the view's language, when there is one. */
 function withDescription(info: ActivityInfo, texts: Record<string, string>): ActivityInfo {
   const description = texts[info.id];
   return description === undefined ? info : { ...info, description };
 }
 
-/** Every Activity this build includes, native and PreMiD's, as the catalog lists them. */
 export async function loadCatalog(): Promise<ActivityInfo[]> {
   const { activities } = parseCatalog(await fetchJson(CATALOG_PATH));
   const texts = await translatedDescriptions();
@@ -88,12 +99,8 @@ export async function loadActivityInfo(id: string): Promise<ActivityInfo | null>
 
 /** Plain text, which the host index is searched as: it's never parsed, so it costs one string, not an object per site. */
 async function fetchText(path: string): Promise<string> {
-  try {
-    const response = await fetch(chrome.runtime.getURL(path));
-    return response.ok ? await response.text() : "";
-  } catch {
-    return "";
-  }
+  const text = await readOnce(path, (response) => response.text());
+  return typeof text === "string" ? text : "";
 }
 
 /**
@@ -106,13 +113,7 @@ export async function findActivity(url: URL, states: ActivityStates): Promise<Ac
   for (const id of hostIds(await fetchText(HOSTS_PATH), url.hostname)) {
     const manifest = await loadManifest(id);
     if (!manifest) continue;
-    let matches = false;
-    try {
-      matches = compileMatch(manifest.match)(url);
-    } catch {
-      // A pattern this browser can't compile matches nothing.
-    }
-    if (!matches) continue;
+    if (!compileMatch(manifest.match)(url)) continue;
     const chosen = chosenVariant(manifest.info, states);
     return chosen === manifest.info.id ? manifest.info : loadActivityInfo(chosen);
   }
@@ -141,12 +142,10 @@ export function activityStatus(
 // Every call that asks the browser for access must run straight from a
 // click, before anything else is awaited, or the browser won't ask.
 
-/** The sites granted now. */
 export async function readGrants(): Promise<Grants> {
   return grantsFrom(await chrome.permissions.getAll());
 }
 
-/** Calls `listener` whenever site access is granted or taken back, anywhere. Returns a function that stops it. */
 export function watchGrants(listener: () => void): () => void {
   chrome.permissions.onAdded.addListener(listener);
   chrome.permissions.onRemoved.addListener(listener);
@@ -223,7 +222,6 @@ async function releaseSites(
   }
 }
 
-/** Turns an Activity off, and gives back the sites only it needed. */
 export async function turnOff(
   info: ActivityInfo,
   catalog: readonly ActivityInfo[],
@@ -265,18 +263,13 @@ export function chooseVariant(
   );
 }
 
-/** The catalog as the dashboard lists it: each website once, as the implementation chosen for it. */
 export function listed(catalog: readonly ActivityInfo[], states: ActivityStates): ActivityInfo[] {
   return catalog.filter((info) => chosenVariant(info, states) === info.id);
 }
 
-/** What "Enable all" and "Disable all" would do to a set of Activities. */
 export interface BulkPlan {
-  /** Off, or on but missing sites: what "Enable all" turns on, or asks for again. */
   enable: ActivityInfo[];
-  /** On: what "Disable all" turns off. */
   disable: ActivityInfo[];
-  /** The sites "Enable all" asks the browser for, in one request. */
   sites: string[];
 }
 
@@ -294,9 +287,7 @@ export function bulkPlan(
 }
 
 export interface BulkResult {
-  /** Activities now on. */
   changed: number;
-  /** The Activities that stayed off (or unavailable) because their sites weren't granted. */
   declined: string[];
 }
 

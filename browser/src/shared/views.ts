@@ -8,7 +8,6 @@ import { connectionBadge, connectionHelp, type ConnectionHelp } from "./connecti
 import { icon } from "./icons";
 import { DESKTOP_DOWNLOAD } from "./links";
 
-/** Icons for the shared presence view, the same in the popup and dashboard. */
 export const presenceIcons: PresenceViewOptions = {
   icon: (name) => icon(name === "elapsed" ? faClock : faMoon),
 };

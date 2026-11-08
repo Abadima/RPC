@@ -26,14 +26,12 @@ export function isMediaActivity(activity: Activity): boolean {
  * over, so two playing at once never trade places.
  */
 export class MediaTabs {
-  /** Tabs by the order in which they were last shared with music or video playing. */
   private readonly sharedAt = new Map<number, number>();
   private clock = 0;
 
   /** `onChange` hears every change to which tabs are remembered, and to which is the most recent. */
   constructor(private readonly onChange: (tabs: readonly number[]) => void = () => {}) {}
 
-  /** The tabs remembered, the one shared longest ago first. */
   order(): number[] {
     return [...this.sharedAt].sort(([, a], [, b]) => a - b).map(([tab]) => tab);
   }

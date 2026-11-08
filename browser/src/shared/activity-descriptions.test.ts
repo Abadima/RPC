@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { setLanguage } from "../core/i18n";
-import { loadCatalog } from "./activity-catalog";
+import { loadCatalog, resetActivityReads } from "./activity-catalog";
 
 const premid = { id: "premid:Example", name: "Example", hosts: ["example.com"], source: "premid" };
 const native = { id: "tunes", name: "Tunes", hosts: ["tunes.example"], source: "parousia" };
@@ -18,6 +18,7 @@ const files: Record<string, unknown> = {
 const original = { chrome: globalThis.chrome, fetch: globalThis.fetch };
 
 beforeAll(() => {
+  resetActivityReads();
   globalThis.chrome = {
     runtime: { getURL: (path: string) => `chrome-extension://self/${path}` },
   } as unknown as typeof chrome;
@@ -42,7 +43,6 @@ describe("PreMiD Activities' descriptions in the view's language", () => {
     const catalog = await loadCatalog();
     expect(catalog.map((info) => info.description)).toEqual([
       "Exemple, pour les tests.",
-      // Native Activities have no translation, and a bad entry changes nothing.
       "What's playing.",
     ]);
   });

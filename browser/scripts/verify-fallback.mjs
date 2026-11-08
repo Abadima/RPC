@@ -56,7 +56,6 @@ const log = logger("fallback");
 const extensionDir = resolve(browserDir, process.env.PAROUSIA_BUILD_DIR ?? "dist", "chromium");
 const RETRY_MS = 10_000;
 
-/** A stand-in for the app: a WebSocket server on 6969 that says its version and records everything. */
 function startApp() {
   const connections = [];
   const messages = [];

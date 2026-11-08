@@ -1,8 +1,5 @@
-//! Windows: the notification-area tray, the console a GUI-subsystem build
-//! needs for commands typed into a terminal, Desktop's control pipe, and
-//! Discord's named pipe. "Another OS user" is decided by the user in a
-//! process's token (`user.rs`): for a loopback connection (`peer.rs`), for the
-//! control pipe, and for Discord's pipe.
+//! Windows. "Another OS user" is decided by the user SID in a process's token
+//! (`user.rs`): for loopback connections, the control pipe, and Discord's pipe.
 
 pub mod control;
 pub mod discord;
@@ -32,7 +29,6 @@ pub fn listener_owner(port: u16) -> super::Owner {
     super::Owner::Unknown
 }
 
-/// Runs the tray on this thread until Quit, or returns why it couldn't.
 pub fn run_tray(hub: Arc<Hub>) -> Option<TrayExit> {
     Some(tray::run(hub))
 }

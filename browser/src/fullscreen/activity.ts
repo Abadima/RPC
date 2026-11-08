@@ -30,7 +30,6 @@ const SOURCES: Record<ActivityInfo["source"], string> = {
   premid: "PreMiD",
 };
 
-/** The sites an Activity reads, for a sentence: "www.youtube.com and m.youtube.com". */
 function sitesText(origins: readonly string[]): string {
   const names = [...new Set(origins.map(siteName))];
   const [first = "", second = ""] = names;
@@ -40,7 +39,6 @@ function sitesText(origins: readonly string[]): string {
   return t("{first}, {second}, and {n} more", { first, second, n: names.length - 2 });
 }
 
-/** What turning it on means, next to its switch. */
 function switchNote(info: ActivityInfo): string {
   if (!needsAccess(info)) {
     return t("Reads only page addresses and titles, so it needs no site access.");

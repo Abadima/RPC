@@ -19,7 +19,6 @@ import type { PageImage, PageMedia, RegisteredActivity, SettingValues } from "..
 export interface ActivityManifest {
   info: ActivityInfo;
   match: ActivityMatch;
-  /** A PreMiD Activity's script, which runs in its pages. */
   script?: PageScript;
 }
 
@@ -59,12 +58,28 @@ export interface NativeModule {
   detect(page: NativePage, settings: SettingValues): Activity | null;
 }
 
-/** Longer URLs aren't tested, so no pattern can be made to run long. */
+/** Longer URLs aren't tested, which bounds how long any pattern can run. */
 const MAX_URL = 2048;
 
+/**
+ * The matcher a manifest's `match` compiles to. One this browser can't
+ * compile matches nothing, rather than throwing and taking the tab's
+ * presence down with it.
+ */
 export function compileMatch(match: ActivityMatch): (url: URL) => boolean {
-  if ("patterns" in match) return matchPatterns(match.patterns);
-  const pattern = new RegExp(match.regExp);
+  if ("patterns" in match) {
+    try {
+      return matchPatterns(match.patterns);
+    } catch {
+      return () => false;
+    }
+  }
+  let pattern: RegExp;
+  try {
+    pattern = new RegExp(match.regExp);
+  } catch {
+    return () => false;
+  }
   return (url) => url.href.length <= MAX_URL && pattern.test(url.href);
 }
 
@@ -119,9 +134,7 @@ export const CATALOG_PATH = "activities/catalog.json";
  * an object for every site.
  */
 export const HOSTS_PATH = "activities/hosts.txt";
-/** Parousia's page-data collector, for native Activities that take page data. */
 export const COLLECTOR_PATH = "activities/collector.js";
-/** PreMiD's API in the page, injected before each PreMiD Activity's script. */
 export const PREMID_RUNTIME_PATH = "activities/premid/runtime.js";
 /** PreMiD Activities' descriptions in one language (`{ [id]: text }`), for the languages PreMiD's own metadata has them in. */
 export const descriptionsPath = (language: string): string =>
@@ -182,7 +195,7 @@ export const PREMID_ID_PREFIX = "premid:";
 export const premidId = (service: string): string => `${PREMID_ID_PREFIX}${service}`;
 
 export interface Catalog {
-  /** The revision of each source the build used (its `main` when fetched), for debugging, not a pin. */
+  /** The revision of each source the build used: its pin (see activity-sources.json). */
   sources: Record<string, string>;
   activities: ActivityInfo[];
 }
@@ -273,7 +286,6 @@ function parseScript(value: unknown): PageScript | null {
   return script;
 }
 
-/** One Activity's manifest from its shard (`shardPath`), or `null`. */
 export function parseShard(value: unknown, id: string): ActivityManifest | null {
   return isObject(value) ? parseManifest(value[id]) : null;
 }

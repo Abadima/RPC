@@ -30,12 +30,10 @@ export class PresenceController {
     this.publish(createPresence(share(this.runtime.resolve(page).activity)));
   }
 
-  /** Publish an explicit "nothing" Presence, e.g. when a tab closes or loses focus. */
   clear(): void {
     this.publish(createPresence(null));
   }
 
-  /** For a consumer that polls instead of receiving pushes, such as a compatibility layer answering another extension's request. */
   getActivity(): Presence["activity"] {
     return this.current?.activity ?? null;
   }

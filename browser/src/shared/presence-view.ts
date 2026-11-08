@@ -1,6 +1,5 @@
 import { t } from "../core/i18n";
 
-/** Just enough of an Activity to display; deliberately independent of `core/` data. */
 export interface PresenceActivity {
   name: string;
   details?: string;
@@ -16,7 +15,6 @@ export interface PresenceSnapshot {
 export type PresenceIconName = "empty" | "elapsed";
 
 export interface PresenceViewOptions {
-  /** Icons for the view, from the icon set the host bundles; without it the view draws none. */
   icon?: (name: PresenceIconName) => Element;
 }
 
@@ -46,8 +44,13 @@ export function formatElapsed(ms: number): string {
     : `${minutes}:${seconds}`;
 }
 
-/** One ticking clock per root, stopped whenever that root re-renders. */
+/** One ticking clock per root, stopped when that root is re-rendered or its view goes away. */
 const clocks = new WeakMap<HTMLElement, ReturnType<typeof setInterval>>();
+
+export function stopPresence(root: HTMLElement): void {
+  clearInterval(clocks.get(root));
+  clocks.delete(root);
+}
 
 function renderEmpty(root: HTMLElement, options: PresenceViewOptions): void {
   const wrapper = element("div", "presence-empty");
@@ -106,14 +109,12 @@ function renderActivity(
   root.append(card);
 }
 
-/** Renders the Activity being shared, or the empty state; never a placeholder or a simulated one. */
 export function renderPresence(
   root: HTMLElement,
   snapshot: PresenceSnapshot,
   options: PresenceViewOptions = {},
 ): void {
-  clearInterval(clocks.get(root));
-  clocks.delete(root);
+  stopPresence(root);
   root.replaceChildren();
   if (snapshot.activity) {
     renderActivity(root, snapshot.activity, options);

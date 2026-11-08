@@ -1,0 +1,13 @@
+{
+  "summary": "Sinu Rich Presence Discordis ja kaugemalgi.",
+  "description": [
+    "Sinu Rich Presence Discordis ja mujalgi.",
+    "Parousia toob sinu brauseri tegevuse Discordi Rich Presence’i. Laiend tunneb toetatud saidid automaatselt ära ja saab kuvada otse sinu Discordi profiilil, mida sa vaatad, kuulad, mängid või sirvid. Kui ükski tegevus ei kehti, saad selle asemel näidata oma kohandatud olekut.",
+    "Saitide ja veebirakenduste toetamiseks kasutame tegevusi. Tegevused võivad pakkuda rikkalikke üksikasju, näiteks pealkirju, esitajaid, sisuloojaid, pisipilte, taasesituse olekut, ajatempleid ja linke. Nii saab sinu Discordi olek palju rohkem konteksti kui lihtsast brauseri pealkirjast.",
+    "Parousia ühildub PreMiD avatud lähtekoodiga tegevuste ökosüsteemiga ning pakub ühtlasi oma tegevuste ökosüsteemi arendajatele ja kasutajatele.",
+    "See laiend on avatud lähtekoodiga ja loodud arendajasõbraliku tegevussüsteemi ümber. TypeScripti arendajad saavad luua saitidele tegevusi, avaldada neid tegevuste ökosüsteemi kaudu ja ehitada integratsioone, ilma et peaks Parousiat ennast muutma.",
+    "Parousia on loodud privaatsust silmas pidades ja töötleb tegevusteavet võimaluse korral kohalikult. Laiend suhtleb meie töölauarakendusega, mis hoolitseb platvormidega lõimimise eest. Kasutamiseks pole vaja kontot ega sisselogimist ning Parousia ei kasuta sinu sirvimise jälgimiseks analüütikat ega telemeetriat.",
+    "Valmis oma brauseri tegevust ellu äratama? Paigalda Parousia ja lase brauseris toimuval saada osaks oma Discord Rich Presence’ist.",
+    "Parousia on sõltumatu avatud lähtekoodiga projekt, mis ei ole seotud ettevõttega Discord Inc. ega ole selle heaks kiidetud ega sponsoreeritud."
+  ]
+}

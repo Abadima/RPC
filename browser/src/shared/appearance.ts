@@ -33,7 +33,6 @@ export async function saveTheme(
   await area.set({ [STORAGE_KEY]: parseTheme(theme) });
 }
 
-/** Calls `listener` whenever any view saves a theme; returns a function that stops it. */
 export function watchTheme(listener: (theme: ThemeId) => void): () => void {
   const onChanged = (changes: Record<string, chrome.storage.StorageChange>, area: string): void => {
     const change = changes[STORAGE_KEY];
@@ -43,7 +42,6 @@ export function watchTheme(listener: (theme: ThemeId) => void): () => void {
   return () => chrome.storage.onChanged.removeListener(onChanged);
 }
 
-/** The slice of localStorage the hint needs; tests pass a fake. */
 export interface HintStore {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
@@ -67,7 +65,6 @@ export function readThemeHint(store: HintStore | null = hintStore()): ThemeId {
   }
 }
 
-/** Themes `root` (normally <html>) and remembers the choice for the next first paint. */
 export function applyTheme(
   theme: ThemeId,
   root: { dataset: DOMStringMap } = document.documentElement,

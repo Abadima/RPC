@@ -37,7 +37,6 @@ export type SettingValue = string | number | boolean;
 export type PageDataKind = "media" | "thumbnails" | "creatorIcons";
 export const PAGE_DATA_KINDS: readonly PageDataKind[] = ["media", "thumbnails", "creatorIcons"];
 
-/** One of an Activity's own settings, shown on its page in the dashboard. */
 export interface ActivitySetting {
   id: string;
   title: string;
@@ -58,7 +57,6 @@ export interface ActivitySetting {
  */
 export type ActivitySource = "parousia" | "premid";
 
-/** What the dashboard's Activities page lists: one entry per registered Activity. */
 export interface ActivityInfo {
   id: string;
   name: string;

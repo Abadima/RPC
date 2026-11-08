@@ -1,10 +1,7 @@
-//! The Windows notification-area icon: a tooltip with the status line, the
-//! same menu as the Linux tray (`platform/tray_menu.rs`) on click, and balloon
-//! notifications for blocked extensions.
-//!
-//! Runs on the main thread, blocked in `GetMessageW`: no timers, no polling.
-//! Hub changes arrive from other threads and are handed over as a posted
-//! message, so all icon and menu work stays on this thread.
+//! The Windows notification-area icon: the status line as its tooltip, the shared
+//! menu (`platform/tray_menu.rs`) on click, and balloons for blocked extensions.
+//! Runs on the main thread in `GetMessageW` (no timers or polling); Hub changes
+//! arrive as a posted message.
 
 use std::ffi::c_void;
 use std::mem::{size_of, zeroed};
@@ -39,9 +36,7 @@ use super::sys::wide;
 const ICON: &[u8] = include_bytes!("../../../assets/tray-32.rgba");
 const ICON_SIZE: i32 = 32;
 
-/// The shell reports clicks on the icon with this message.
 const WM_TRAY: u32 = WM_APP + 1;
-/// Posted from other threads when the hub changed.
 const WM_HUB: u32 = WM_APP + 2;
 
 static HUB: OnceLock<Arc<Hub>> = OnceLock::new();
@@ -50,7 +45,6 @@ static ICON_HANDLE: AtomicIsize = AtomicIsize::new(0);
 /// Registered message that Explorer broadcasts when it (re)starts and
 /// forgets every icon.
 static TASKBAR_CREATED: AtomicU32 = AtomicU32::new(0);
-/// A balloon waiting for the tray thread to show it.
 static NOTICE: Mutex<Option<(String, String)>> = Mutex::new(None);
 
 pub fn run(hub: Arc<Hub>) -> Exit {
@@ -217,7 +211,6 @@ unsafe fn add_icon(window: HWND) {
     }
 }
 
-/// Refreshes the tooltip and shows a pending balloon, if any.
 unsafe fn modify_icon(window: HWND) {
     // SAFETY: as `add_icon`.
     unsafe {

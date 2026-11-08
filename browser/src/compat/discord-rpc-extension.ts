@@ -2,21 +2,15 @@ import type { Activity } from "../core/activity";
 import { onFirefox } from "./browser-family";
 
 /**
- * Discord-RPC-Extension compatibility (github.com/lolamtisch/Discord-RPC-Extension):
- * Parousia's Activity detection feeds that extension's own Desktop bridge, so
- * Rich Presence works without Parousia Desktop. Nothing in `core/` knows this
- * exists. Checked against its source (Extension/background.js, Examples/):
+ * Discord-RPC-Extension compatibility: Parousia's detection feeds that
+ * extension's own Desktop bridge. Checked against its source:
  *
- * - `chrome.runtime.sendMessage(<their id>, { mode })` registers. They branch
- *   on `sender.tab`, not `mode`: a background-script sender always becomes
- *   their "background" type, so the `mode` sent isn't load-bearing.
- * - They re-request presence about every 15 s with a cross-extension message,
- *   which arrives on `onMessageExternal`, not `onMessage`.
- * - Every request needs a response or they unregister us; `{}` means "still
- *   here, nothing to show".
- * - `externally_connectable.ids` narrows who can message us on Chrome only.
- *   Firefox never implemented it (bugzilla.mozilla.org/1319168), so the
- *   `sender.id` check below is the real, cross-browser restriction.
+ * - `runtime.sendMessage(<their id>, { mode })` registers; they branch on
+ *   `sender.tab`, so `mode` isn't load-bearing.
+ * - They re-request presence about every 15 s on `onMessageExternal`; every
+ *   request needs an answer or they unregister us (`{}` is "nothing to show").
+ * - `externally_connectable.ids` works on Chrome only (Firefox bug 1319168), so
+ *   the `sender.id` check below is the real restriction.
  */
 
 /** Discord-RPC-Extension's own published, stable extension IDs (docs/api.md). */
@@ -101,22 +95,10 @@ const time = (value: number | undefined): number | undefined =>
     : undefined;
 
 /**
- * Parousia's Activity as a Discord activity. The same rules as Desktop's
- * `desktop/src/adapters/discord/activity.rs`, and both are tested against the cases in
- * `adapters/discord/activity-mapping.json`. Discord turns down a whole
- * activity over one field it doesn't accept, so a field it can't take is
- * left out instead:
- *
- * - Text (name, details, state, image captions) is trimmed. Under 2 UTF-16
- *   units it's left out; over 128 it's cut to 127 and ends in "…".
- * - Images (asset keys or URLs): at most 256 units.
- * - Links for the details and state lines: `http(s)`, at most 256.
- * - Buttons: the first 2 with a label, cut to 32 like text; URL `http(s)`, at most 512.
- * - Times: whole milliseconds from 1 through 2147483647000, the most the RPC
- *   library behind Discord-RPC-Extension's app accepts.
- *
- * The type, status line, party, and image links aren't sent: that library's
- * version isn't known to take them (Desktop's adapter does).
+ * Parousia's Activity as a Discord activity, by the rules of Desktop's
+ * `adapters/discord/activity.rs` (both tested against
+ * `adapters/discord/activity-mapping.json`). Type, status line, party, and image
+ * links aren't sent: the app's RPC library isn't known to take them.
  */
 export function toDiscordPresence(activity: Activity): DiscordRpcExtensionPresence {
   const buttons = (activity.buttons ?? [])
@@ -144,7 +126,6 @@ export function toDiscordPresence(activity: Activity): DiscordRpcExtensionPresen
   };
 }
 
-/** Translates Parousia's canonical Activity into Discord-RPC-Extension's response shape. Pure, and independent of whether a clientId is configured yet. */
 export function toDiscordRpcExtensionResponse(
   clientId: string,
   activity: Activity | null,
@@ -161,10 +142,7 @@ function currentExtensionId(): string {
   return onFirefox() ? DISCORD_RPC_EXTENSION_IDS.firefox : DISCORD_RPC_EXTENSION_IDS.chrome;
 }
 
-/**
- * Wires Parousia's current Activity to Discord-RPC-Extension's presence
- * protocol, if installed. A no-op until DISCORD_RPC_EXTENSION_CLIENT_ID is set.
- */
+/** A no-op until `DISCORD_RPC_EXTENSION_CLIENT_ID` is set. */
 export function startDiscordRpcExtensionCompat(getActivity: () => Activity | null): void {
   if (!DISCORD_RPC_EXTENSION_CLIENT_ID) {
     return;

@@ -12,7 +12,6 @@ export interface WebsiteFolder {
   letter: string;
   name: string;
   dir: string;
-  /** `websites/<letter>/<Name>`, for messages. */
   path: string;
 }
 
@@ -23,7 +22,6 @@ async function folders(dir: string): Promise<string[]> {
     .sort((a, b) => a.localeCompare(b, "en"));
 }
 
-/** Every `websites/<letter>/<Name>/` folder under `root`, in order. */
 export async function websiteFolders(root: string): Promise<WebsiteFolder[]> {
   const websites = join(root, "websites");
   if (!existsSync(websites)) return [];

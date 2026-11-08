@@ -1,8 +1,13 @@
 // What each language of the popup and dashboard shows, spot-checked, for the
 // Chromium and Firefox checks (verify-languages*.mjs).
 
-/** What each language shows, spot-checked: the popup's own HTML, the code's text, and the dashboard. */
 export const EXPECTED = {
+  ar: {
+    footer: "غير متصل بـ Parousia Desktop",
+    settings: ["عام", "المظهر", "الخصوصية"],
+    nav: ["نظرة عامة", "الأنشطة", "النشاط الافتراضي", "الإعدادات"],
+    summary: /1–\d+/,
+  },
   de: {
     footer: "Nicht mit Parousia Desktop verbunden",
     settings: ["Allgemein", "Darstellung", "Datenschutz"],
@@ -20,6 +25,12 @@ export const EXPECTED = {
     settings: ["一般", "外観", "プライバシー"],
     nav: ["概要", "アクティビティ", "デフォルトのアクティビティ", "設定"],
     summary: /^\S+ 件中 1–\d+ 件$/,
+  },
+  nl: {
+    footer: "Niet verbonden met Parousia Desktop",
+    settings: ["Algemeen", "Weergave", "Privacy"],
+    nav: ["Overzicht", "Activiteiten", "Standaardactiviteit", "Instellingen"],
+    summary: /^1–\d+ van /,
   },
   ro: {
     footer: "Neconectat la Parousia Desktop",
@@ -50,5 +61,41 @@ export const EXPECTED = {
     settings: ["General", "Appearance", "Privacy"],
     nav: ["Overview", "Activities", "Default Activity", "Settings"],
     summary: /^1–\d+ of /,
+  },
+  el: {
+    footer: "Χωρίς σύνδεση στο Parousia Desktop",
+    settings: ["Γενικά", "Εμφάνιση", "Απόρρητο"],
+    nav: ["Επισκόπηση", "Δραστηριότητες", "Προεπιλεγμένη δραστηριότητα", "Ρυθμίσεις"],
+    summary: /^1–\d+ από /,
+  },
+  es: {
+    footer: "Sin conexión con Parousia Desktop",
+    settings: ["General", "Apariencia", "Privacidad"],
+    nav: ["Resumen", "Actividades", "Actividad predeterminada", "Ajustes"],
+    summary: /^1–\d+ de /,
+  },
+  "es-419": {
+    footer: "Sin conexión con Parousia Desktop",
+    settings: ["General", "Apariencia", "Privacidad"],
+    nav: ["Resumen", "Actividades", "Actividad predeterminada", "Configuración"],
+    summary: /^1–\d+ de /,
+  },
+  ko: {
+    footer: "Parousia Desktop에 연결 안 됨",
+    settings: ["일반", "모양", "개인정보"],
+    nav: ["개요", "액티비티", "기본 액티비티", "설정"],
+    summary: /1–\d+$/,
+  },
+  "pt-BR": {
+    footer: "Não conectado à Parousia Desktop",
+    settings: ["Geral", "Aparência", "Privacidade"],
+    nav: ["Visão geral", "Atividades", "Atividade padrão", "Configurações"],
+    summary: /^1–\d+ de /,
+  },
+  "pt-PT": {
+    footer: "Sem ligação à Parousia Desktop",
+    settings: ["Geral", "Aspeto", "Privacidade"],
+    nav: ["Vista geral", "Atividades", "Atividade predefinida", "Definições"],
+    summary: /^1–\d+ de /,
   },
 };

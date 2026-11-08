@@ -194,8 +194,6 @@ export function parseToPage(value: unknown): ToPage | null {
   return null;
 }
 
-// Parousia's page-data collector (collector.ts), for native Activities.
-
 export type CollectorMessage =
   | { type: "hello"; activity: string }
   | { type: "data"; data: PageData };
@@ -203,7 +201,6 @@ export type CollectorMessage =
 export type ToCollector =
   /** What to read: the kinds its Activity declares, isn't denied, and has access for. */
   | { type: "collect"; kinds: PageDataKind[] }
-  /** As for a page script (`ToPage`): keep reading while the tab is in the background. */
   | { type: "background"; on: boolean }
   | { type: "stop" };
 
@@ -220,7 +217,6 @@ const seconds = (value: unknown): number | undefined =>
 const unixMs = (value: unknown): number | undefined =>
   typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 
-/** Page data from a page, parsed and bounded. */
 export function parsePageData(value: unknown): PageData | null {
   if (!isObject(value)) return null;
   const data: PageData = {};

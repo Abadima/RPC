@@ -46,7 +46,6 @@ function matchesTheme(selector: string, theme: ThemeId): boolean {
     );
 }
 
-/** Every custom property <html data-theme=theme> ends up with, unresolved. */
 export function themeTokens(css: string, theme: ThemeId): Map<string, string> {
   const tokens = new Map<string, string>();
   for (const { selector, body } of topLevelBlocks(css)) {
@@ -68,7 +67,6 @@ export function themeBlockTokens(css: string, theme: ThemeId): string[] {
   return [...own.body.matchAll(/(--[\w-]+)\s*:/g)].flatMap((match) => (match[1] ? [match[1]] : []));
 }
 
-/** Splits on commas outside parentheses. */
 function splitArgs(value: string): string[] {
   const parts: string[] = [];
   let depth = 0;
@@ -127,7 +125,6 @@ export function resolveColor(
   throw new Error(`can't audit the color "${text}"`);
 }
 
-/** `top` drawn over an opaque `bottom`. */
 function over(top: Rgba, bottom: Rgba): Rgba {
   const a = top[3];
   const blend = (i: 0 | 1 | 2): number => top[i] * a + bottom[i] * (1 - a);

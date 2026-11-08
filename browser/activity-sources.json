@@ -1,10 +1,12 @@
 {
   "parousia": {
     "repository": "https://github.com/parousia-project/activities",
-    "branch": "main"
+    "branch": "main",
+    "revision": "d450aeb6899514ba3bca71d7dd1940ee354be821"
   },
   "premid": {
     "repository": "https://github.com/PreMiD/Activities",
-    "branch": "main"
+    "branch": "main",
+    "revision": "c79545fc1d908a9a8f5ff8001b8863dd3b013f90"
   }
 }

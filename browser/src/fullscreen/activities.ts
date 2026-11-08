@@ -1,5 +1,5 @@
 import type { ActivityInfo } from "../core/activity";
-import { t, tn } from "../core/i18n";
+import { formatNumber, t, tn } from "../core/i18n";
 import {
   isActivityOn,
   loadActivityStates,
@@ -30,11 +30,11 @@ import {
 import { activityIcon } from "../shared/activity-ui";
 import {
   PAGE_SIZE,
+  fittedSize,
   indexActivities,
   pageNumbers,
   pageOf,
   paginate,
-  rowsThatFit,
   searchActivities,
   type IndexedActivity,
 } from "../shared/catalog";
@@ -45,25 +45,16 @@ const SEARCH_DELAY_MS = 120;
 const RESIZE_DELAY_MS = 150;
 const count = (n: number): string => tn(n, "{n} Activity", "{n} Activities");
 
-/** Where an Activity's own page is: `#activities/<id>`. */
 export const activityHash = (id: string): string => `#activities/${encodeURIComponent(id)}`;
 
-/** Which step "Enable or disable all" is on. */
 type BulkStep = "choose" | "enable" | "disable";
 
 /**
- * The Activity catalog: search, filters, and pages, so only one page of cards
- * is ever in the DOM however large the catalog grows. A page is as many cards
- * as fit the screen (full rows, from a phone to 8K), and resizing keeps your
- * place. The query, filters, and page live in the URL
- * (`#activities?q=…&filter=…&page=…`), so reloading or going back keeps them.
- * Each card opens the Activity's page, and has its own switch to turn it on
- * or off right there.
- *
- * Enabled Activities come first, then disabled ones, each by name. That order
- * is worked out when the list is built or when you search or filter, not when
- * you switch a card: one that moved to the top the moment you turned it on
- * would be hard to follow.
+ * The Activity catalog, searched, filtered, and paged so only one page of cards
+ * is in the DOM; a page is the full rows that fit, and the URL keeps the query,
+ * filters, and page. Enabled Activities come first, then by name, sorted when
+ * the list is built or filtered, not when a card is switched (a card that jumps
+ * to the top as it's turned on is hard to follow).
  */
 export function activitiesView(context: ViewContext, params: URLSearchParams): View {
   const element = fromTemplate("activities");
@@ -78,7 +69,6 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
   const bulkPanel = slot(element, "bulk");
   const bulkBody = slot(element, "bulk-body");
   let index: IndexedActivity[] = [];
-  /** The listed Activities that match the search and filters, in the order shown. */
   let arranged: ActivityInfo[] = [];
   let listedKey = "";
   let catalog: readonly ActivityInfo[] = [];
@@ -98,7 +88,6 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
   input.value = query;
   slot(element, "catalog").hidden = true;
 
-  /** Search, filter, and sort. Run when those change, not on every switch (see above). */
   function arrange(): void {
     arranged = sortActivities(
       filterActivities(searchActivities(index, query), states, filters),
@@ -106,7 +95,6 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
     );
   }
 
-  /** The listed Activities, rebuilt when a website's chosen implementation changes. */
   function relist(): boolean {
     const now = listed(catalog, states);
     const key = now.map((info) => info.id).join("\n");
@@ -183,8 +171,6 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
     return item;
   }
 
-  // Filter menu
-
   function setFilterMenu(open: boolean): void {
     filterMenu.hidden = !open;
     filterToggle.setAttribute("aria-expanded", String(open));
@@ -195,7 +181,7 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
     for (const box of filterInputs) box.checked = chosen.has(box.value);
     const active = filterCount(filters);
     filterBadge.hidden = active === 0;
-    filterBadge.textContent = String(active);
+    filterBadge.textContent = formatNumber(active);
     filterToggle.setAttribute(
       "aria-label",
       active > 0 ? t("Filter, {n} selected", { n: active }) : t("Filter"),
@@ -236,8 +222,6 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
       setFilterMenu(false);
     }
   };
-
-  // Enable or disable all
 
   function bulkButton(label: string, onClick: () => void, quiet = true, disabled = false) {
     const button = el("button", quiet ? "button button-quiet" : "button", label);
@@ -300,7 +284,6 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
       });
   }
 
-  /** `moveFocus` is for a step change; a redraw for anything else leaves the focus alone. */
   function renderBulk(moveFocus = false): void {
     if (bulkPanel.hidden) return;
     const plan = bulkPlan(arranged, states, grants);
@@ -329,7 +312,7 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
                 "Your browser will ask for access to {n} site in one prompt, which can be long. Anything you decline stays off.",
                 "Your browser asks for access to {n} sites in one prompt. Anything you decline stays off.",
               )}`
-            : t("None needs access to a new site, so your browser won't ask."),
+            : t("No additional site access is needed, so your browser won't ask."),
         ),
       );
       const actions = el("div", "bulk-actions");
@@ -448,13 +431,12 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
     }, SEARCH_DELAY_MS);
   });
 
-  /** Full rows that fill the window below the list's top, leaving room for the pager. */
   function fittingSize(): number {
     const style = getComputedStyle(list);
     const columns = style.gridTemplateColumns.split(" ").filter(Boolean).length;
     const cardHeight = list.firstElementChild?.getBoundingClientRect().height ?? 0;
     const room = window.innerHeight - list.getBoundingClientRect().top - pager.offsetHeight * 2;
-    return Math.max(1, columns) * rowsThatFit(room, cardHeight, parseFloat(style.rowGap) || 0);
+    return fittedSize(columns, room, cardHeight, parseFloat(style.rowGap) || 0);
   }
 
   function fit(): void {
@@ -464,6 +446,24 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
     page = pageOf((page - 1) * size, next);
     size = next;
     render();
+  }
+
+  /**
+   * The first page's size, from one card and one pager button measured on the
+   * empty list, so the first draw is already fitted. `fit` still checks it.
+   */
+  function firstSize(): number {
+    const [first] = arranged;
+    if (first === undefined) return PAGE_SIZE;
+    const probe = card(first);
+    const button = el("button", "pager-button", "·");
+    button.type = "button";
+    list.append(probe);
+    pager.append(button);
+    const fitted = fittingSize();
+    probe.remove();
+    button.remove();
+    return Math.min(fitted, arranged.length);
   }
 
   let resizeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -499,6 +499,7 @@ export function activitiesView(context: ViewContext, params: URLSearchParams): V
     slot(element, "catalog").hidden = empty;
     slot(element, "empty").hidden = !empty;
     if (empty) return;
+    size = firstSize();
     render();
     fit();
   });

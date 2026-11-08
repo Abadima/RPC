@@ -57,7 +57,6 @@ describe("ui-port messages", () => {
     expect(
       parseUiEvent({ type: "activity", activity: { id: "tunes", name: "Tunes", kept: true } }),
     ).toEqual({ type: "activity", activity: { id: "tunes", name: "Tunes", kept: true } });
-    // Left out unless it is so.
     expect(
       parseUiEvent({ type: "activity", activity: { id: "tunes", name: "Tunes", kept: false } }),
     ).toEqual({ type: "activity", activity: { id: "tunes", name: "Tunes" } });

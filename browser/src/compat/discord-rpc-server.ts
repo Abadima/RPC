@@ -6,25 +6,18 @@ import type { BridgeState, BridgeStatus } from "../core/ui-port";
 import { toDiscordPresence } from "./discord-rpc-extension";
 
 /**
- * Discord Rich Presence through Discord-RPC-Extension's own app
- * (github.com/lolamtisch/Discord-RPC-Extension: `discord_rpc_ext` on Linux,
- * its Node `server.js` elsewhere), for anyone without Parousia Desktop.
+ * Discord Rich Presence through Discord-RPC-Extension's own app, for anyone
+ * without Parousia Desktop. The app is an unauthenticated WebSocket server on
+ * port 6969, so this sticks to plain Rich Presence (checked against its
+ * `server.js` and `Server/presence.js`):
  *
- * The app is a WebSocket server on port 6969 with no authentication, so this
- * is locked down to plain Rich Presence, checked against its `server.js` and
- * `Server/presence.js`:
- *
- * - Only two messages are ever sent: `{clientId, presence, extId}` to show an
- *   activity (`extId` is required: without it the app throws on a new client
- *   id and exits), and `{action: "disconnect"}` to clear it. Never `party` or
- *   `reply`.
- * - Of what the app sends back, only `{version}` is read. Its `join`,
- *   `spectate`, and `joinRequest` messages are ignored.
- * - The app clears a presence it hasn't heard about for 30 seconds, so a
- *   shown one is resent every 15.
- * - "Clear" is only sent after this link showed something, so it never wipes
- *   presence another tool (MAL-Sync, the real extension) put there.
- * - Only `127.0.0.1` is used, even though the app listens on every interface.
+ * - Only `{clientId, presence, extId}` (without `extId` the app exits on a new
+ *   client id) and `{action: "disconnect"}` are sent; of its replies only
+ *   `{version}` is read.
+ * - It drops a presence unheard of for 30 s, so a shown one is resent every 15.
+ * - Clear is sent only after this link showed something, so it never wipes
+ *   another tool's presence.
+ * - Only `127.0.0.1`, though the app listens on every interface.
  */
 export const DISCORD_RPC_SERVER_URL = "ws://127.0.0.1:6969";
 const RESEND_MS = 15_000;
@@ -32,11 +25,9 @@ const RETRY_MS = 10_000;
 const LINGER_MS = 30_000;
 const MAX_VERSION_CHARS = 32;
 
-/** `version` is the app's own, once it has said it. */
 export type DiscordLinkState = BridgeState;
 type DiscordLinkStatus = BridgeStatus;
 
-/** The slice of `WebSocket` this uses; tests pass a fake. */
 export interface ServerSocket {
   send(data: string): void;
   close(): void;
@@ -66,7 +57,6 @@ function parseVersion(data: unknown): string | null {
   }
 }
 
-/** A real WebSocket behind the narrow ServerSocket shape. */
 function openWebSocket(url: string): ServerSocket {
   const socket = new WebSocket(url);
   const adapter: ServerSocket = {
@@ -107,7 +97,6 @@ export class DiscordRpcServerLink implements PresenceTransport {
   #latest: Activity | null = null;
   #socket: ServerSocket | null = null;
   #open = false;
-  /** This link showed a presence that it hasn't cleared yet. */
   #showing = false;
   #state: DiscordLinkState = { status: "off", version: null };
   readonly #listeners = new Set<(state: DiscordLinkState) => void>();
@@ -153,7 +142,6 @@ export class DiscordRpcServerLink implements PresenceTransport {
     }
   }
 
-  /** Keeps the link up while a UI shows its state; call the returned function when it closes. */
   acquire(): () => void {
     this.#uiDemand++;
     this.#evaluate();
@@ -181,7 +169,6 @@ export class DiscordRpcServerLink implements PresenceTransport {
     return () => this.#listeners.delete(listener);
   }
 
-  /** The activity to show and the Discord Application to show it as, if there's both. */
   #shareable(): { activity: Activity; clientId: string } | null {
     const activity = this.#latest;
     const clientId = activity && this.#options.clientIdFor(activity);
@@ -245,7 +232,6 @@ export class DiscordRpcServerLink implements PresenceTransport {
     };
   }
 
-  /** Shows the current activity, or clears the one this link showed. */
   #publish(): void {
     this.#cancelResend?.();
     this.#cancelResend = null;

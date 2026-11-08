@@ -80,6 +80,12 @@ function watchTitle(on: boolean): void {
     return;
   }
   if (titleObserver) return;
+  if (!document.head) {
+    // At document-start the parser hasn't made <head> yet. Once it has, the
+    // title it parsed is picked up and watched from then on.
+    document.addEventListener("DOMContentLoaded", refresh, { once: true });
+    return;
+  }
   let title = document.title;
   titleObserver = new MutationObserver(() => {
     if (document.title === title) return;

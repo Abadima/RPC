@@ -67,7 +67,6 @@ export function chromiumLaunch() {
   return binary ? { executablePath: binary } : { channel: "chromium" };
 }
 
-/** Polls `check` (which returns a truthy value when done) until it passes. Test-side only. */
 export async function waitUntil(check, description, timeoutMs = STEP_TIMEOUT_MS) {
   const deadline = Date.now() + timeoutMs;
   let last;
@@ -155,9 +154,7 @@ export function startDesktop(ws, { tray = false } = {}) {
     pid: child.pid,
     trayName: `org.kde.StatusNotifierItem-${child.pid}-1`,
     lines,
-    /** Position to pass to `waitFor`, taken before triggering what should log. */
     mark: () => lines.length,
-    /** Resolves with the first line matching `pattern` logged at or after `since`. */
     waitFor(pattern, since = 0, timeoutMs = STEP_TIMEOUT_MS) {
       const past = lines.slice(since).find((line) => pattern.test(line));
       if (past) return Promise.resolve(past);
@@ -181,7 +178,6 @@ export function startDesktop(ws, { tray = false } = {}) {
   };
 }
 
-/** Runs a Desktop command and returns its text output. */
 export async function command(ws, ...args) {
   const { stdout } = await run(desktopBinary, args, { env: ws.env });
   return stdout;
@@ -192,14 +188,12 @@ export async function cli(ws, ...args) {
   return JSON.parse(stdout);
 }
 
-/** Desktop's status report (`Parousia-Desktop status --json`). */
 export async function status(ws) {
   const response = await cli(ws, "status");
   assert(response.result === "status", `status returned ${JSON.stringify(response)}`);
   return response.status;
 }
 
-/** Runs a control command that answers with the new status, and returns it. */
 export async function control(ws, ...args) {
   const response = await cli(ws, ...args);
   assert(response.result === "status", `${args.join(" ")} returned ${JSON.stringify(response)}`);
@@ -213,7 +207,6 @@ export async function control(ws, ...args) {
  */
 export const QUIET_DISCORD = `chrome.storage.local.set({ preferences: { discordRpcExtension: false } })`;
 
-/** Turns the extension's Settings > Platforms > Discord on or off, evaluated in the extension. */
 export const setDiscordPlatform = (on) => `(async () => {
   const { preferences = {} } = await chrome.storage.local.get("preferences");
   const platforms = { discord: true, fluxer: true, stoat: true, ...preferences.platforms, discord: ${on} };
@@ -223,13 +216,11 @@ export const setDiscordPlatform = (on) => `(async () => {
 /** Parousia's own Discord Application, which Desktop shows Activities as by default. */
 export const PAROUSIA_CLIENT_ID = "1553980756731363428";
 
-/** The footer's status, without Desktop's version. */
 export const STATUS_LINE = `(() => {
   const label = document.getElementById("status-label");
   return label ? label.textContent.replace(/ v\\S+$/, "") : null;
 })()`;
 
-/** Popup helpers for any Playwright page showing `popup.html`. */
 export const popup = {
   status: (page) => page.evaluate(STATUS_LINE),
 
@@ -244,14 +235,12 @@ export const popup = {
     );
   },
 
-  /** The popup's "what to do about it" line, or null while it's hidden. */
   async help(page) {
     const hidden = await page.$eval("#connection-help", (el) => el.hidden);
     return hidden ? null : page.textContent("#connection-help");
   },
 };
 
-/** An Activity's packaged manifest, from its shard (src/activities/manifest.ts, `manifestShard`), or `null`. */
 export async function readManifest(extensionDir, id) {
   const name = id.startsWith("premid:") ? id.slice("premid:".length) : id;
   const first = name.normalize("NFKD").charAt(0).toLowerCase();

@@ -1,29 +1,16 @@
-// What Parousia costs on this machine, measured with real processes, so a
-// change's effect on size, memory, CPU, and latency is a number rather than
-// a guess. Prints a table and writes the numbers as JSON (BENCH_OUT).
+// What Parousia costs on this machine, measured with real processes: sizes;
+// Desktop's startup, memory, threads, CPU, and wakeups idle, with three clients,
+// and publishing, and its latency to a stand-in Discord; the extension's
+// background heap, process memory and CPU idle and while sharing a native and a
+// PreMiD Activity, its latency to Discord, and how fast the popup and dashboard
+// show. Prints a table and writes JSON (BENCH_OUT). CPU is utime + stime from
+// /proc; Playwright keeps the background running, so "idle" isn't "stopped".
 //
-// - Sizes: each extension build, Firefox's zip, the userscript, the largest
-//   bundles and packaged files, Desktop's release binary.
-// - Desktop (release, headless): time until it answers, then memory,
-//   threads, CPU time, and wakeups while idle, with three clients connected,
-//   and with them publishing; how long a Presence takes to reach Discord (a
-//   stand-in, e2e/fake-discord.mjs).
-// - The extension in playwright-core's Chromium, with the fixture native
-//   Activities and real PreMiD ones: the background's heap and its process's
-//   memory and CPU while idle and while sharing a native and a PreMiD
-//   Activity; how long a detected Activity takes to reach Discord; how long
-//   the popup and the dashboard's Activities page take to show.
-//
-// CPU is kernel-accounted time (utime + stime from /proc). Playwright stays
-// attached to the background, which keeps Chromium from stopping it, so
-// "idle" here means running with nothing to do, not stopped.
-//
-// Env: BENCH_DIST (an extension build including the fixture Activities;
-// default: builds one into a temporary folder), PAROUSIA_DESKTOP_BIN
-// (default: ../desktop/target/release/Parousia-Desktop), BENCH_SECONDS (each
-// measuring window, default 20), BENCH_OUT (a JSON file to write).
-// Linux only; needs `bun run activities:fetch`, `cargo build --release` in
-// ../desktop, and a free port 57179.
+// Env: BENCH_DIST (a build with the fixture Activities; default: built into a
+// temporary folder), PAROUSIA_DESKTOP_BIN (default:
+// ../desktop/target/release/Parousia-Desktop), BENCH_SECONDS (default 20),
+// BENCH_OUT. Linux only; needs `bun run activities:fetch`, a release Desktop
+// build, and a free port 57179.
 
 import { chromium } from "playwright-core";
 import { execFile, spawn } from "node:child_process";
@@ -97,7 +84,6 @@ async function proc(pid) {
   };
 }
 
-/** CPU time, wakeups, and memory of `pids()` over `seconds`. */
 async function measure(pids, seconds = SECONDS) {
   const sample = async () => {
     const list = await pids();
@@ -132,7 +118,6 @@ async function measure(pids, seconds = SECONDS) {
   };
 }
 
-/** `root` and every process under it. */
 async function tree(root) {
   const parents = new Map();
   for (const name of await readdir("/proc")) {

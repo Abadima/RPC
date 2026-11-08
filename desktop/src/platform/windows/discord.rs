@@ -1,17 +1,13 @@
-//! Where the Discord app listens on Windows: a named pipe called
-//! `\\.\pipe\discord-ipc-0` to `9`. Framing is the adapter's
-//! (`adapters/discord/ipc.rs`).
-//!
-//! A pipe is in a machine-wide namespace, so any user's program could create
-//! `discord-ipc-0` and pose as Discord. Desktop connects only to a pipe whose
-//! server process runs as this user (`user.rs`), and as an anonymous client,
-//! so even a pipe that isn't Discord can't act as this user.
+//! Where the Discord app listens on Windows: `\\.\pipe\discord-ipc-0` to `9`. Any
+//! account can create such a pipe, so Desktop connects only to one whose server
+//! process runs as this user, and as an anonymous client that can't be
+//! impersonated.
 
 use std::io::{self, Write};
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::adapters::discord::ipc::{Deliver, Incoming, encode, read_frame};
+use crate::adapters::discord::ipc::{Deliver, Incoming, READ_BUFFER, encode, read_frame};
 
 use super::pipe::{self, Pipe};
 use super::user::is_this_user;
@@ -19,7 +15,6 @@ use super::user::is_this_user;
 /// A write to Discord that takes longer than this means it has stopped listening.
 const WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Where to look for Discord: the pipe names are fixed up to the number.
 #[derive(Debug, Clone)]
 pub struct Endpoints {
     prefix: String,
@@ -83,7 +78,7 @@ pub fn open(endpoints: &Endpoints, deliver: Deliver) -> io::Result<Link> {
         std::thread::Builder::new()
             .name("discord-ipc".into())
             .spawn(move || {
-                let mut io = reader.io(None);
+                let mut io = io::BufReader::with_capacity(READ_BUFFER, reader.io(None));
                 while let Ok((op, body)) = read_frame(&mut io) {
                     deliver(Incoming::Frame(op, body));
                 }

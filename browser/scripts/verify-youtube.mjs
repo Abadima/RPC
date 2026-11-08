@@ -102,7 +102,6 @@ try {
       ? `${activity.name} | ${activity.details ?? ""} | ${activity.state ?? ""} | image ${String(activity.assets?.large_image ?? "none").slice(0, 70)}`
       : "nothing";
 
-  /** The popup's line for `page`'s tab. */
   async function popupLine(page) {
     await page.bringToFront();
     const opened = context.waitForEvent("page", (p) => p.url().endsWith("/popup.html"));
@@ -123,7 +122,6 @@ try {
     if (message.text().includes("Parousia")) log(`page console: ${message.text().slice(0, 200)}`);
   });
 
-  /** Waits for what Discord shows to pass `check`, and logs it. */
   async function showing(check, description, timeoutMs = PATIENCE_MS) {
     const activity = await waitUntil(
       () => {

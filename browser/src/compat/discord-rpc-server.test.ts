@@ -9,7 +9,6 @@ import {
   type ServerSocket,
 } from "./discord-rpc-server";
 
-/** A stand-in for the Discord-RPC-Extension app's WebSocket. */
 class FakeSocket implements ServerSocket {
   sent: unknown[] = [];
   closed = false;
@@ -24,7 +23,6 @@ class FakeSocket implements ServerSocket {
     this.closed = true;
     this.onclose?.();
   }
-  /** The app accepts the connection and says its version, as `server.js` does. */
   accept(version = "0.3.0"): void {
     this.onopen?.();
     this.onmessage?.({ data: JSON.stringify({ version }) });
@@ -179,7 +177,6 @@ describe("DiscordRpcServerLink", () => {
     const { link, timers, sockets } = harness();
     link.setEnabled(true);
     link.setYielding(true);
-    // A popup being open or an activity being there doesn't make it connect.
     const release = link.acquire();
     link.send(createPresence(jena));
     timers.advance(120_000);

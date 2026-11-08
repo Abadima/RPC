@@ -24,17 +24,14 @@ import {
   type PremidFound,
 } from "./premid";
 import { BROWSER_DIR, refreshSources, resolveSources } from "./sources";
+import { atJsonFloor } from "../json";
 
 export interface ActivitiesBuild {
   native: NativeFound[];
   premid: PremidFound["manifest"][];
-  /** PreMiD Activities left out, and why. */
   excluded: Exclusion[];
-  /** Resolves `parousia:activities` in the extension's bundles. */
   plugin: Bun.BunPlugin;
-  /** What was included, from where, for the build's output. */
   summary: string[];
-  /** Writes the packaged Activity files (`activities/`) into an extension's output folder. */
   writeTo(targetDir: string): Promise<void>;
 }
 
@@ -70,12 +67,19 @@ export async function buildActivities(): Promise<ActivitiesBuild> {
   let premid: PremidFound[] = [];
   const excluded: Exclusion[] = [];
 
-  // Each source at its repository's newest commit, every time (see sources.ts).
   await refreshSources((line) => summary.push(line));
   for (const source of await resolveSources()) {
     if ("missing" in source) {
       summary.push(`${source.name}: no Activities (${source.missing})`);
       continue;
+    }
+    if (!source.local && source.revision !== undefined && source.commit !== source.revision) {
+      throw new Error(
+        `${source.name}: the checkout is at ${source.commit.slice(0, 12)}, but ` +
+          `activity-sources.json pins ${source.revision.slice(0, 12)}. A build is made ` +
+          "from the reviewed revision, nothing else: run `bun run activities:fetch` to " +
+          "bring it there, or advance the pin deliberately.",
+      );
     }
     const at = source.local
       ? `${source.dir}, ${source.commit.slice(0, 12)}`
@@ -161,7 +165,9 @@ export async function buildActivities(): Promise<ActivitiesBuild> {
       const folders = new Set([...files.keys()].map((path) => dirname(join(targetDir, path))));
       for (const folder of folders) await mkdir(folder, { recursive: true });
       await Promise.all(
-        [...files].map(([path, content]) => Bun.write(join(targetDir, path), content)),
+        [...files].map(([path, content]) =>
+          Bun.write(join(targetDir, path), path.endsWith(".json") ? atJsonFloor(content) : content),
+        ),
       );
     },
   };

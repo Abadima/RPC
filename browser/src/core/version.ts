@@ -6,7 +6,6 @@
  * told to update instead of being cut off.
  */
 
-/** Which side is older and could update. */
 export type UpdateNotice = "desktop" | "extension";
 
 // An optional fourth number is a store revision: Firefox takes each version once,
@@ -34,7 +33,6 @@ export function compareVersions(extension: string, desktop: string): UpdateNotic
   return "none";
 }
 
-/** Whether `candidate` is a later release than `than`, by their numbers; false if either isn't a release. */
 export function isNewerRelease(candidate: string, than: string): boolean {
   const a = parseRelease(candidate);
   const b = parseRelease(than);

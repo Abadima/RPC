@@ -13,9 +13,7 @@ import type { SourceName } from "./sources";
 export interface Discovery {
   native: NativeFound[];
   premid: PremidFound[];
-  /** Native Activities' problems: any stops the build. */
   problems: string[];
-  /** PreMiD Activities left out, and why. */
   excluded: Exclusion[];
 }
 

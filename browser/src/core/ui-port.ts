@@ -12,7 +12,6 @@ export const UI_PORT_NAME = "parousia-ui";
 
 export type UiRequest =
   | { type: "status-request" }
-  /** Try Desktop again now, instead of waiting for the next retry. */
   | { type: "reconnect" }
   | { type: "set"; setting: DesktopSetting; value: boolean };
 
@@ -27,7 +26,6 @@ export interface BridgeState {
   version: string | null;
 }
 
-/** What's being shared right now, as the popup and dashboard show it. */
 export interface UiActivity {
   id: string;
   name: string;
@@ -46,7 +44,6 @@ export type UiEvent =
   /** `null`: not connected, or Desktop refused (a `set` from an unverified connection). */
   | { type: "report"; report: DesktopReport | null }
   | { type: "discord"; state: BridgeState }
-  /** The Activity being shared, as Privacy settings allow; `null` for nothing. */
   | { type: "activity"; activity: UiActivity | null };
 
 const BRIDGE_STATUSES: ReadonlySet<string> = new Set<BridgeStatus>([

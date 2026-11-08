@@ -1,13 +1,7 @@
-//! Which Windows user is on the other end of a loopback TCP connection.
-//!
-//! Every local user can reach `127.0.0.1`, so on a shared machine another
-//! user could publish into this user's Desktop by sending an allowed `Origin`
-//! (it's just a header, to anything that isn't a browser). Windows lists every
-//! TCP connection with its owning process (`GetExtendedTcpTable`); the
-//! client's end of an accepted connection is the row whose local address is
-//! the connection's peer address, and that process's token says which user it
-//! is (`user.rs`). Connections from another user are closed before anything is
-//! read.
+//! Which Windows user is on the other end of a loopback TCP connection: the row of
+//! `GetExtendedTcpTable` whose local address is the peer address names the client
+//! process, and its token names the user. Connections from another user are
+//! closed before anything is read.
 
 use std::net::{SocketAddr, SocketAddrV4};
 

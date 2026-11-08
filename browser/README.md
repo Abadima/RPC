@@ -6,7 +6,7 @@ Parousia's browser extension and userscript, built with [Bun](https://bun.com) a
 
 ```bash
 bun install
-bun run activities:fetch   # Activity sources, at the newest commit on each main branch
+bun run activities:fetch   # Activity sources, at each pinned revision
 ```
 
 ## Commands
@@ -20,7 +20,7 @@ bun run format        # oxfmt
 bun run format:check  # oxfmt --check
 bun test              # unit tests
 
-bun run activities:fetch   # move each Activity source to the newest commit on its main (builds do this too; a failed fetch keeps the copy it has)
+bun run activities:fetch   # move each Activity source to its pinned revision (builds do this too; a failed fetch keeps the copy it has)
 bun run activities:check   # check and compile every Activity; list the PreMiD ones left out, and why
 
 bun run firefox:setup      # once: fetch an isolated automation Firefox
@@ -33,6 +33,8 @@ bun run discord:verify     # one Activity on a real Discord (opt-in, see below)
 bun run activities:verify  # Activities, the popup, and the dashboard, end to end (Linux, Windows)
 bun run activities:firefox # the same features in an installed Firefox Developer Edition
 bun run languages:verify   # every language in the popup and dashboard, and a change reaching an open view
+bun run store check        # the Web Store and Add-ons listing text: limits, leftover English, the screens' terms
+bun run store export       # write what the two dashboards take to dist/store/ (see store/README.md)
 bun run bench              # sizes, memory, CPU, and latency, as JSON
 bun run contrast           # WCAG 2.2 AA contrast of each theme's tokens, as a table
 bun run themes:verify      # each theme on every popup and dashboard view
@@ -54,11 +56,11 @@ There's no Safari target. The code uses standard `chrome.*` APIs, so one is poss
 
 Manifests live in `manifests/` and must declare `"manifest_version": 3`, which the build checks. `dist/` is cleared before every build, so the zips are always rebuilt, never patched.
 
-JS is minified with Bun's own `--minify`, with no minifier dependency: `chromium.js` goes from 27.9 KB to 13.4 KB (7.2 KB to 4.8 KB gzipped). Adding `uglify-js` saved only about 3.5% more gzipped in earlier tests, which isn't worth a dependency. `DesktopConnection` uses `#private` members because Bun shortens those but not ordinary property names.
+JS is minified with Bun's own `--minify`, with no minifier dependency: `chromium.js` goes from 197 KB to 114 KB (44 KB to 34 KB gzipped), most of it the 22 native Activities. Adding `uglify-js` saved only about 3.5% more gzipped in earlier tests, which isn't worth a dependency. `DesktopConnection` uses `#private` members because Bun shortens those but not ordinary property names.
 
 The zips come from a small writer with no dependencies (`scripts/zip.ts`, using `node:zlib`), because `Bun.Archive` writes only tar and gzip and stores need a real `.zip`. It sorts entries and fixes timestamps, so the same files always give the same archive.
 
-The userscript is minified the same way (11.9 KB raw, 4.7 KB gzipped, 4.2 KB with brotli) and keeps its `==UserScript==` header. Dropping `console` calls would save 27 bytes but silence the logger, so they stay.
+The userscript is minified the same way (127 KB to 78 KB, 22 KB gzipped) and keeps its `==UserScript==` header. The native Activities' manifests inside the background and the userscript leave out the words only the views show (descriptions, versions, setting titles), which the views read from the packaged catalog and manifests instead. Dropping `console` calls would save 27 bytes but silence the logger, so they stay.
 
 ## Firefox Verification
 
@@ -80,7 +82,7 @@ Without Parousia Desktop, Discord still works through Discord-RPC-Extension's ap
 
 Extension pages carry an explicit CSP: `script-src 'self'; object-src 'self'; connect-src 'self' ws://127.0.0.1:57179 ws://127.0.0.1:6969 https://api.github.com`. Firefox's default MV3 policy adds `upgrade-insecure-requests`, which silently turns `ws://` into `wss://`, so the policy is set explicitly. `connect-src` limits extension pages to Desktop, the Discord-RPC-Extension app, and the GitHub request below.
 
-Apart from the dashboard's Activity icons (remote logos, loaded lazily with no referrer, with a letter as the fallback), the only request to anyone other than the local computer is the update check (`src/shared/latest-desktop.ts`). Desktop and the extension are versioned separately, so a newer extension beside an older Desktop is the normal result of a release, not a reason to say "update Desktop". When a popup or dashboard needs it, it asks `api.github.com/repos/Abadima/RPC/releases/latest` for the Desktop version named in the release notes (`<!-- parousia-desktop: 1.0.2 -->`, written by the release workflow), and says so only if that version is newer than the connected one. The request is unauthenticated and sends no cookies, referrer, or identifier. It runs at most once a day, or an hour after a failure, and the answer is cached in `chrome.storage.local`. If the request fails or the notes name no version, nothing is shown.
+Apart from the dashboard's Activity icons (remote logos, loaded lazily with no referrer, with a letter as the fallback), the only request to anyone other than the local computer is the update check (`src/shared/latest-desktop.ts`). Desktop and the extension are versioned separately, so a newer extension beside an older Desktop is the normal result of a release, not a reason to say "update Desktop". When a popup or dashboard needs it, it asks `api.github.com/repos/Abadima/RPC/releases/latest` for the Desktop version named in the release notes (`<!-- parousia-desktop: 1.0.3 -->`, written by the release workflow), and says so only if that version is newer than the connected one. The request is unauthenticated and sends no cookies, referrer, or identifier. It runs at most once a day, or an hour after a failure, and the answer is cached in `chrome.storage.local`. If the request fails or the notes name no version, nothing is shown.
 
 The Chromium manifest also scopes `externally_connectable.ids` to Discord-RPC-Extension's own id (see Compatibility). That's Chrome only. Firefox has never implemented the key, so the real cross-browser check is in code.
 
@@ -138,15 +140,15 @@ The choice is stored under its own `theme` key in `chrome.storage.local`, apart 
 
 ## Activities
 
-Activities come from two repositories, both followed at their `main` branch (`activity-sources.json` names each repository and branch):
+Activities come from two repositories, each pinned to the revision its build was reviewed against (`activity-sources.json` names each repository, branch, and pinned revision):
 
 - Parousia's own: [parousia-project/activities](https://github.com/parousia-project/activities)
 - PreMiD's: [PreMiD/Activities](https://github.com/PreMiD/Activities)
 
-`bun run activities:fetch` checks them out under `.cache/activities/`. Every build and `activities:check` runs it first, so an extension always comes from each repository's newest commit. `PAROUSIA_ACTIVITIES_OFFLINE=1` skips the network and uses what's already fetched. A fetch records the revision it reached and never replaces a working copy with a failed one. Both repositories keep one folder per website at `websites/<letter>/<Name>/`, and both go through one pipeline (`scripts/activities/`): one walk, an adapter per source that maps a folder onto a draft, one module (`metadata.ts`) that turns it into the shared manifest (`src/activities/manifest.ts`), then one catalog, one matcher, one settings model, and one site-access model. A website in both sources (same folder name) is listed once, and only the implementation chosen on its page runs. That's the native one until PreMiD's is picked. Nothing is downloaded at runtime.
+`bun run activities:fetch` checks them out under `.cache/activities/`, at their pins. Every build and `activities:check` runs it first and refuses anything else: code not reviewed at the pin doesn't enter an extension. The fetch says when a repository's `main` has moved past a pin. A pin moves only when someone edits `activity-sources.json` to a revision they reviewed, never with the next fetch. `PAROUSIA_ACTIVITIES_OFFLINE=1` skips the network and uses what's already fetched (which stays at its pin). A fetch records the revision it reached and never replaces a working copy with a failed one. Both repositories keep one folder per website at `websites/<letter>/<Name>/`, and both go through one pipeline (`scripts/activities/`): one walk, an adapter per source that maps a folder onto a draft, one module (`metadata.ts`) that turns it into the shared manifest (`src/activities/manifest.ts`), then one catalog, one matcher, one settings model, and one site-access model. A website in both sources (same folder name) is listed once, and only the implementation chosen on its page runs. That's the native one until PreMiD's is picked. Nothing is downloaded at runtime.
 
 - **Native** Activities export `detect(page, settings)`. They see the URL and title, plus the page data they declare (`media`, `thumbnails`), which Parousia's collector (`src/activities/collector.ts`) reads on sites the user granted. An Activity that declares page data stays off until it's turned on, which asks for its sites. They're bundled through a generated module, `parousia:activities`. A problem with one stops the build, and `activities:check` type-checks each against `src/core/api.ts`.
-- **PreMiD's** Activities compile unchanged into `activities/premid/<name>.js` and run on Parousia's `Presence` and `iFrame` (`src/premid/page.ts`). Their `regExp` is the matcher, every `clientId` in their source is kept, and their settings map to Parousia's. Their language picker is fixed to English, since PreMiD translates its strings on its own service, which Parousia doesn't call. Only the `metadata.json` descriptions are translated, in the views' languages, as `activities/descriptions/<language>.json`. Activities that need their own npm packages, name no client id, target API version 2, are on PreMiD's DMCA list, or assign page text to `innerHTML` (VLC, TLX Toki, Weverse, flagged `UNSAFE_MARKUP` in `scripts/activities/premid.ts`) are left out. `activities:check` lists each one with its reason. They're in the extensions only, not the userscript.
+- **PreMiD's** Activities compile unchanged into `activities/premid/<name>.js` and run on Parousia's `Presence` and `iFrame` (`src/premid/page.ts`). Their `regExp` is the matcher, every `clientId` in their source is kept, and their settings map to Parousia's. Their language picker is fixed to English, since PreMiD translates its strings on its own service, which Parousia doesn't call. Only the `metadata.json` descriptions are translated, in the views' languages, as `activities/descriptions/<language>.json`. Activities that need their own npm packages, name no client id, target API version 2, are on PreMiD's DMCA list, assign page text to `innerHTML` (VLC, TLX Toki, Weverse, flagged `UNSAFE_MARKUP` in `scripts/activities/premid.ts`), or have a `regExp` that can take seconds to fail on a crafted address (`scripts/activities/redos.ts`) are left out, and so is one whose build would read a file outside its own folder or PreMiD's helper package (a path that climbs out, an absolute path, a package, or a symlink). `activities:check` lists each one with its reason. They're in the extensions only, not the userscript.
 - **Packaged** as one `catalog.json`, which the dashboard lists and searches. Manifests are one file per first letter (`activities/manifests/<letter>.json`), found from an id alone, without the description and keywords the catalog holds. Each carries its Activity's version from `metadata.json`, which only that Activity's page shows. A text host index (`hosts.txt`) is searched as text, so the popup never builds an object per site. `src/activities/manifest.ts` has the formats and their readers.
 
 `src/activities/host.ts` runs what both kinds need in the active tab's page, and turns the result into the page the runtime hands the Activity (see `project/architecture.md`, Activity System Architecture). To build from a local checkout instead of the fetched one, set `PAROUSIA_ACTIVITIES_DIR` or `PREMID_ACTIVITIES_DIR`.
@@ -170,9 +172,9 @@ The tests are `src/core/media-presence.test.ts` (selection, order, restore), `sr
 
 ## Languages
 
-The popup and dashboard are in English, German, French, Japanese, Romanian, Russian, Swedish, and Simplified Chinese. Settings > General chooses one, and Automatic follows the browser. `src/core/i18n.ts` holds the mechanism. English is the string written in the code: `t("Show {name}", { name })`, `tn(n, "{n} Activity", "{n} Activities")` for plurals, and `msg("…")` for a string defined away from where it's shown. English costs nothing to load. Every other language is `src/locales/<code>.json`, which maps each English string to its translation. A view fetches it once when it opens (`src/shared/language.ts`). The fixed text of `popup.html` and `fullscreen.html` is translated the same way, by its words. A language change reloads the other open views. Activity names come from the Activities themselves, except PreMiD's descriptions (see Activities).
+The popup and dashboard are in English, Amharic, Arabic, Catalan, Dutch, Estonian, German, Greek, Spanish (Spain and Latin America), Persian, French, Japanese, Korean, Latvian, Lithuanian, Polish, Portuguese (Brazil and Portugal), Romanian, Russian, Slovenian, Swedish, Swahili, Turkish, and Simplified Chinese, the regional variants named the way the stores use them. Every language is complete. Arabic and Persian read right to left, but no view sets a text direction yet, so their layout isn't mirrored. Contributors are credited in `CONTRIBUTORS.md`. Settings > General chooses one, and Automatic follows the browser's region before its language (`pt-BR` on a `pt-BR` browser; Brazilian for other Portuguese regions, Latin American for the Latin American regions). `src/core/i18n.ts` holds the mechanism. English is the string written in the code: `t("Show {name}", { name })`, `tn(n, "{n} Activity", "{n} Activities")` for plurals, and `msg("…")` for a string defined away from where it's shown. English costs nothing to load. Every other language is `src/locales/<code>.json`, which maps each English string to its translation. A view fetches it once when it opens (`src/shared/language.ts`). The fixed text of `popup.html` and `fullscreen.html` is translated the same way, by its words. A language change reloads the other open views. Activity names come from the Activities themselves, except PreMiD's descriptions (see Activities).
 
-`scripts/i18n.test.ts` finds every marked string and every line of fixed page text. It fails when a language lacks one, keeps one the code no longer uses, changes a `{name}` that a string fills, or lacks a plural form its language has. To add a language, add its code to `LANGUAGES` and its name to `LANGUAGE_NAMES` (both in `src/core/i18n.ts`), then write its file. The test lists what's missing.
+`scripts/i18n.test.ts` finds every marked string and every line of fixed page text. It fails when a language lacks one, keeps one the code no longer uses, changes a `{name}` that a string fills, or lacks a plural form its language has. To add a language, add its code to `LANGUAGES` and its name to `LANGUAGE_NAMES` (both in `src/core/i18n.ts`), then write its file. The test lists what's missing. A language that's started but not finished can hold the English text as its values: it shows English and packs to almost nothing, since `scripts/locales.ts` drops entries equal to their key.
 
 **Why not the browsers' own `i18n` (`_locales`)?** It was measured against this and not adopted:
 
@@ -180,7 +182,11 @@ The popup and dashboard are in English, German, French, Japanese, Romanian, Russ
 - It needs a complete `en` file as the default, and the browser keeps the active locale and the default in memory. The same strings in its format are 149 KB across English and five other languages, against 96 KB here. The packed size is no better, because a zip compresses both alike.
 - PreMiD's 1,400 translated descriptions would all stay in memory for as long as the extension runs. They stay in `activities/descriptions/<language>.json` and are fetched when a view needs them.
 - Locale files can't be compressed, deduplicated, or shared between languages, since each must hold its own messages. `scripts/locales.ts` already minifies them and leaves out strings that are their own translation, which takes the locale files from 118 KB to 110 KB.
-- Native `i18n` would add only a translated extension description in the browser's list. That's one sentence, and it would need a `default_locale`, placeholders in both manifests, and a special case for the userscript header. So it isn't done.
+- Native `i18n` would add only a translated extension description in the browser's list. That's one sentence, so the screens don't use it. The Chromium package does carry it for the Web Store (see Store Listings): the dashboard lists a language for the listing only if the package has its `_locales/<code>/`.
+
+## Store Listings
+
+`store/listings/<code>.json` is the Chrome Web Store and Firefox Add-ons text (a summary and a description) in each language, kept apart from `src/locales/`, which the stores don't read. The Chromium build writes each summary to `_locales/<code>/messages.json` and points the manifest's `description` at it (`default_locale` is `en`); the Firefox package, the source manifests, and the userscript header are unchanged. Nothing reaches a store until its text is entered in the dashboard. `store/README.md` has the limits of each store, the language codes, and the steps; `store/keywords.md` the wording chosen.
 
 ## Compatibility
 

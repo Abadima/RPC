@@ -1,10 +1,7 @@
-//! Which clients may connect: the WebSocket's `Origin` header, which the
-//! browser sets and no page or extension can forge, matched exactly against
-//! an allowlist of Parousia builds.
-//!
-//! Nothing here is a secret, and nothing is issued or stored per client: a
-//! process running as the same user could claim any identity anyway, and is
-//! out of scope (see `project/threat-model.md`).
+//! Which clients may connect: the browser-set `Origin`, which no page or extension
+//! can forge, matched exactly against an allowlist of Parousia builds. Nothing is
+//! secret or issued per client: a same-user process could claim any identity
+//! anyway (out of scope, see project/threat-model.md).
 
 use std::fmt;
 
@@ -33,7 +30,6 @@ impl ClientKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Peer {
     pub kind: ClientKind,
-    /// The origin the browser vouched for.
     pub identity: String,
     /// Whether the OS confirmed the connection comes from this user, where
     /// the loopback peer's owner can be checked (Linux, see `platform/linux/peer.rs`). Only
@@ -48,14 +44,10 @@ pub const PRODUCTION_CHROMIUM_ORIGINS: &[&str] =
 
 const MAX_ORIGIN_LEN: usize = 255;
 
-/// What a WebSocket's `Origin` header says about the client.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Origin {
-    /// An exact extension origin (it may or may not be allowed).
     Extension(ClientKind),
-    /// A web page, or an opaque `null` origin: where a userscript connects from.
     Web,
-    /// Missing, malformed, or a scheme no Parousia client uses.
     Invalid,
 }
 

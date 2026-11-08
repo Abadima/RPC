@@ -1,6 +1,3 @@
-//! What Linux and macOS share: Desktop's control socket, Discord's socket,
-//! who owns a socket's other end, and owner-only file permissions.
-
 pub mod control;
 pub mod discord;
 pub mod user;

@@ -82,7 +82,6 @@ describe("one manifest for both sources", () => {
       details: "Listening to Song",
       state: "media",
     });
-    // With every kind switched off in Settings > Privacy: the URL and title.
     expect(runtime.resolve({ url, title: "Song - Tunes", granted: [] }).activity).toMatchObject({
       details: "Song - Tunes",
       state: "",
@@ -90,8 +89,6 @@ describe("one manifest for both sources", () => {
   });
 
   test("a native Activity with no cover shows its site's logo, the way a PreMiD one does", () => {
-    // Paused, browsing, or a page without artwork: `detect` sends no image, and
-    // Discord would show Parousia's own logo for it.
     const logo = "https://cdn.example/tunes.png";
     const registry = new ActivityRegistry();
     registry.register(

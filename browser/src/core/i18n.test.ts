@@ -7,7 +7,6 @@ describe("English, which is the strings themselves", () => {
   test("t returns its key and fills what's in braces", () => {
     expect(t("Settings")).toBe("Settings");
     expect(t("Show {name}", { name: "YouTube" })).toBe("Show YouTube");
-    // A name with no value stays as written, and a value that looks like a name is never filled twice.
     expect(t("Show {name}")).toBe("Show {name}");
     expect(t("{a} {b}", { a: "{b}", b: "x" })).toBe("{b} x");
     expect(t("{constructor}", { name: "x" })).toBe("{constructor}");
@@ -64,14 +63,13 @@ describe("another language", () => {
     expect(tn(1, "{n} Activity", "{n} Activities")).toBe("1 activités");
     setLanguage("fr", { "{n} Activities": {} });
     expect(tn(3, "{n} Activity", "{n} Activities")).toBe("3 Activities");
-    // A plural entry is no answer for a plain string.
     setLanguage("fr", { Save: { other: "x" } });
     expect(t("Save")).toBe("Save");
   });
 });
 
 describe("the language to use", () => {
-  test("a chosen language wins; automatic follows the browser's, by its first part", () => {
+  test("a chosen language wins; automatic follows the browser's, region before language", () => {
     expect(resolveLanguage("ja", "fr-FR")).toBe("ja");
     expect(resolveLanguage("auto", "fr-FR")).toBe("fr");
     expect(resolveLanguage("auto", "zh-Hans-CN")).toBe("zh");
@@ -81,8 +79,34 @@ describe("the language to use", () => {
     expect(resolveLanguage("auto", "de_AT")).toBe("de");
     expect(resolveLanguage("auto", "ro-RO")).toBe("ro");
     expect(resolveLanguage("auto", "sv_FI")).toBe("sv");
-    expect(resolveLanguage("auto", "es-ES")).toBe("en");
+    expect(resolveLanguage("auto", "es-ES")).toBe("es");
+    expect(resolveLanguage("auto", "es-MX")).toBe("es-419");
+    expect(resolveLanguage("auto", "es-US")).toBe("es-419");
+    // Portuguese has no neutral variant: the browser's region, then
+    // Brazilian, which Unicode's likely subtags give bare `pt`.
+    expect(resolveLanguage("auto", "pt-BR")).toBe("pt-BR");
+    expect(resolveLanguage("auto", "pt_PT")).toBe("pt-PT");
+    expect(resolveLanguage("auto", "pt-AO")).toBe("pt-BR");
     expect(resolveLanguage("auto", "")).toBe("en");
+  });
+
+  test("the newer languages resolve from what Chromium (`tr-TR`) and Firefox (`tr`) report", () => {
+    for (const [browser, language] of [
+      ["am-ET", "am"],
+      ["ca-ES-valencia", "ca"],
+      ["et", "et"],
+      ["fa-IR", "fa"],
+      ["lt_LT", "lt"],
+      ["lv", "lv"],
+      ["pl", "pl"],
+      ["pl-PL", "pl"],
+      ["pl_PL", "pl"],
+      ["sl-SI", "sl"],
+      ["sw-KE", "sw"],
+      ["tr-TR", "tr"],
+    ] as const) {
+      expect(resolveLanguage("auto", browser)).toBe(language);
+    }
   });
 });
 

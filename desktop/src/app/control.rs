@@ -1,9 +1,7 @@
-//! Managing a running Desktop without a tray: status, settings, and which
-//! extension origins are allowed. The CLI sends these over the control
-//! socket (`platform/unix/control.rs`) or named pipe (`platform/windows/control.rs`),
-//! which only this user can reach; the
-//! console and the tray call `handle` in-process. Allowing an origin is only
-//! possible from here, never from a browser.
+//! Status, settings, and allowed origins for a running Desktop. The CLI sends them
+//! over the control socket or pipe, which only this user can reach; the console
+//! and tray call `handle` in-process. Origins are allowed only from here, never
+//! from a browser.
 
 use std::io::{self, Read, Write};
 
@@ -29,7 +27,6 @@ pub enum ControlRequest {
     /// Point the user at the running Desktop (a notification, where there's
     /// a desktop session). Sent when Desktop is launched a second time.
     Show,
-    /// Debug logging for this run only (see `Hub::set_debug`).
     Debug {
         on: bool,
     },

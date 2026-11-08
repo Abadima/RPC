@@ -68,7 +68,6 @@ describe("Default Activity", () => {
     expect(
       defaultActivityProblems({ ...studying, buttons: [{ label: "Half", url: "" }] }),
     ).toHaveProperty("buttons");
-    // An asset name of the person's own Discord Application is an image too.
     expect(defaultActivityProblems({ ...studying, largeImage: "my_cover" })).toEqual({});
   });
 

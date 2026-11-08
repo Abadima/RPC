@@ -42,7 +42,6 @@ await run(
   { cwd: browserDir },
 );
 
-/** Firefox in `locale` (its own interface language, which `i18n.getUILanguage()` reports). */
 async function launch(locale, name) {
   const profileDir = join(ws.dir, `firefox-${name}`);
   await prepareProfile(profileDir, [{ id: PAROUSIA_ID, xpi, uuid: PAROUSIA_UUID }]);
@@ -70,7 +69,6 @@ async function launch(locale, name) {
   return { firefox, ext, choose };
 }
 
-/** The popup's and the dashboard's words, once the popup's footer reads `settled`. */
 async function look({ firefox }, settled) {
   const popup = await firefox.openTab(`${EXTENSION}/popup.html`);
   const home = await waitUntil(async () => {

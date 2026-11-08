@@ -1,14 +1,10 @@
-//! Where the Discord app listens on Linux and macOS: a Unix socket called
-//! `discord-ipc-0` to `discord-ipc-9` in its runtime or temporary directory,
-//! or in the Flatpak or Snap package's own. Framing is the adapter's
-//! (`adapters/discord/ipc.rs`).
+//! Where the Discord app listens on Linux and macOS: `discord-ipc-0` to `9` in its
+//! runtime or temporary directory, or its Flatpak or Snap package's.
 //!
-//! Some of those directories are shared (`/tmp`) or can be made by anyone
-//! (`/tmp/snap.discord`), so another user could put a socket there and pose
-//! as Discord. Only a socket this user owns is tried, and once connected, the
-//! kernel must confirm the process listening on it runs as this user too: a
-//! symbolic link in a directory someone else controls can be pointed at this
-//! user's socket for the first check and at their own for the connect.
+//! Some of those can be made by anyone (`/tmp/snap.discord`), so only a socket
+//! this user owns is tried, and the kernel must confirm its listener runs as this
+//! user too: a symlink can point at this user's socket for the first check and at
+//! another's for the connect.
 
 use std::io::{self, Write};
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
@@ -16,14 +12,13 @@ use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::adapters::discord::ipc::{Deliver, Incoming, encode, read_frame};
+use crate::adapters::discord::ipc::{Deliver, Incoming, READ_BUFFER, encode, read_frame};
 
 use super::user;
 
 /// A write to Discord that takes longer than this means it has stopped listening.
 const WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Where to look for Discord.
 #[derive(Debug, Clone)]
 pub struct Endpoints {
     dirs: Vec<PathBuf>,
@@ -133,7 +128,7 @@ pub fn open(endpoints: &Endpoints, deliver: Deliver) -> io::Result<Link> {
             if stream.set_write_timeout(Some(WRITE_TIMEOUT)).is_err() {
                 continue;
             }
-            let mut reader = stream.try_clone()?;
+            let mut reader = io::BufReader::with_capacity(READ_BUFFER, stream.try_clone()?);
             std::thread::Builder::new()
                 .name("discord-ipc".into())
                 .spawn(move || {

@@ -1,24 +1,20 @@
-//! Desktop's local socket (Linux and macOS): the CLI's way in, and the
-//! single-instance check. It lives in a directory only this user can open
-//! (see `config::create_private_dir`), so unlike the `127.0.0.1` port, no
-//! other local user and no web page can reach it at all. Browsers never use
-//! it.
-//!
-//! Every frame is a 4-byte little-endian length and that many bytes of JSON:
-//! one control request, one response (`control.rs`).
+//! Desktop's control socket on Linux and macOS: the CLI's way in, and the
+//! single-instance check. It's in a directory only this user can open, so no other
+//! user and no web page can reach it. Frames are a 4-byte little-endian length
+//! and that much JSON (`control.rs`).
 
 use std::fs::{self, File, OpenOptions, TryLockError};
 use std::io;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::Duration;
 
 use crate::app::config::AppPaths;
 use crate::app::control::{self, ControlRequest, ControlResponse, read_frame, write_frame};
 use crate::app::hub::Hub;
+use crate::app::slots::Slots;
 use crate::link::session::HANDSHAKE_TIMEOUT;
 
 /// Each open connection is a thread; the CLI makes one at a time.
@@ -51,7 +47,6 @@ pub fn start(server: Server, hub: Arc<Hub>) {
     });
 }
 
-/// Sends one request to the running Desktop.
 pub fn send(request: &ControlRequest) -> io::Result<ControlResponse> {
     let paths = AppPaths::locate()?;
     self::request(&socket_path(&paths), request)
@@ -107,17 +102,10 @@ fn claim_in(dir: &Path) -> io::Result<Server> {
 }
 
 pub fn serve(listener: UnixListener, hub: Arc<Hub>) {
-    let open = Arc::new(AtomicUsize::new(0));
+    let connections = Slots::new(MAX_CONNECTIONS);
     for stream in listener.incoming().flatten() {
-        if open.fetch_add(1, Ordering::SeqCst) >= MAX_CONNECTIONS {
-            open.fetch_sub(1, Ordering::SeqCst);
-            continue;
-        }
-        let (hub, open) = (Arc::clone(&hub), Arc::clone(&open));
-        thread::spawn(move || {
-            handle(stream, &hub);
-            open.fetch_sub(1, Ordering::SeqCst);
-        });
+        let hub = Arc::clone(&hub);
+        connections.spawn(move || handle(stream, &hub));
     }
 }
 

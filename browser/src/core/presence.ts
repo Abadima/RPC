@@ -60,7 +60,6 @@ function activityEquals(a: Activity | null, b: Activity | null): boolean {
   );
 }
 
-/** Whether two Presence values represent the same reported state, ignoring `updatedAt`. */
 export function presenceEquals(a: Presence, b: Presence): boolean {
   return activityEquals(a.activity, b.activity);
 }

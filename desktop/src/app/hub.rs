@@ -1,12 +1,9 @@
-//! Desktop's shared state: settings, the live connections with the latest
-//! Presence each one reported, the platform adapters, a short in-memory
-//! event log, and the extensions recently turned away. Nothing about a
-//! client outlives its connection. Sessions (`session.rs`), the tray, the
-//! console, and control requests all go through here.
+//! Desktop's shared state: settings, live connections and their latest Presence,
+//! the adapters, a short in-memory event log, and recently refused extensions.
+//! Nothing about a client outlives its connection.
 //!
-//! What each platform shows: of the connections that allow it, the one
-//! whose Activity changed most recently. When that one clears or goes away,
-//! the next most recent still-current Activity takes over.
+//! Each platform shows, of the connections allowing it, the most recently changed
+//! Activity; when that one clears or leaves, the next most recent takes over.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
@@ -64,7 +61,6 @@ pub struct Status {
     pub refused: Vec<RefusedStatus>,
     pub events: Vec<EventStatus>,
     pub debug: bool,
-    /// Each platform adapter's state.
     pub platforms: Vec<AdapterStatus>,
 }
 
@@ -82,9 +78,7 @@ pub struct ClientStatus {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransportStatus {
-    /// Where the WebSocket listens.
     pub address: String,
-    /// Whether connections from other OS users are detected and closed.
     pub same_user_check: bool,
 }
 
@@ -103,7 +97,6 @@ pub struct EventStatus {
     pub text: String,
 }
 
-/// What the WebSocket upgrade does with an `Origin`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Gate {
     Admit(Peer),
@@ -131,7 +124,6 @@ struct Inner {
     /// event history unless someone turns it on for this run.
     debug: bool,
     adapters: Vec<Routed>,
-    /// Orders Presence changes across connections.
     next_seq: u64,
 }
 
@@ -141,14 +133,12 @@ struct Live {
     since: u64,
     presence: Option<Presence>,
     platforms: Platforms,
-    /// When this connection's Presence last changed, in `next_seq` order.
     seq: u64,
     closer: Closer,
 }
 
 struct Routed {
     adapter: Box<dyn PlatformAdapter>,
-    /// What it was last told to show.
     given: Option<Activity>,
 }
 
@@ -299,7 +289,6 @@ impl Hub {
         id
     }
 
-    /// `platforms` are where this connection's Presence may be shown.
     pub fn update_presence(&self, id: ConnId, presence: Presence, platforms: Platforms) {
         let mut inner = self.lock();
         let debug = inner.debug;
@@ -308,6 +297,10 @@ impl Hub {
             return;
         };
         let changed = live.presence.as_ref().map(|p| &p.activity) != Some(&presence.activity);
+        // The tray shows an Activity only by its name.
+        let before = live.presence.as_ref().and_then(|p| p.activity.as_ref());
+        let shown =
+            before.map(|a| a.name.as_str()) != presence.activity.as_ref().map(|a| a.name.as_str());
         let rerouted = changed || live.platforms != platforms;
         if changed && debug {
             println!(
@@ -330,12 +323,11 @@ impl Hub {
             route(&mut inner);
         }
         drop(inner);
-        if changed {
+        if shown {
             self.notify(HubEvent::Changed);
         }
     }
 
-    /// Drops the connection and, with it, whatever Presence it reported.
     pub fn disconnect(&self, id: ConnId) {
         let mut inner = self.lock();
         let Some(live) = inner.connections.remove(&id) else {
@@ -497,7 +489,6 @@ impl Hub {
     }
 }
 
-/// Tells each adapter what it should now show, if that changed.
 fn route(inner: &mut Inner) {
     let Inner {
         adapters,
@@ -523,7 +514,6 @@ fn route(inner: &mut Inner) {
     }
 }
 
-/// Debug mode only: prints `text` and keeps it among the recent events.
 fn log_event(inner: &mut Inner, text: String) {
     if inner.debug {
         println!("parousia-desktop: {text}");
@@ -531,7 +521,6 @@ fn log_event(inner: &mut Inner, text: String) {
     record_event(inner, text);
 }
 
-/// Debug mode only: keeps `text` among the recent events, without printing it.
 fn record_event(inner: &mut Inner, text: String) {
     if !inner.debug {
         return;
@@ -544,7 +533,6 @@ fn record_event(inner: &mut Inner, text: String) {
         .push_back((unix_now(), truncate(&text, MAX_TEXT_CHARS)));
 }
 
-/// Returns whether `origin` wasn't already on the refused list.
 fn record_refusal(inner: &mut Inner, origin: &str) -> bool {
     let now = unix_now();
     if let Some(refused) = inner.refused.iter_mut().find(|r| r.origin == origin) {
@@ -793,7 +781,6 @@ pub mod tests {
         assert_eq!(status.events[1].text, "Chromium on Linux connected");
     }
 
-    /// Records what the Hub tells it to show.
     struct Recorder {
         platform: Platform,
         shown: Arc<Mutex<Vec<Option<String>>>>,
@@ -876,6 +863,32 @@ pub mod tests {
         assert_eq!(calls(&discord), ids(&[Some("youtube")]), "the update waits");
         hub.update_presence(chrome, presence(Some("github")), Platforms::ALL);
         assert_eq!(calls(&discord), ids(&[Some("youtube"), Some("github")]));
+    }
+
+    #[test]
+    fn the_tray_hears_of_a_presence_only_when_what_status_shows_of_it_changes() {
+        let hub = test_hub();
+        let id = hub.connect(admit(&hub, CHROMIUM), "Chromium", noop_closer());
+        let changes = Arc::new(AtomicUsize::new(0));
+        let seen = Arc::clone(&changes);
+        hub.set_listener(Box::new(move |event| {
+            if event == HubEvent::Changed {
+                seen.fetch_add(1, Ordering::SeqCst);
+            }
+        }));
+        let count = || changes.load(Ordering::SeqCst);
+
+        hub.update_presence(id, presence(Some("youtube")), Platforms::ALL);
+        assert_eq!(count(), 1);
+        let mut next_video = presence(Some("youtube"));
+        next_video.activity.as_mut().unwrap().details = Some("another video".into());
+        hub.update_presence(id, next_video, Platforms::ALL);
+        assert_eq!(count(), 1);
+        hub.update_presence(id, presence(Some("github")), Platforms::ALL);
+        assert_eq!(count(), 2);
+        hub.update_presence(id, presence(None), Platforms::ALL);
+        assert_eq!(count(), 3);
+        assert_eq!(hub.status().clients[0].activity, None);
     }
 
     #[test]

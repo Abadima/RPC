@@ -21,7 +21,6 @@ export interface DefaultActivity {
   smallText: string;
   /** At most two; one with a blank label and link is left out. */
   buttons: ActivityButton[];
-  /** Show how long it's been shown. */
   elapsed: boolean;
   /** A Discord Application of its own; blank for Parousia's. */
   discordClientId: string;
@@ -64,7 +63,7 @@ export type DefaultActivityField =
   | "buttons"
   | "discordClientId";
 
-const STORAGE_KEY = "defaultActivity";
+export const DEFAULT_ACTIVITY_KEY = "defaultActivity";
 const TEXT_FIELDS = ["name", "details", "state", "largeText", "smallText"] as const;
 const IMAGE_FIELDS = ["largeImage", "smallImage"] as const;
 
@@ -111,7 +110,6 @@ export function parseDefaultActivity(value: unknown): DefaultActivity {
   };
 }
 
-/** What's wrong with it, by field, in words for the form. Empty: it can be shown. */
 export function defaultActivityProblems(
   activity: DefaultActivity,
 ): Partial<Record<DefaultActivityField, string>> {
@@ -178,7 +176,7 @@ export function defaultActivityToShow(activity: DefaultActivity, since: number):
 export async function loadDefaultActivity(
   area: PreferenceArea = chrome.storage.local,
 ): Promise<DefaultActivity> {
-  return parseDefaultActivity((await area.get(STORAGE_KEY))[STORAGE_KEY]);
+  return parseDefaultActivity((await area.get(DEFAULT_ACTIVITY_KEY))[DEFAULT_ACTIVITY_KEY]);
 }
 
 export async function saveDefaultActivity(
@@ -186,14 +184,13 @@ export async function saveDefaultActivity(
   area: PreferenceArea = chrome.storage.local,
 ): Promise<DefaultActivity> {
   const next = parseDefaultActivity(activity);
-  await area.set({ [STORAGE_KEY]: next });
+  await area.set({ [DEFAULT_ACTIVITY_KEY]: next });
   return next;
 }
 
-/** Calls `listener` whenever it's saved, from any view. Returns a function that stops it. */
 export function watchDefaultActivity(listener: (activity: DefaultActivity) => void): () => void {
   const onChanged = (changes: Record<string, chrome.storage.StorageChange>, area: string): void => {
-    const change = changes[STORAGE_KEY];
+    const change = changes[DEFAULT_ACTIVITY_KEY];
     if (area === "local" && change) listener(parseDefaultActivity(change.newValue));
   };
   chrome.storage.onChanged.addListener(onChanged);

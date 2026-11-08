@@ -32,7 +32,6 @@ const premid: ActivityManifest = {
   },
 };
 
-/** A native Activity that takes page data (the collector reads it). */
 const tunes: ActivityManifest = {
   info: {
     id: "tunes",
@@ -75,6 +74,7 @@ function fakePort(name: string, sender: Port["sender"]): FakePort {
 function setup(
   initial: Grants = { all: false, origins: ["*://example.com/*", "https://tunes.example/*"] },
   manifest: ActivityManifest = premid,
+  answer: () => Promise<string | null> = async () => JSON.stringify({ "player.title": "Song" }),
 ) {
   let connect: (port: Port) => void = () => {};
   let accessChanged: () => void = () => {};
@@ -101,7 +101,7 @@ function setup(
     },
     readPage: async (tabId, frameId, spec) => {
       reads.push({ tabId, frameId, spec });
-      return JSON.stringify({ "player.title": "Song" });
+      return answer();
     },
     loadManifest: async (id) => (id === PREMID ? manifest : null),
     saveState: async (id, patch) => {
@@ -194,7 +194,6 @@ describe("PageHost: PreMiD Activities", () => {
       info: { ...premid.info, variants: ["example", PREMID] },
     };
     const { host, registry } = setup(undefined, shared);
-    // The native one is chosen until someone picks PreMiD's.
     await host.setStates({ [PREMID]: { on: true } });
     expect(registry.list().map((info) => info.id)).toEqual(["tunes"]);
     await host.setStates({ [PREMID]: { on: true }, example: { use: PREMID } });
@@ -260,6 +259,31 @@ describe("PageHost: PreMiD Activities", () => {
     port.close();
     expect((await host.page(7, WATCH)).reported).toBeUndefined();
     expect(changed.at(-1)).toBe(7);
+  });
+
+  test("a tells that changes nothing for the script posts nothing, and a real change posts once", async () => {
+    const { host, page, setGrants } = setup();
+    await host.setStates(on);
+    const port = page();
+    port.send({ type: "hello", activity: PREMID, clientId: DEFAULT_CLIENT });
+    await settle();
+    const first = port.posted.length;
+
+    await host.setStates({ [PREMID]: { on: true }, tunes: { on: true } });
+    expect(port.posted).toHaveLength(first);
+
+    await setGrants({ all: false, origins: ["*://example.com/*", "https://tunes.example/*"] });
+    expect(port.posted).toHaveLength(first);
+
+    await host.setStates({ [PREMID]: { on: true, settings: { buttons: false } } });
+    expect(port.posted).toHaveLength(first + 1);
+    expect(port.posted.at(-1)).toEqual({
+      type: "settings",
+      values: { lang: "en", buttons: false },
+    });
+
+    await host.setStates(on);
+    expect(port.posted.at(-1)).toEqual({ type: "settings", values: { lang: "en", buttons: true } });
   });
 
   test("a first report refreshes at once; a burst after it, once more when it settles", async () => {
@@ -349,6 +373,35 @@ describe("PageHost: PreMiD Activities", () => {
       value: { "player.title": "Song" },
     });
     expect(saved).toEqual([[PREMID, { hidden: ["buttons"] }]]);
+  });
+
+  test("a script sending reads faster than they're answered can't build a backlog without end", async () => {
+    let release = (): void => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { host, page, reads } = setup(undefined, undefined, async () => {
+      await held;
+      return "1";
+    });
+    await host.setStates(on);
+    const port = page();
+    port.send({ type: "hello", activity: PREMID, clientId: DEFAULT_CLIENT });
+    const spec = { kind: "variables", paths: ["player.title"] };
+    for (let nonce = 0; nonce < 1000; nonce++) port.send({ type: "page", nonce, spec });
+    await settle();
+    // One read at a time, and only so many waiting behind it.
+    expect(reads).toHaveLength(1);
+    release();
+    await settle(10);
+    const answered = (): number =>
+      port.posted.filter((message) => (message as { type?: string }).type === "page-result").length;
+    expect(answered()).toBeGreaterThan(0);
+    expect(answered()).toBeLessThanOrEqual(64);
+
+    port.send({ type: "page", nonce: 5000, spec });
+    await settle(10);
+    expect(port.posted).toContainEqual({ type: "page-result", nonce: 5000, value: 1 });
   });
 
   test("a setting hidden again, or shown when it isn't hidden, is no change to save", async () => {
@@ -494,7 +547,6 @@ describe("PageHost: what runs for an Activity that's off", () => {
       granted: ["media", "thumbnails"],
       data: { media: { title: "Song", playing: true } },
     });
-    // A tab nobody has looked at: what it may read, and no script put into it.
     expect(await host.peek(12, TUNES)).toEqual({ granted: ["media", "thumbnails"] });
     expect(injected).toEqual([]);
     expect(started).toEqual([]);
@@ -560,7 +612,6 @@ describe("PageHost: tabs whose music or video is kept", () => {
     await settle();
 
     host.keepReading([9, 7]);
-    // Told where each stands when it connected, and the tabs kept told again.
     const told = [
       { type: "background", on: false },
       { type: "background", on: true },
@@ -569,7 +620,6 @@ describe("PageHost: tabs whose music or video is kept", () => {
     expect(background(premidPort)).toEqual(told);
     expect(background(other)).toEqual([{ type: "background", on: false }]);
 
-    // Told once: the same tabs again change nothing.
     host.keepReading([7, 9]);
     expect(background(kept)).toHaveLength(2);
     expect(background(premidPort)).toHaveLength(2);
@@ -619,7 +669,6 @@ describe("PageHost: tabs whose music or video is kept", () => {
     const plain = open(PAGE_DATA_PORT, { id: "self", url: TUNES.href, frameId: 0, tab: { id: 9 } });
     plain.send({ type: "hello", activity: "tunes" });
     await settle();
-    // Not kept: told so, in case it was told otherwise before the background restarted.
     expect(background(plain)).toEqual([{ type: "background", on: false }]);
   });
 

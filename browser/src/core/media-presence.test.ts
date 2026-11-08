@@ -8,7 +8,6 @@ const timed: Activity = { id: "radio", name: "Radio", timestamps: { start: 1, en
 const browsing: Activity = { id: "shop", name: "Shop", details: "Browsing" };
 const elapsed: Activity = { id: "game", name: "Game", timestamps: { start: 1 } };
 
-/** Resolves a tab to what it shows, for the tabs in `shows`; a tab not in it is gone. */
 const resolver =
   (shows: Map<number, Activity | null>) =>
   async (tabId: number): Promise<Activity | null> => {
@@ -131,7 +130,6 @@ describe("MediaTabs: choosing one", () => {
       [1, next],
       [2, film],
     ]);
-    // Tab 1 plays on and changes in the background; tab 2 was shared later and stays the one.
     expect((await tabs.pick(9, resolver(shows)))?.tab).toBe(2);
     expect((await tabs.pick(9, resolver(shows)))?.tab).toBe(2);
   });

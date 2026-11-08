@@ -47,7 +47,6 @@ const GUIDE = "premid:DiscordJS Guide";
 const GUIDE_CLIENT = "819865300173324288";
 const JUMMBOX = "premid:Jummbox";
 
-/** What the proxy answers for each host; anything else gets an empty page. */
 const PAGES = {
   "discordjs.guide":
     "<!doctype html><title>Slash commands | discord.js Guide</title><h1>Slash Commands</h1>",

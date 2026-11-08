@@ -10,7 +10,6 @@ describe("updateNotice", () => {
 
   test("a newer extension says nothing about Desktop unless GitHub lists a newer Desktop", () => {
     const state = { status: "connected", desktopVersion: "1.0.1", update: "desktop" } as const;
-    // The release that carries this very Desktop, a lookup that failed, and one not made yet.
     expect(updateNotice(state, "1.1.0", "1.0.1")).toBeNull();
     expect(updateNotice(state, "1.1.0", "1.0.0")).toBeNull();
     expect(updateNotice(state, "1.1.0", null)).toBeNull();

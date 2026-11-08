@@ -62,7 +62,6 @@ describe("PresenceRuntime", () => {
     expect(
       runtime.resolve({ url: new URL("https://unmatched.example"), title: "" }).activity?.id,
     ).toBe("compat:other");
-    // No page (a browser page) is only ever the fallback.
     expect(runtime.resolve(null).activity?.id).toBe("default");
 
     external = null;
@@ -114,7 +113,6 @@ describe("PresenceRuntime", () => {
     });
     expect(set.resolve(page).activity?.name).toBe("Chosen");
     expect(new PresenceRuntime(registry, { usable: () => false }).matches(page.url)).toBe(false);
-    // Usable is decided per page: an Activity without access to one site still runs on another.
     const perSite = new PresenceRuntime(registry, {
       usable: (info, url) => info.id !== "first" || url.hostname === "granted.example",
     });
@@ -156,7 +154,6 @@ describe("PresenceRuntime", () => {
     const LOGO = "https://music.youtube.com/img/favicon_32.png";
     const COVER = "https://lh3.googleusercontent.com/cover=w544-h544";
 
-    /** A music site: the song's cover when the page gave one, nothing else. */
     function music(source: "parousia" | "premid", icon?: string): PresenceRuntime {
       const registry = new ActivityRegistry();
       registry.register({
@@ -184,7 +181,6 @@ describe("PresenceRuntime", () => {
     });
 
     test("is the site's logo, not Discord's Application icon, when the Activity has none", () => {
-      // Paused, browsing, thumbnails switched off, or a page with no artwork: no image of its own.
       for (const source of ["parousia", "premid"] as const) {
         const { activity } = music(source, LOGO).resolve(page());
         expect(activity?.assets).toEqual({ largeImage: LOGO });
@@ -209,7 +205,6 @@ describe("PresenceRuntime", () => {
       expect(runtime.resolve(page({ favicon })).activity?.assets).toEqual({
         largeImage: "https://music.example/static/favicon-192.png",
       });
-      // The catalog's icon is the site's logo: it comes first.
       expect(music("parousia", LOGO).resolve(page({ favicon })).activity?.assets).toEqual({
         largeImage: LOGO,
       });
@@ -218,7 +213,6 @@ describe("PresenceRuntime", () => {
     test("is left out, so Discord's own icon shows, only with no site image at all", () => {
       const runtime = music("parousia");
       expect(runtime.resolve(page()).activity?.assets).toBeUndefined();
-      // A favicon Discord can't show doesn't count.
       expect(
         runtime.resolve(page({ favicon: "https://music.example/favicon.ico" })).activity?.assets,
       ).toBeUndefined();
@@ -282,7 +276,6 @@ describe("PresenceRuntime: music or video kept from another tab", () => {
   test("shown when the page has nothing of its own, ahead of the fallback", () => {
     const runtime = new PresenceRuntime(registry, { media: () => kept, fallback: () => fallback });
     expect(runtime.resolve(nowhere).activity?.id).toBe("player");
-    // A browser page, which no Activity covers, is the same.
     expect(runtime.resolve(null).activity?.id).toBe("player");
   });
 

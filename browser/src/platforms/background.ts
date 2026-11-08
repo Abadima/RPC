@@ -3,7 +3,8 @@ import { DiscordRpcServerLink } from "../compat/discord-rpc-server";
 import { MALSYNC_NAME, MalSyncSource } from "../compat/malsync";
 import { PAGE_DATA_KINDS, type Activity } from "../core/activity";
 import {
-  loadActivityStates,
+  ACTIVITY_STATES_KEY,
+  parseActivityStates,
   settingValues,
   watchActivityStates,
   type ActivityStates,
@@ -12,9 +13,10 @@ import { webSocketChannel } from "../core/channel";
 import { describeClient } from "../core/client-name";
 import {
   DEFAULT_ACTIVITY_ID,
+  DEFAULT_ACTIVITY_KEY,
   EMPTY_DEFAULT_ACTIVITY,
   defaultActivityToShow,
-  loadDefaultActivity,
+  parseDefaultActivity,
   watchDefaultActivity,
   type DefaultActivity,
 } from "../core/default-activity";
@@ -28,9 +30,10 @@ import { PresenceController } from "../core/lifecycle";
 import { MediaTabs, isMediaActivity } from "../core/media-presence";
 import {
   DEFAULT_PREFERENCES,
+  PREFERENCES_KEY,
   applyPreferences,
   enabledPlatforms,
-  loadPreferences,
+  parsePreferences,
   watchPreferences,
   type Preferences,
 } from "../core/preferences";
@@ -49,7 +52,6 @@ import type { ActivityManifest } from "../activities/manifest";
 import { limitPageData } from "../premid/presence-data";
 
 export interface Background {
-  /** The Activity currently detected on the active tab, if any. */
   getActivity: () => Activity | null;
   getState: () => ConnectionState;
 }
@@ -72,7 +74,6 @@ export const KEEPALIVE_MS = 20_000;
 const MEDIA_TABS_KEY = "mediaTabs";
 const MAX_MEDIA_TABS = 64;
 
-/** The tab numbers written down, as far as they're sound: the most recent last. */
 function parseMediaTabs(value: unknown): number[] {
   if (!Array.isArray(value)) return [];
   const tabs: unknown[] = value;
@@ -82,15 +83,12 @@ function parseMediaTabs(value: unknown): number[] {
 }
 
 /**
- * An MV3 background is stopped after about 30 seconds without extension
- * events or API calls, and its connections close with it: Desktop and
- * Discord-RPC-Extension's app then drop the presence being shared. While an
- * Activity is shared, a cheap API call every `KEEPALIVE_MS` keeps it
- * running. Socket traffic isn't enough: measured, Firefox 150 stops an event
- * page with an open, busy WebSocket, while `runtime.getPlatformInfo()`
- * resets its idle timer (as it does Chromium's, since Chrome 110).
- *
- * Returns a switch: `true` while there's something to share.
+ * An MV3 background stops after about 30 s without extension events or API
+ * calls, closing its connections, so Desktop and Discord-RPC-Extension's app
+ * drop the presence. While an Activity is shared, a cheap call every
+ * `KEEPALIVE_MS` keeps it running: measured, Firefox 150 stops an event page
+ * with a busy WebSocket, while `runtime.getPlatformInfo()` resets the idle
+ * timer (as in Chromium since 110).
  */
 export function backgroundKeepalive(
   // Best-effort: a test double, or a context without the API, keeps running.
@@ -108,7 +106,6 @@ export function backgroundKeepalive(
   };
 }
 
-/** What the background needs from Discord-RPC-Extension's app link (see compat/discord-rpc-server.ts). */
 export interface DiscordBridge extends PresenceTransport {
   setEnabled(enabled: boolean): void;
   /** Steps aside while Parousia Desktop is the way to Discord. */
@@ -118,7 +115,6 @@ export interface DiscordBridge extends PresenceTransport {
   onStateChange(listener: (state: BridgeState) => void): () => void;
 }
 
-/** Each Activity shows in Discord as its own Discord Application, falling back to Parousia's. */
 export function createDiscordBridge(): DiscordBridge {
   return new DiscordRpcServerLink({
     clientIdFor: (activity) => activity.discordClientId ?? PAROUSIA_DISCORD_CLIENT_ID,
@@ -148,7 +144,6 @@ export function uiActivity(
   };
 }
 
-/** The Activity being shared, as UIs show it, and news of every change to it. */
 interface SharedActivity {
   get(): UiActivity | null;
   onChange(listener: (activity: UiActivity | null) => void): () => void;
@@ -175,9 +170,7 @@ function serveUi(link: DesktopLink, discord: DiscordBridge, shared: SharedActivi
     const post = (event: UiEvent): void => {
       try {
         port.postMessage(event);
-      } catch {
-        // The UI closed between the event and this post.
-      }
+      } catch {}
     };
     const release = link.acquire();
     const releaseDiscord = discord.acquire();
@@ -192,7 +185,6 @@ function serveUi(link: DesktopLink, discord: DiscordBridge, shared: SharedActivi
       const request = parseUiRequest(message);
       if (!request) return;
       if (request.type === "reconnect") {
-        // The outcome arrives as state changes.
         link.reconnect();
         return;
       }
@@ -222,21 +214,15 @@ function restrictStorage(): void {
   if (!("setAccessLevel" in local)) return;
   try {
     void local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" }).catch(() => {});
-  } catch {
-    // Not supported for this storage area here.
-  }
+  } catch {}
 }
 
 export interface BackgroundOptions {
-  /** The native Activities (see core/activities.ts); PreMiD ones join it as they're turned on. */
   registry?: ActivityRegistry;
-  /** The native Activities' manifests: the page host runs the collector for ones that take page data. */
   natives?: readonly ActivityManifest[];
   link?: DesktopLink;
   bridge?: DiscordBridge;
-  /** How Activities reach pages; by default, the extension's own APIs. */
   pages?: PageBrowser;
-  /** Asks the MAL-Sync extension for a tab's presence; by default through the browser (see compat/malsync.ts). */
   askMalSync?: (tabId: number) => Promise<unknown>;
 }
 
@@ -259,7 +245,6 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
   let defaultActivity: DefaultActivity = EMPTY_DEFAULT_ACTIVITY;
   /** When the Default Activity started being shown, so its elapsed time doesn't restart on every refresh. */
   let defaultSince: number | null = null;
-  /** Clears presence once the idle timeout runs out after the browser loses focus. */
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   /** The idle timeout ran out: nothing is shared again until the browser has focus, or sound plays. */
   let idleExpired = false;
@@ -273,7 +258,6 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
     // Without a session store the tabs are kept only until the background stops.
     void chrome.storage.session?.set({ [MEDIA_TABS_KEY]: tabs }).catch(() => {});
   });
-  /** The tabs written down before the background last stopped, put back once, before they're first needed. */
   let restoring: Promise<void> | null = null;
   const restoreMediaTabs = (): Promise<void> =>
     (restoring ??= (async () => {
@@ -281,17 +265,13 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
         const written = (await chrome.storage.session.get(MEDIA_TABS_KEY))[MEDIA_TABS_KEY];
         // Switched off while this was being read: nothing comes back.
         if (preferences.showMediaPresence) mediaTabs.restore(parseMediaTabs(written));
-      } catch {
-        // No session store here, or nothing written.
-      }
+      } catch {}
     })());
-  /** The music or video kept from another tab for the page being shared, which `refresh` decides before it resolves. */
   let kept: Activity | null = null;
   /** The last refresh found no Activity of its own on the tab shared, so those other tabs matter. */
   let watchingMedia = false;
   /** What's shared is that kept music or video, not what the tab shared has; the popup says so. */
   let keptShown = false;
-  /** What UIs were last told about that. */
   let keptTold = false;
 
   const pages = new PageHost(
@@ -299,12 +279,12 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
     options.pages ?? chromePageBrowser(),
     options.natives ?? [],
     (tabId) => {
-      if (tabId === activeTabId || (watchingMedia && mediaTabs.has(tabId))) void refresh();
+      if (tabId === activeTabId || (watchingMedia && mediaTabs.has(tabId))) refresh();
     },
   );
   const malSync = new MalSyncSource({
     ...(options.askMalSync && { ask: options.askMalSync }),
-    onChange: () => void refresh(),
+    onChange: () => refresh(),
   });
   const runtime = new PresenceRuntime(registry, {
     usable: (info, url) => pages.usable(info, url),
@@ -318,10 +298,11 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
     // Activity's. Its cover is the series itself: without media details it isn't a picture to share.
     external: () => {
       const shown = malSync.current();
+      if (!shown) return null;
       const allowed = preferences.shareMediaDetails
         ? PAGE_DATA_KINDS.filter((kind) => preferences.pageData[kind])
         : [];
-      return shown && limitPageData(shown, allowed, { name: MALSYNC_NAME });
+      return limitPageData(shown, allowed, { name: MALSYNC_NAME });
     },
   });
   const keepAlive = backgroundKeepalive();
@@ -342,7 +323,6 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
   });
 
   const watchers = new Set<(activity: UiActivity | null) => void>();
-  /** The shared Activity as UIs show it: with whether it has settings to change from the popup. */
   const shown = (activity: Activity | null): UiActivity | null => {
     const info = activity && activity.id !== DEFAULT_ACTIVITY_ID ? registry.get(activity.id) : null;
     return uiActivity(activity, (info?.settings?.length ?? 0) > 0, keptShown);
@@ -364,7 +344,6 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
       announce(activity);
     },
   });
-  /** Publishes the page's presence. UIs are told if it now comes from another tab, or no longer does, though it is as it was. */
   const update = (
     page: Page | null,
     share: (activity: Activity | null) => Activity | null,
@@ -410,7 +389,7 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
       idleTimer = null;
       idleExpired = true;
       // Music or video kept from another tab goes on with its sound: look again rather than clear.
-      if (preferences.showMediaPresence) void refresh();
+      if (preferences.showMediaPresence) refresh();
       else controller.clear();
     }, minutes * 60_000);
     return true;
@@ -462,10 +441,36 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
     return own === null ? ((await mediaTabs.pick(tabId, mediaOf))?.media ?? null) : null;
   }
 
-  /** Counts refreshes, so one overtaken by a newer refresh or a preference change publishes nothing. */
   let passes = 0;
+  /**
+   * One refresh runs at a time, so a burst of tab events costs the running
+   * lookup plus one rerun. A request during a run also overtakes it: what it
+   * found is already out of date, and publishing it would make Desktop hold
+   * back the rerun's update for its 2-second interval.
+   */
+  let refreshRunning = false;
+  let refreshAgain = false;
+  /** Until the stored settings are read: the refresh at the end of startup covers every request before it. */
+  let starting = true;
 
-  async function refresh(): Promise<void> {
+  function refresh(): void {
+    if (starting) return;
+    if (refreshRunning) {
+      passes++;
+      refreshAgain = true;
+      return;
+    }
+    refreshRunning = true;
+    void runRefresh().finally(() => {
+      refreshRunning = false;
+      if (refreshAgain) {
+        refreshAgain = false;
+        refresh();
+      }
+    });
+  }
+
+  async function runRefresh(): Promise<void> {
     const pass = ++passes;
     const overtaken = (tabId: number): boolean => pass !== passes || tabId !== activeTabId;
     if (activeTabId === null) {
@@ -508,7 +513,6 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
         return;
       }
       if (!tab.url) {
-        // A page the extension can't see (a browser page): only music or video kept, or the Default Activity, if one is set up.
         malSync.watch(null);
         const found = await keptFor(tabId, tab, null);
         if (overtaken(tabId)) return;
@@ -518,7 +522,6 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
       }
       const url = new URL(tab.url);
       malSync.watch(/^https?:$/.test(url.protocol) ? { id: tabId, url } : null);
-      // Site access, the page data it's granted, and what the page gave, for an Activity that reads pages.
       const page = await pages.page(tabId, url);
       if (overtaken(tabId)) return;
       const detail: Page = {
@@ -545,7 +548,6 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
     }
   }
 
-  /** Under "Pause activity", private tabs run nothing: their music is forgotten, and scripts already running there stop. */
   async function stopPrivateTabs(): Promise<void> {
     const tabs: chrome.tabs.Tab[] = await chrome.tabs.query({});
     const privateTabs = tabs.flatMap((tab) =>
@@ -572,30 +574,22 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
     link.setPlatforms(enabledPlatforms(next));
     bridge.setEnabled(next.platforms.discord && next.discordRpcExtension);
     malSync.setEnabled(next.malSync);
-    void refresh();
+    refresh();
   };
   watchPreferences(usePreferences);
-  loadPreferences().then(usePreferences, () =>
-    logger.info("preferences unreadable, using the defaults"),
-  );
 
   const useStates = async (next: ActivityStates): Promise<void> => {
     states = next;
     await pages.setStates(next);
-    void refresh();
+    refresh();
   };
   watchActivityStates((next) => void useStates(next));
-  loadActivityStates().then(
-    (next) => useStates(next),
-    () => useStates({}),
-  );
 
   const useDefault = (next: DefaultActivity): void => {
     defaultActivity = next;
-    void refresh();
+    refresh();
   };
   watchDefaultActivity(useDefault);
-  loadDefaultActivity().then(useDefault, () => {});
 
   // What's shared is the active tab of the focused window. A tab activated
   // in another window (one opening in the background, or the tab next to a
@@ -604,7 +598,7 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
   chrome.tabs.onActivated.addListener(({ tabId, windowId }) => {
     if (focusedWindow !== null && windowId !== focusedWindow) return;
     activeTabId = tabId;
-    void refresh();
+    refresh();
   });
 
   // Chromium throws "This event does not support filters" for a filter
@@ -629,7 +623,7 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
         mediaTabs.has(tabId) &&
         (changeInfo.audible !== undefined || changeInfo.url !== undefined || titleMatters())
       ) {
-        void refresh();
+        refresh();
       }
       return;
     }
@@ -640,7 +634,7 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
       loaded ||
       changeInfo.audible !== undefined
     ) {
-      void refresh();
+      refresh();
     }
   });
 
@@ -654,14 +648,14 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
       controller.clear();
     } else if (keptFrom && watchingMedia) {
       // The music or video being kept was in this tab: another may take over, or nothing is left.
-      void refresh();
+      refresh();
     }
   });
 
   const focusWindow = (windowId: number): void => {
     windowFocused = windowId !== chrome.windows.WINDOW_ID_NONE;
     if (!windowFocused || windowId === focusedWindow) {
-      void refresh();
+      refresh();
       return;
     }
     focusedWindow = windowId;
@@ -669,9 +663,9 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
       ([tab]) => {
         if (focusedWindow !== windowId) return;
         activeTabId = tab?.id ?? null;
-        void refresh();
+        refresh();
       },
-      () => void refresh(),
+      () => refresh(),
     );
   };
   chrome.windows.onFocusChanged.addListener(focusWindow);
@@ -689,11 +683,31 @@ export function startBackground(appName: string, options: BackgroundOptions = {}
     );
   });
 
+  // What's stored is read in one call and applied Settings first, and the
+  // first refresh comes after it. Until then every setting is at its default,
+  // which shares more than someone may have chosen (media details, page data),
+  // so the order separate reads finish in can't decide what leaves the browser.
+  // The tab is asked for last, so the answer is as fresh as the refresh.
   void (async () => {
-    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    activeTabId = tab?.id ?? null;
-    focusedWindow ??= tab?.windowId ?? null;
-    await refresh();
+    try {
+      const stored = await chrome.storage.local
+        .get([PREFERENCES_KEY, ACTIVITY_STATES_KEY, DEFAULT_ACTIVITY_KEY])
+        .catch((): Record<string, unknown> => {
+          logger.info("settings unreadable, using the defaults");
+          return {};
+        });
+      usePreferences(parsePreferences(stored[PREFERENCES_KEY]));
+      await useStates(parseActivityStates(stored[ACTIVITY_STATES_KEY]));
+      useDefault(parseDefaultActivity(stored[DEFAULT_ACTIVITY_KEY]));
+      const [tab] = await chrome.tabs
+        .query({ active: true, lastFocusedWindow: true })
+        .catch((): chrome.tabs.Tab[] => []);
+      activeTabId = tab?.id ?? null;
+      focusedWindow ??= tab?.windowId ?? null;
+    } finally {
+      starting = false;
+      refresh();
+    }
   })();
 
   logger.info("initialized");

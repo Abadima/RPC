@@ -36,7 +36,6 @@ import {
 import { readPage } from "./page-world";
 import { COLLECTOR_KEY } from "./collector";
 
-/** Just enough of `runtime.Port` for this (and for tests' fakes). */
 export interface Port {
   name: string;
   sender?: { id?: string; url?: string; frameId?: number; tab?: { id?: number } };
@@ -46,18 +45,13 @@ export interface Port {
   onDisconnect: { addListener(listener: () => void): void };
 }
 
-/** The browser APIs the host uses; `chromePageBrowser` is the real one. */
 export interface PageBrowser {
   extensionId: string;
   onConnect(listener: (port: Port) => void): void;
-  /** Site access was granted or taken back (from the dashboard, or the browser's own settings). */
   onAccessChange(listener: () => void): void;
   grants(): Promise<Grants>;
-  /** Injects packaged scripts into a tab's top frame, or every frame it may; rejects without access. */
   inject(tabId: number, files: string[], allFrames: boolean): Promise<void>;
-  /** Starts the collector (already injected) in a tab for one Activity. */
   startCollector(tabId: number, activity: string): Promise<void>;
-  /** Runs `readPage` in one frame's own world. */
   readPage(tabId: number, frameId: number, spec: PageSpec): Promise<string | null>;
   loadManifest(id: string): Promise<ActivityManifest | null>;
   saveState(id: string, patch: ActivityState): Promise<void>;
@@ -74,7 +68,6 @@ function startInPage(key: string, activity: string): void {
 /** The extension's own APIs. `scripting` is optional, so it's looked up when needed. */
 export function chromePageBrowser(): PageBrowser {
   const scripting = (): typeof chrome.scripting => {
-    // Undefined until the optional `scripting` permission is granted.
     const api = "scripting" in chrome ? chrome.scripting : undefined;
     if (!api) throw new Error("the scripting permission isn't granted");
     return api;
@@ -121,6 +114,12 @@ export function chromePageBrowser(): PageBrowser {
 const REPORT_INTERVAL_MS = 200;
 /** Iframe scripts are injected again at most this often per page. */
 const FRAMES_INTERVAL_MS = 2000;
+/**
+ * Messages one port may have waiting: page reads run in the page, so a script
+ * sending faster would make the background hold everything. Past this they're
+ * dropped; an unanswered read gives up on its own (src/premid/page.ts).
+ */
+const MAX_QUEUED = 64;
 
 function webUrl(value: string | undefined): URL | null {
   if (!value) return null;
@@ -132,12 +131,12 @@ function webUrl(value: string | undefined): URL | null {
   }
 }
 
-/** Something running in a page for an Activity: its port, and the page it came from. */
 interface Live {
   port: Port;
   manifest: ActivityManifest;
   url: URL;
   kind: "premid" | "frame" | "collector";
+  told?: string;
 }
 
 type Report =
@@ -153,26 +152,20 @@ type Report =
 const isPremid = (id: string): boolean => id.startsWith(PREMID_ID_PREFIX);
 
 /**
- * Runs what Activities need in pages, for the background script, the same
- * way for both kinds: a native Activity that takes page data gets
- * Parousia's collector (collector.ts); a PreMiD Activity gets its own script
- * on PreMiD's API (src/premid/page.ts). Either way, only in the active tab,
- * only on a page the Activity matches, and only where its site was granted:
- * an Activity that reads pages is unavailable where it isn't. Page data kinds
- * switched off in Settings > Privacy are never collected (native) or never
- * shown (PreMiD).
+ * Runs what Activities need in pages: Parousia's collector for a native Activity
+ * that takes page data, a PreMiD Activity's own script on PreMiD's API. Only in
+ * the active tab, on a page the Activity matches, where its site was granted;
+ * Privacy's switched-off kinds are never collected (native) or shown (PreMiD).
  *
  * Everything a page sends is untrusted: a port is served only from this
- * extension's content script in a tab, for an Activity that's on and matches
- * the page it came from, and every message is parsed and bounded
- * (messages.ts). Taking back a site's access stops what runs there at once.
- * PreMiD manifests are read only once one is turned on.
+ * extension's content script, for an Activity that's on and matches the page,
+ * and every message is parsed and bounded (messages.ts). Taking back a site's
+ * access stops what runs there at once.
  */
 export class PageHost {
   private states: ActivityStates = {};
   private pageData: PageDataPreferences = DEFAULT_PREFERENCES.pageData;
   private grantsNow: Promise<Grants> | null = null;
-  /** What `grantsNow` last settled to, for synchronous checks. */
   private granted: Grants = NO_GRANTS;
   /** Activities that read pages and are on: PreMiD's once loaded, native ones that take page data. */
   private readonly running = new Map<string, ActivityManifest>();
@@ -180,11 +173,8 @@ export class PageHost {
   private readonly live = new Map<number, Set<Live>>();
   private readonly reports = new Map<number, Report>();
   private readonly pending = new Map<number, ReturnType<typeof setTimeout>>();
-  /** Tabs that reported again while `pending`, to refresh once it ends. */
   private readonly again = new Set<number>();
-  /** The URL each tab's scripts were last injected for. */
   private readonly visited = new Map<number, string>();
-  /** Tabs whose music or video is kept: their scripts read even while the tab isn't shown. */
   private readonly background = new Set<number>();
   /** Settles once the first states are in, so a page connecting right after a restart isn't turned away. */
   private readonly ready = Promise.withResolvers<void>();
@@ -193,7 +183,6 @@ export class PageHost {
     private readonly registry: ActivityRegistry,
     private readonly browser: PageBrowser,
     natives: readonly ActivityManifest[],
-    /** A tab's page data or report changed. */
     private readonly changed: (tabId: number) => void,
   ) {
     this.natives = new Map(
@@ -209,7 +198,6 @@ export class PageHost {
     browser.onAccessChange(() => void this.accessChanged());
   }
 
-  /** Whether anything that reads pages is on, so page loads are worth watching. */
   get active(): boolean {
     return this.running.size > 0;
   }
@@ -225,7 +213,6 @@ export class PageHost {
     return this.grantsNow;
   }
 
-  /** Whether `info` may run at `url`: it's on, and its site is granted if it reads pages. */
   usable(info: ActivityInfo, url: URL): boolean {
     return isActivityOn(info, this.states) && canRun(info, url, this.granted);
   }
@@ -235,7 +222,6 @@ export class PageHost {
     return manifest?.info.id === id && manifest.script ? manifest : null;
   }
 
-  /** Settings > Privacy changed what Activities may read: running scripts are told. */
   setPageData(pageData: PageDataPreferences): void {
     if (PAGE_DATA_KINDS.every((kind) => pageData[kind] === this.pageData[kind])) return;
     this.pageData = pageData;
@@ -245,7 +231,6 @@ export class PageHost {
     }
   }
 
-  /** What's turned on changed: registers PreMiD Activities as they're turned on, stops what's turned off. */
   async setStates(states: ActivityStates): Promise<void> {
     this.states = states;
     const wanted = Object.keys(states).filter(
@@ -284,20 +269,25 @@ export class PageHost {
     this.ready.resolve();
   }
 
-  /** What a running script in a page is told: PreMiD's its settings, the collector what it may read. */
   private tell(live: Live): void {
     if (live.kind === "frame") return;
     const allowed = allowedData(live.manifest.info, this.pageData);
-    if (live.kind === "collector") {
-      const message: ToCollector =
-        allowed.length > 0 ? { type: "collect", kinds: allowed } : { type: "stop" };
-      this.post(live.port, message);
-      return;
-    }
-    this.post(live.port, {
-      type: "settings",
-      values: { ...live.manifest.script?.fixed, ...settingValues(live.manifest.info, this.states) },
-    });
+    const message: ToPage | ToCollector =
+      live.kind === "collector"
+        ? allowed.length > 0
+          ? { type: "collect", kinds: allowed }
+          : { type: "stop" }
+        : {
+            type: "settings",
+            values: {
+              ...live.manifest.script?.fixed,
+              ...settingValues(live.manifest.info, this.states),
+            },
+          };
+    const told = JSON.stringify(message);
+    if (live.told === told) return;
+    live.told = told;
+    this.post(live.port, message);
   }
 
   /**
@@ -310,10 +300,6 @@ export class PageHost {
     return this.read(tabId, url, true);
   }
 
-  /**
-   * The same for a tab that isn't the one being shared, for music or video
-   * kept from it: what its scripts last reported, and nothing injected.
-   */
   peek(tabId: number, url: URL): Promise<Pick<Page, "granted" | "data" | "reported">> {
     return this.read(tabId, url, false);
   }
@@ -370,7 +356,6 @@ export class PageHost {
     }
   }
 
-  /** A new document loaded in the tab: its scripts need injecting again. */
   loaded(tabId: number): void {
     this.visited.delete(tabId);
   }
@@ -399,7 +384,6 @@ export class PageHost {
     for (const live of this.live.get(tabId) ?? []) this.post(live.port, { type: "background", on });
   }
 
-  /** The tab closed. */
   forget(tabId: number): void {
     this.background.delete(tabId);
     this.visited.delete(tabId);
@@ -425,7 +409,6 @@ export class PageHost {
     }
   }
 
-  /** Access was granted or taken back: what runs on sites no longer granted stops now. */
   private async accessChanged(): Promise<void> {
     this.grantsNow = null;
     this.visited.clear();
@@ -448,7 +431,6 @@ export class PageHost {
     port.disconnect();
   }
 
-  /** Stops every script `which` picks, and drops what they reported. */
   private stop(which: (live: Live) => boolean): void {
     for (const [tabId, lives] of this.live) {
       for (const live of lives) {
@@ -498,7 +480,6 @@ export class PageHost {
     this.post(port, { type: "page-result", nonce, value });
   }
 
-  /** Whether `manifest` may run as `kind` on the page at `url` (with `granted` sites). */
   private allowed(
     manifest: ActivityManifest,
     kind: Live["kind"],
@@ -518,11 +499,7 @@ export class PageHost {
     const iframe = manifest.script.iframe;
     if (!iframe) return false;
     if (iframe.regExp === null) return true;
-    try {
-      return compileMatch({ regExp: iframe.regExp })(url);
-    } catch {
-      return false;
-    }
+    return compileMatch({ regExp: iframe.regExp })(url);
   }
 
   private serve(port: Port, kind: Live["kind"]): void {
@@ -634,8 +611,16 @@ export class PageHost {
 
     // In order, once the Activities that are on are known (the background may have just started).
     let queue = this.ready.promise;
+    let queued = 0;
     port.onMessage.addListener((raw) => {
-      queue = queue.then(() => handle(raw)).catch(() => {});
+      if (queued >= MAX_QUEUED) return;
+      queued++;
+      queue = queue
+        .then(() => handle(raw))
+        .catch(() => {})
+        .finally(() => {
+          queued--;
+        });
     });
     port.onDisconnect.addListener(() => {
       if (live) this.live.get(tabId)?.delete(live);

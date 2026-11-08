@@ -28,6 +28,7 @@ function harness(
     clientName: "Test Browser",
     version,
     setTimer: timers.setTimer,
+    now: timers.now,
   });
   const states: ConnectionState[] = [];
   connection.onStateChange((state) => states.push(state));
@@ -105,9 +106,9 @@ describe("DesktopConnection demand", () => {
     connection.setPlatforms(["discord", "stoat"]);
     expect(platforms()).toHaveLength(1);
     connection.setPlatforms(["stoat"]);
+    timers.advance(250);
     expect(platforms()).toEqual([["discord", "stoat"], ["stoat"]]);
 
-    // And after Desktop comes back.
     ws.opened[0]?.end();
     timers.advance(10_000);
     await settle();
@@ -129,6 +130,7 @@ describe("DesktopConnection demand", () => {
     connection.send(createPresence(activity));
     await settle();
     connection.send(createPresence(null));
+    timers.advance(250);
     expect(desktop.presences().at(-1)).toMatchObject({ activity: null });
     expect(ws.opened[0]?.closedByClient).toBe(false);
 
@@ -147,6 +149,30 @@ describe("DesktopConnection demand", () => {
     release();
     timers.advance(30_000);
     expect(connection.getState().status).toBe("idle");
+  });
+
+  test("Presence goes out under Desktop's rate limit, the latest winning, and at once after a pause", async () => {
+    const desktop = new FakeDesktop();
+    const { connection, timers } = harness(fakeChannel(desktop));
+    connection.send(createPresence({ ...activity, details: "0" }));
+    await settle();
+    for (let tick = 1; tick <= 100; tick++) {
+      connection.send(createPresence({ ...activity, details: String(tick) }));
+      timers.advance(100);
+    }
+    timers.advance(250);
+    const details = desktop
+      .presences()
+      .map((presence) => (presence as { activity: { details: string } }).activity.details);
+    // Desktop closes a connection past a burst of 20 and 5 a second (link/session.rs).
+    expect(details.length).toBeLessThanOrEqual(1 + 10 * 4 + 1);
+    expect(details.at(-1)).toBe("100");
+    expect(connection.getState().status).toBe("connected");
+    expect(timers.pending()).toBe(0);
+
+    timers.advance(1000);
+    connection.send(createPresence({ ...activity, details: "after a pause" }));
+    expect(desktop.presences()).toHaveLength(details.length + 1);
   });
 
   test("sends nothing but what's needed: no pings, and no timers while connected", async () => {

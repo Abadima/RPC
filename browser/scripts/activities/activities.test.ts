@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hostIds, manifestShard, parseCatalog, parseShard } from "../../src/activities/manifest";
@@ -9,11 +9,13 @@ import { activityId, folderLetter, websiteFolders } from "./discover";
 import { versionFrom } from "./metadata";
 import { discover, linkVariants, websiteKey } from "./pipeline";
 import {
+  compilePremid,
   descriptionFiles,
   extractClientIds,
   mapPremidSettings,
   readDescriptions,
   wrapScript,
+  type PremidFound,
 } from "./premid";
 import { SOURCE_ENV } from "./sources";
 
@@ -45,12 +47,12 @@ describe("one pipeline for both sources", () => {
   });
 
   test("PreMiD's translated descriptions are kept for the languages the views have, and go to one file each", async () => {
-    // Trimmed; Spanish isn't a language of the views; an empty one is no translation.
     expect(
       readDescriptions({ en: "x", fr: " Bonjour ", de: "Hallo", es: "Hola", ja: " ", ru: 4 }),
     ).toEqual({
       fr: "Bonjour",
       de: "Hallo",
+      es: "Hola",
     });
     expect(readDescriptions({ zh: "x".repeat(1000) }).zh).toHaveLength(256);
     expect(readDescriptions("Example")).toEqual({});
@@ -115,7 +117,6 @@ describe("one pipeline for both sources", () => {
       iframe: { regExp: "^https?[:][/][/]player[.]example[/]" },
       fixed: { lang: "en" },
     });
-    // What differs is only what each needs to run: a module, or a script.
     expect(Object.keys(tunes ?? {}).sort()).toEqual(["info", "match"]);
     expect(Object.keys(example ?? {}).sort()).toEqual(["info", "match", "script"]);
   });
@@ -220,7 +221,6 @@ describe("the identity of a website across sources", () => {
     expect(websiteKey(activityId("YouTube Music"))).not.toBe(websiteKey(activityId("YouTube")));
 
     const native = [{ site: activityId("DiscordJS"), manifest: entry("discordjs", "parousia") }];
-    // A different display name says nothing; the folder is what counts.
     const premid = [
       { site: activityId("Discord.js"), manifest: entry("premid:Discord.js", "premid", "Docs") },
       { site: activityId("Discord Bots"), manifest: entry("premid:Discord Bots", "premid") },
@@ -317,13 +317,18 @@ describe("PreMiD Activities (PreMiD/Activities)", () => {
   });
 
   test("a script's wrapper is as short as it can be: it's in every packaged script", () => {
-    expect(wrapScript("CODE;", "premid:A", {}, false)).toBe(
-      'globalThis.__pmd?.bind("premid:A",(Presence,iFrame,Slideshow,SlideshowSlide,MIN_SLIDE_TIME)=>{\n' +
-        "CODE;\n});\n",
+    expect(wrapScript("new Presence({});", "premid:A", {}, false)).toBe(
+      'globalThis.__pmd?.bind("A",({Presence})=>{\nnew Presence({});\n});\n',
     );
-    const frame = wrapScript("CODE;", "premid:A", { "a.b": "c" }, true);
-    expect(frame).toStartWith('globalThis.__pmd?.bindFrame("premid:A",(');
+    const frame = wrapScript("new iFrame;", "premid:A", { "a.b": "c" }, true);
+    expect(frame).toStartWith('globalThis.__pmd?.bindFrame("A",({iFrame})=>{');
     expect(frame).toEndWith('\n},{"a.b":"c"});\n');
+    expect(
+      wrapScript("new Presence({}),new Slideshow,MIN_SLIDE_TIME;", "premid:B", {}, false),
+    ).toStartWith('globalThis.__pmd?.bind("B",({Presence,Slideshow,MIN_SLIDE_TIME})=>{');
+    expect(wrapScript("SlideshowSlide;", "premid:C", {}, false)).toStartWith(
+      'globalThis.__pmd?.bind("C",({SlideshowSlide})=>{',
+    );
   });
 
   test("settings map to Parousia's: switches, choices by index, text, numbers, and conditions", () => {
@@ -373,6 +378,70 @@ describe("PreMiD Activities (PreMiD/Activities)", () => {
   });
 });
 
+describe("compiling a PreMiD Activity", () => {
+  async function checkout(sources: Record<string, Record<string, string>>): Promise<string> {
+    const root = await mkdtemp(join(tmpdir(), "premid-compile-"));
+    await mkdir(join(root, "premid", "src"), { recursive: true });
+    await writeFile(join(root, "premid", "src", "index.ts"), "export const helper = 1;\n");
+    await writeFile(join(root, "outside.txt"), "BUILD-MACHINE-SECRET");
+    for (const [name, files] of Object.entries(sources)) {
+      const dir = join(root, "websites", name[0] ?? "X", name);
+      await mkdir(dir, { recursive: true });
+      for (const [file, text] of Object.entries(files)) await writeFile(join(dir, file), text);
+    }
+    return root;
+  }
+
+  const found = (root: string, name: string): PremidFound => ({
+    site: name.toLowerCase(),
+    manifest: {
+      info: { id: `premid:${name}`, name, hosts: ["example.com"], source: "premid" },
+      match: { regExp: "^https://example[.]com/" },
+      script: { file: "", clientIds: ["503557087041683458"] },
+    },
+    dir: join(root, "websites", name[0] ?? "X", name),
+    strings: {},
+    descriptions: {},
+  });
+
+  test("an Activity's files and PreMiD's helpers are bundled, and nothing else on the machine", async () => {
+    const root = await checkout({
+      Honest: {
+        "presence.ts":
+          'import { helper } from "premid";\nimport { x } from "./util.js";\nconsole.log(helper, x);\n',
+        "util.ts": "export const x = 2;\n",
+      },
+      Upward: {
+        "presence.ts":
+          'import s from "../../../outside.txt" with { type: "text" };\nconsole.log(s);\n',
+      },
+      Absolute: {
+        "presence.ts": `import s from ${JSON.stringify("/etc/hostname")} with { type: "text" };\nconsole.log(s);\n`,
+      },
+      Linked: {
+        "presence.ts": 'import s from "./data.txt" with { type: "text" };\nconsole.log(s);\n',
+      },
+    });
+    try {
+      await symlink(join(root, "outside.txt"), join(root, "websites", "L", "Linked", "data.txt"));
+      const { activities, scripts, excluded } = await compilePremid(
+        root,
+        ["Honest", "Upward", "Absolute", "Linked"].map((name) => found(root, name)),
+      );
+      expect(activities.map((entry) => entry.manifest.info.name)).toEqual(["Honest"]);
+      expect(excluded.map((exclusion) => exclusion.service).sort()).toEqual([
+        "Absolute",
+        "Linked",
+        "Upward",
+      ]);
+      for (const exclusion of excluded) expect(exclusion.reason).toContain("outside its folder");
+      for (const script of scripts.values()) expect(script).not.toContain("BUILD-MACHINE-SECRET");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("the packaged build", () => {
   let build: ActivitiesBuild;
   let out: string;
@@ -406,7 +475,6 @@ describe("the packaged build", () => {
     const shard = async (id: string) =>
       parseShard(await read(`activities/manifests/${manifestShard(id)}.json`), id);
     expect((await shard("premid:Example"))?.script?.file).toBe("example");
-    // The list needs no settings, page data, or Discord Applications: each manifest has those.
     const example = catalog.activities.find((info) => info.id === "premid:Example");
     expect(example?.settings).toBeUndefined();
     expect(example?.data).toBeUndefined();
@@ -415,18 +483,14 @@ describe("the packaged build", () => {
     const full = (await shard("premid:Example"))?.info;
     expect(full?.settings?.length).toBeGreaterThan(0);
     expect(full?.discordClientId).toBe("503557087041683458");
-    // The catalog has the words (they're searched and shown there), the manifest doesn't repeat them.
     expect(full?.description).toBeUndefined();
     expect(full?.keywords).toBeUndefined();
     expect(example?.description).toBeDefined();
     expect((await shard("tunes"))?.info.data).toEqual(["media", "thumbnails"]);
-    // Only an Activity's own page shows its version, so the manifest has it and the catalog doesn't.
     expect(catalog.activities.some((info) => info.version !== undefined)).toBe(false);
     expect(full?.version).toBe("2.0.5");
     expect((await shard("tunes"))?.info.version).toBe("1.2.3");
-    // A service with a folder per API version shows the one that runs (v1), not the newest.
     expect((await shard("premid:Versioned"))?.info.version).toBe("1.0.0");
-    // Manifests share a file by first letter, so there's no file per Activity and no index of them.
     expect(Object.keys((await read("activities/manifests/t.json")) as object).sort()).toEqual([
       "premid:Tunes",
       "tunes",
@@ -462,7 +526,6 @@ describe("the packaged build", () => {
     expect(catalog.find((info) => info.id === "tunes")?.variants).toEqual(variants);
     expect(catalog.find((info) => info.id === "premid:Tunes")?.variants).toEqual(variants);
     expect(catalog.find((info) => info.id === "premid:Example")?.variants).toBeUndefined();
-    // The background reads PreMiD's manifest and bundles the native one: both know.
     expect(
       parseShard(await read("activities/manifests/t.json"), "premid:Tunes")?.info.variants,
     ).toEqual(variants);
@@ -482,6 +545,7 @@ describe("the packaged build", () => {
         '  { url: new URL("https://tunes.example/listen/1?b"), title: "Home", granted: ["media"], media: { title: "Song" } },',
         "  {},",
         ")?.details]);",
+        "export const infos = native.map(({ manifest }) => manifest.info);",
       ].join("\n"),
     );
     const result = await Bun.build({
@@ -499,6 +563,27 @@ describe("the packaged build", () => {
     ).toEqual([
       ["example-site", "undefined Home"],
       ["tunes", "Song"],
+    ]);
+    const infos =
+      typeof module === "object" && module !== null && "infos" in module ? module.infos : null;
+    expect(infos).toEqual([
+      {
+        id: "example-site",
+        name: "Example Site",
+        hosts: ["example.site"],
+        source: "parousia",
+        settings: [{ id: "prefix", title: "", type: "text", default: "Reading" }],
+      },
+      {
+        id: "tunes",
+        name: "Tunes",
+        hosts: ["tunes.example"],
+        source: "parousia",
+        icon: "https://tunes.example/icon.png",
+        data: ["media", "thumbnails"],
+        origins: ["https://tunes.example/*"],
+        variants: ["tunes", "premid:Tunes"],
+      },
     ]);
   });
 
@@ -566,7 +651,6 @@ describe("the packaged build", () => {
       const next = posted.at(-1) as { data: Record<string, unknown> };
       expect(next.data.buttons).toBeUndefined();
 
-      // Stopped (turned off, or its site taken back), then turned on again: injected again, it runs anew.
       receive({ type: "stop" });
       // oxlint-disable-next-line no-eval
       (0, eval)(script);

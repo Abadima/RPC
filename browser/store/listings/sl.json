@@ -1,0 +1,13 @@
+{
+  "summary": "Vaš Rich Presence na Discordu in širše.",
+  "description": [
+    "Vaš Rich Presence na Discordu in še več.",
+    "Parousia prinaša dejavnost vašega brskalnika v Discord Rich Presence. Samodejno prepozna podprta spletna mesta in lahko neposredno na vašem profilu v Discordu prikaže, kaj gledate, poslušate, igrate ali brskate. Kadar nobena dejavnost ne velja, lahko namesto nje prikažete svoj prilagojeni status.",
+    "Za podporo spletnim mestom in spletnim aplikacijam uporabljamo dejavnosti. Dejavnosti lahko zagotovijo bogate podrobnosti, kot so naslovi, izvajalci, ustvarjalci, sličice, stanje predvajanja, časovni žigi in povezave. Tako vaš status v Discordu dobi veliko več konteksta kot preprost naslov zavihka.",
+    "Parousia deluje z odprtokodnim ekosistemom dejavnosti PreMiD, hkrati pa ponuja tudi lasten ekosistem dejavnosti za razvijalce in uporabnike.",
+    "Ta razširitev je odprtokodna in zasnovana okoli sistema dejavnosti, prijaznega do razvijalcev. Razvijalci v jeziku TypeScript lahko ustvarjajo dejavnosti za spletna mesta, jih objavljajo prek ekosistema dejavnosti in gradijo integracije, ne da bi bilo treba spreminjati samo razširitev.",
+    "Parousia je zasnovana z mislijo na zasebnost in podatke o dejavnosti, kadar je to mogoče, obdeluje lokalno. Razširitev komunicira z našo namizno aplikacijo, ki skrbi za povezovanje s platformami. Za uporabo ni potreben noben račun ali prijava, Parousia pa ne uporablja analitike ali telemetrije za sledenje vašemu brskanju.",
+    "Ste pripravljeni oživiti dejavnost svojega brskalnika? Namestite razširitev Parousia in naj bo vse, kar počnete v brskalniku, del vašega Discord Rich Presence.",
+    "Parousia je neodvisen odprtokoden projekt, ki ni povezan z družbo Discord Inc., ta ga ne potrjuje in ga ne sponzorira."
+  ]
+}

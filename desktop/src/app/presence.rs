@@ -1,6 +1,5 @@
-//! Desktop's own Presence, converted from the wire shape in `protocol.rs`.
-//! Conversion bounds every field, so an adapter never receives unbounded
-//! text from a browser.
+//! Desktop's own Presence, converted from the wire shape; conversion bounds every
+//! field, so an adapter never gets unbounded text from a browser.
 
 use std::fmt;
 
@@ -32,8 +31,6 @@ pub struct Activity {
     pub state: Option<String>,
     pub assets: Option<ActivityAssets>,
     pub timestamps: Option<ActivityTimestamps>,
-    /// A Discord snowflake (see `is_discord_id`), when the Activity has its
-    /// own Discord Application.
     pub discord_client_id: Option<String>,
     /// Links for the details and state lines; `http(s)` only.
     pub details_url: Option<String>,
@@ -125,14 +122,23 @@ pub fn is_discord_id(value: &str) -> bool {
 /// Text from a client or an Activity (a page can pick an Activity's name),
 /// as Desktop shows it itself: in the terminal, the tray, and notifications.
 /// Control characters go, since in a terminal they're commands (escape
-/// sequences can retitle the window or write the clipboard), and so do
-/// invisible direction overrides and zero-width characters, which could make
-/// one entry pass for another. At most `max_chars` are kept.
+/// sequences can retitle the window or write the clipboard), and so do line
+/// and paragraph separators, direction marks and overrides, and invisible
+/// characters, which could break a line or make one entry pass for another.
+/// At most `max_chars` are kept.
 pub fn display_text(text: &str, max_chars: usize) -> String {
     text.chars()
         .filter(|c| {
             !c.is_control()
-                && !matches!(c, '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{FEFF}')
+                && !matches!(
+                    c,
+                    '\u{061C}'
+                        | '\u{180E}'
+                        | '\u{200B}'..='\u{200F}'
+                        | '\u{2028}'..='\u{202E}'
+                        | '\u{2060}'..='\u{2069}'
+                        | '\u{FEFF}'
+                )
         })
         .take(max_chars)
         .collect()
@@ -496,5 +502,14 @@ mod tests {
         );
         assert_eq!(display_text("\u{9b}31mred", 64), "31mred");
         assert_eq!(display_text("日本語のタイトル", 3), "日本語");
+        // Line and paragraph separators break a line where Unicode is read; the rest are
+        // a direction mark and invisible joiners.
+        assert_eq!(
+            display_text(
+                "one\u{2028}two\u{2029}\u{061C}three\u{2060}\u{2064}\u{180E}",
+                64
+            ),
+            "onetwothree"
+        );
     }
 }

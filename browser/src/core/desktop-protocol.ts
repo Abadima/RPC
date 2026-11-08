@@ -37,7 +37,6 @@ const REJECT_REASONS: ReadonlySet<string> = new Set<RejectReason>([
 
 export type DesktopSetting = "allowUserscripts";
 
-/** Desktop's `status` report, for Parousia's dashboard. */
 export interface DesktopReport {
   version: string;
   clients: Array<{
@@ -101,7 +100,6 @@ function everyItem(value: unknown, check: (item: Json) => boolean): boolean {
   return Array.isArray(value) && value.every((item) => isObject(item) && check(item));
 }
 
-/** Checks the shape of a report before anything renders it. */
 export function isDesktopReport(value: unknown): value is DesktopReport {
   if (!isObject(value) || !isString(value.version)) return false;
   const { transport, settings } = value;

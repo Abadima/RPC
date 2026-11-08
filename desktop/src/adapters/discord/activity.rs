@@ -1,23 +1,12 @@
-//! Parousia's Activity as a Discord Rich Presence activity: the `activity`
-//! of an RPC `SET_ACTIVITY`. Same rules as `toDiscordPresence` in
-//! `browser/src/compat/discord-rpc-extension.ts`, which reaches Discord
-//! through Discord-RPC-Extension's app; both are tested against the cases in
-//! `adapters/discord/activity-mapping.json`.
+//! Parousia's Activity as the `activity` of Discord's `SET_ACTIVITY`. Same rules as
+//! `toDiscordPresence` (browser/src/compat/discord-rpc-extension.ts); both are tested
+//! against `adapters/discord/activity-mapping.json`.
 //!
-//! Discord turns down a whole activity over one field it doesn't accept, so a
-//! field it can't take is left out instead:
-//! - Text (name, details, state, image captions) is trimmed. Under 2 UTF-16
-//!   units it's left out; over 128 it's cut to 127 and ends in "…".
-//! - Images (asset keys or URLs): at most 256 UTF-16 units.
-//! - Links for the details and state lines, and on the images: `http(s)`, at
-//!   most 256. An image's link goes only with that image.
-//! - The type (Listening, Watching, Competing; Playing is Discord's default
-//!   and is left out), which line the status shows (the name is the default
-//!   and is left out), and the party (a Playing activity's "2 of 5").
-//! - Buttons: the first 2 with a label, cut to 32 like text; URL `http(s)`,
-//!   at most 512.
-//! - Times: milliseconds from 1 through 2147483647000, the most the RPC
-//!   library behind Discord-RPC-Extension's app accepts.
+//! Discord refuses a whole activity over one bad field, so a field it can't take
+//! is left out. Text under 2 UTF-16 units goes, and over 128 is cut to 127 and
+//! "…"; images and links at most 256 (links `http(s)`); the first 2 buttons, URLs
+//! at most 512; times 1 through 2147483647000 ms. Discord's defaults (Playing,
+//! showing the name) are sent as nothing, and a party goes only on Playing.
 
 use serde::Serialize;
 
@@ -219,7 +208,6 @@ mod tests {
     use crate::app::presence::Presence;
     use crate::link::protocol::PresenceWire;
 
-    /// The cases the browser's mapping is also tested against.
     const CASES: &str = include_str!("../../../../adapters/discord/activity-mapping.json");
 
     #[test]
@@ -260,7 +248,6 @@ mod tests {
         }));
         assert_eq!(watching["type"], 3);
         assert_eq!(watching["status_display_type"], 2);
-        // A party shows on a Playing activity only.
         assert!(watching.get("party").is_none());
 
         for (kind, number) in [("listening", 2), ("competing", 5)] {
@@ -274,7 +261,6 @@ mod tests {
         }));
         assert_eq!(state["status_display_type"], 1);
 
-        // Playing and "show the name" are Discord's defaults: sent as nothing.
         let plain = mapped(serde_json::json!({
             "id": "a", "name": "A", "type": "playing", "statusDisplayType": "name",
         }));

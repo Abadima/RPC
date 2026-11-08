@@ -1,16 +1,11 @@
-//! Just enough of the D-Bus wire protocol for the tray: connecting to the
-//! session bus, EXTERNAL authentication, and (un)marshalling messages. Written
-//! against the D-Bus specification rather than pulling in a D-Bus library
-//! and the async runtime it brings (see project/architecture.md, Desktop
-//! Tray). Messages arrive through the bus daemon, which validates framing
-//! before routing them, and only this user's processes can send to us; this
-//! parser still bounds sizes and nesting and never panics on bad input.
+//! Just enough of the D-Bus wire protocol for the tray (connection, EXTERNAL
+//! authentication, marshalling), instead of a D-Bus library and its async runtime.
+//! The bus validates framing and only this user's processes can send to us; the
+//! parser still bounds sizes and nesting and never panics.
 //!
-//! The bus is used only if the kernel says this user runs it. An address can
-//! name an abstract socket (`unix:abstract=`, common without systemd), which
-//! has no file permissions: if the real bus is gone, another user can listen
-//! on the same name and would otherwise get the tray's menu clicks to answer
-//! and its notifications to read.
+//! The bus is used only if the kernel says this user runs it: an abstract-socket
+//! address has no file permissions, so another user could listen on the name of a
+//! bus that has gone.
 
 use std::env;
 use std::io::{self, Read, Write};
@@ -86,7 +81,6 @@ impl Value {
         Self::Variant(Box::new(value))
     }
 
-    /// `a{sv}` from name/value pairs.
     pub fn dict(entries: Vec<(&str, Value)>) -> Self {
         Self::Array(
             "{sv}".into(),
@@ -326,7 +320,6 @@ impl<'a> Reader<'a> {
         String::from_utf8(bytes[..len].to_vec()).map_err(|_| invalid("string is not UTF-8"))
     }
 
-    /// Reads one value of the single complete type `ty`.
     pub fn value(&mut self, ty: &str, depth: usize) -> io::Result<Value> {
         if depth > MAX_DEPTH {
             return Err(invalid("value nests too deeply"));

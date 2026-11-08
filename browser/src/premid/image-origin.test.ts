@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { originOf, trackImageOrigins } from "./image-origin";
 
-/** Stand-ins for the browser's canvas and response classes, patched the way the real ones are. */
 function browser() {
   class Canvas {
     toDataURL(): string {

@@ -49,4 +49,16 @@ describe("match patterns", () => {
     expect(test(new URL("https://c.example/"))).toBe(false);
     expect(patternHost("https://*.b.example/*")).toBe("b.example");
   });
+
+  test("a pathname longer than 2048 characters isn't tested at all", () => {
+    const path = "/".concat("a".repeat(3000));
+    expect(matches("https://example.com/*", `https://example.com${path}`)).toBe(false);
+    // A pattern that reads a run of the path can't be made to run long.
+    expect(matches("https://example.com/a*a*b/*", `https://example.com/a${"a".repeat(3000)}`)).toBe(
+      false,
+    );
+    expect(matches("https://example.com/a*a*b/*", `https://example.com/a${"a".repeat(30)}b/`)).toBe(
+      true,
+    );
+  });
 });

@@ -32,7 +32,6 @@ export function grantsFrom(permissions: { origins?: string[] }): Grants {
   return { all, origins: origins.filter((origin) => PATTERN.test(origin) && origin !== ALL_SITES) };
 }
 
-/** Whether `grant` covers `origin` (both origin patterns): its scheme and host, ignoring the path. */
 export function covers(grant: string, origin: string): boolean {
   const g = PATTERN.exec(grant);
   const o = PATTERN.exec(origin);
@@ -50,12 +49,10 @@ export function covers(grant: string, origin: string): boolean {
   return grantHost === host;
 }
 
-/** Whether Parousia may read pages at `origin`, a site's origin pattern. */
 export function siteGranted(origin: string, grants: Grants): boolean {
   return grants.all || grants.origins.some((grant) => covers(grant, origin));
 }
 
-/** Whether Parousia may read the page at `url`. */
 export function pageGranted(url: URL, grants: Grants): boolean {
   return siteGranted(`${url.protocol.slice(0, -1)}://${url.hostname}/*`, grants);
 }
@@ -69,7 +66,6 @@ export function canRun(info: ActivityInfo, url: URL, grants: Grants): boolean {
   return !needsAccess(info) || pageGranted(url, grants);
 }
 
-/** The sites `info` reads that aren't granted, to ask for. */
 export function missingSites(info: ActivityInfo, grants: Grants): string[] {
   return (info.origins ?? []).filter((origin) => !siteGranted(origin, grants));
 }
@@ -87,7 +83,6 @@ export function siteAccess(info: ActivityInfo, grants: Grants): SiteAccess {
   return granted === origins.length ? "all" : granted > 0 ? "some" : "none";
 }
 
-/** The site an origin pattern names: `*://www.youtube.com/*` is `www.youtube.com`. */
 export function siteName(origin: string): string {
   return /^[^:]+:\/\/([^/]+)\//.exec(origin)?.[1]?.replace(/^\*\./, "") ?? origin;
 }

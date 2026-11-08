@@ -1,32 +1,19 @@
 /**
- * Players that live in an iframe. The collector reads the page it's injected
- * into, and a `<video>` in another origin's frame is out of its reach, but
- * the page that embeds one usually hears from it: an embedded player reports
- * its clock with `postMessage` to the page around it, which is how the page's
- * own controls follow it. Those messages are visible to the collector too
- * (it's a listener on the same window), so this reads the same reports the
- * page does, and nothing else: no frame's markup, no stream, no command sent
- * to a player.
+ * Players in an iframe, which the collector can't reach: the embedding page
+ * hears their clock over `postMessage`, and so does the collector, which reads
+ * those reports and nothing else (no frame markup, no stream, no commands).
  *
- * Two kinds of report are understood, both seen from real embeds:
+ * - `aniembed` (AnimeX's player): `{ source: "aniembed", version: 1, name, data }`
+ *   with the whole state on play, pause, seeked, progress, ended;
+ *   `providerchange` replaces the source.
+ * - MegaCloud-family embeds: `{ type: "watching-log", currentTime, duration }`
+ *   (or `{ channel: "megacloud", event: "time", ... }`) several times a second
+ *   while playing, so silence is a pause.
  *
- * - `aniembed` (AnimeX's own player, plyr.animex.one): events with the
- *   player's whole state, `{ source: "aniembed", version: 1, name, data }`.
- *   `play`, `pause`, `seeked`, `progress` and `ended` carry `currentTime`,
- *   `duration`, `paused` and `playbackRate`, so a pause, a seek and a change of
- *   speed are all said outright. `providerchange` says the source is being
- *   replaced (a different Sub/Dub or server), so what was known is dropped.
- * - A stream of `{ type: "watching-log", currentTime, duration }` (or
- *   `{ channel: "megacloud", event: "time", time, duration }`), several
- *   times a second while it plays, as MegaCloud-family embeds send (AnimeX's
- *   KOTO). It says nothing when it's paused, so silence is a pause.
- *
- * A message counts only if it comes from an iframe of this document, from the
- * origin that iframe was loaded from, so another frame can't speak for it.
- * Everything in one is bounded and checked before it's used.
+ * A message counts only from an iframe of this document, from the origin it was
+ * loaded from, and everything in it is bounded.
  */
 
-/** What a player's last report implies about the clock. */
 export interface PlayerClock {
   playing: boolean;
   /** Seconds, when the player said. */
@@ -36,7 +23,6 @@ export interface PlayerClock {
   end?: number;
 }
 
-/** A report, parsed. */
 export type PlayerEvent =
   | {
       type: "reading";
@@ -73,7 +59,6 @@ const ANIEMBED_READINGS: ReadonlySet<string> = new Set([
   "ended",
 ]);
 
-/** Parses one `message` event's data as a player's report, or `null` if it isn't one. */
 export function parsePlayerMessage(data: unknown): PlayerEvent | null {
   if (!isObject(data)) return null;
 
@@ -136,10 +121,8 @@ interface Reading {
   at: number;
 }
 
-/** What it needs of an iframe. */
 export type FrameLike = Pick<HTMLIFrameElement, "contentWindow" | "src" | "isConnected">;
 
-/** The one player a page is playing in, as its frame last reported it. */
 export class PlayerBridge {
   #frame: FrameLike | null = null;
   #src = "";

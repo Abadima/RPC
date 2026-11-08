@@ -1,27 +1,16 @@
-//! Discord Rich Presence through the Discord app's local RPC (`ipc.rs` for
-//! the framing, `platform::discord` for the socket or pipe).
+//! Discord Rich Presence over the Discord app's local RPC.
 //!
-//! A worker thread owns the connection and does everything that waits:
-//! finding Discord, the handshake, retrying, and pacing updates. `show`
-//! only hands over the latest Activity, so the Hub never waits on Discord.
-//! The worker starts when there's something to show and ends once there's
-//! nothing to show and no connection, so an idle Desktop has no thread for
-//! Discord at all.
+//! A worker thread owns the connection and everything that waits (finding
+//! Discord, the handshake, retries, pacing); `show` only hands over the latest
+//! Activity, so the Hub never waits. The worker exists only while there's
+//! something to show or a connection to close.
 //!
-//! - Connects only while there's something to show, and lets go 30 seconds
-//!   after clearing it, so switching tabs doesn't reconnect every time.
-//! - Discord not running: tries again after 1 second, doubling up to 30,
-//!   and right away whenever the Activity changes. Nothing to show, no tries.
-//! - Discord quitting or restarting ends the connection; the current
-//!   Activity is shown again once Discord is back.
-//! - A write Discord doesn't take within 5 seconds (it has stopped reading)
-//!   ends the connection and is retried like a restart.
-//! - Discord accepts 5 activity updates per 20 seconds. Faster changes are
-//!   coalesced: only the latest is sent once the window allows. (Rapid
-//!   changes within one Activity rarely get that far: `coalesce` holds them
-//!   back for every platform first.)
-//! - Discord binds a connection to one Application, so an Activity with its
-//!   own `discordClientId` reconnects as that Application.
+//! - Lets go 30 s after clearing, so switching tabs doesn't reconnect.
+//! - Discord not running: retries after 1 s, doubling up to 30, and at once when
+//!   the Activity changes.
+//! - A write not taken within 5 s ends the connection, like a restart.
+//! - Discord allows 5 updates per 20 s; faster changes send only the latest.
+//! - An Activity with its own `discordClientId` reconnects as that Application.
 
 mod activity;
 pub mod ipc;
@@ -85,7 +74,6 @@ struct Inbox {
 struct Pending {
     show: Option<Option<Box<Activity>>>,
     incoming: VecDeque<(u64, Incoming)>,
-    /// Whether a worker thread is running (or starting).
     running: bool,
     /// Numbers connections across workers, so a closed connection's late
     /// frames can't be mistaken for a newer one's.
@@ -107,7 +95,6 @@ impl Inbox {
         self.ready.notify_one();
     }
 
-    /// The next event, waiting for one until `deadline` (or for good).
     fn next(&self, deadline: Option<Instant>) -> Option<Event> {
         let mut pending = lock(&self.pending);
         loop {
@@ -136,7 +123,6 @@ impl Inbox {
     }
 }
 
-/// What the adapter and each worker it starts share.
 struct Shared {
     inbox: Inbox,
     endpoints: Endpoints,
@@ -151,7 +137,6 @@ pub struct DiscordAdapter {
 }
 
 impl DiscordAdapter {
-    /// Starts no thread until there's something to show.
     pub fn new(default_client_id: String, report: Reporter) -> Self {
         Self::with(Endpoints::discover(), default_client_id, TIMING, report)
     }
@@ -219,7 +204,6 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// An Activity as Discord will show it, and as which Application.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Target {
     client_id: String,
@@ -238,9 +222,7 @@ struct Conn {
 struct Worker {
     shared: Arc<Shared>,
     timing: Timing,
-    /// What the Hub wants shown.
     desired: Option<Target>,
-    /// What this connection has shown (`None` once cleared).
     shown: Option<Target>,
     conn: Option<Conn>,
     nonce: u64,
@@ -249,6 +231,7 @@ struct Worker {
     retry_at: Option<Instant>,
     backoff: Duration,
     linger_until: Option<Instant>,
+    pid: u32,
 }
 
 #[derive(Serialize)]
@@ -276,7 +259,6 @@ fn encode(message: &impl Serialize) -> Vec<u8> {
     serde_json::to_vec(message).expect("Discord messages always serialize")
 }
 
-/// The parts of Discord's replies that matter here.
 #[derive(Deserialize)]
 struct Reply {
     cmd: Option<String>,
@@ -304,6 +286,7 @@ impl Worker {
             retry_at: None,
             backoff: timing.retry_first,
             linger_until: None,
+            pid: std::process::id(),
         }
     }
 
@@ -335,7 +318,6 @@ impl Worker {
                         .unwrap_or_else(|| self.shared.default_client_id.clone()),
                 });
                 if desired != self.desired && desired.is_some() && self.conn.is_none() {
-                    // Something new to show: worth trying Discord again now.
                     self.retry_at = None;
                     self.backoff = self.timing.retry_first;
                 }
@@ -403,7 +385,6 @@ impl Worker {
         }
     }
 
-    /// Moves toward showing what's wanted; returns when to look again.
     fn step(&mut self, now: Instant) -> Option<Instant> {
         if self
             .conn
@@ -450,7 +431,6 @@ impl Worker {
         None
     }
 
-    /// Nothing to show: clear what was shown, then let go after the linger.
     fn wind_down(&mut self, now: Instant) -> Option<Instant> {
         self.retry_at = None;
         self.backoff = self.timing.retry_first;
@@ -475,7 +455,6 @@ impl Worker {
         }
     }
 
-    /// Connects as the Application of what's wanted.
     fn connect(&mut self, now: Instant) {
         let Some(client_id) = self.desired.as_ref().map(|want| want.client_id.clone()) else {
             return;
@@ -516,7 +495,7 @@ impl Worker {
         let command = encode(&SetActivity {
             cmd: "SET_ACTIVITY",
             args: SetActivityArgs {
-                pid: std::process::id(),
+                pid: self.pid,
                 activity: target.as_ref().map(|target| &target.activity),
             },
             nonce: self.nonce.to_string(),

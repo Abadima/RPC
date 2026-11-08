@@ -7,14 +7,12 @@ import { withSiteImage } from "./site-image";
 export interface RuntimeOptions {
   /** Whether an Activity may run at `url`: turned on, and granted the site if it reads pages. By default, every one may. */
   usable?: (info: ActivityInfo, url: URL) => boolean;
-  /** Its settings as set; by default, each at its default. */
   settings?: (info: ActivityInfo) => SettingValues;
   /**
    * Music or video still playing in another tab (see media-presence.ts):
    * shared when the page has nothing of its own, ahead of the fallback.
    */
   media?: () => Activity | null;
-  /** What to share when no Activity has anything to: the Default Activity, if one is set up. */
   fallback?: () => Activity | null;
   /**
    * An Activity another extension supplies for the page being shared (see
@@ -80,7 +78,6 @@ export class PresenceRuntime {
     return createPresence(own ?? this.options.media?.() ?? this.options.fallback?.() ?? null);
   }
 
-  /** Whether `url` is a page some Activity looks at (so its title matters too). */
   matches(url: URL): boolean {
     return this.find(url) !== null;
   }

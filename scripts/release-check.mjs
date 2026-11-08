@@ -36,7 +36,6 @@ function isRevisionOf(core, version) {
   return version.startsWith(`${core}.`) && /^\d{1,9}$/.test(version.slice(core.length + 1));
 }
 
-/** Everything that disagrees with `input`, as messages; empty means the release can go ahead. */
 export function checkRelease(input, root) {
   const parsed = parseVersion(input);
   if (!parsed) return [`"${input}" is not MAJOR.MINOR.PATCH, optionally followed by -pre.release`];

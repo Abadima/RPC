@@ -28,7 +28,6 @@ describe("finding the strings", () => {
     expect(keys.strings.has("Retry connection")).toBe(true);
     expect(keys.strings.has("Settings")).toBe(true);
     expect(keys.plurals.has("{n} Activities")).toBe(true);
-    // Written with `tn`, so they're plural forms, not plain strings.
     expect(keys.strings.has("{n} Activities")).toBe(false);
   });
 });

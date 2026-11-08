@@ -12,7 +12,6 @@ function isPage(value: string | undefined): value is SettingsPageId {
   return SETTINGS_PAGES.some((page) => page.id === value);
 }
 
-/** Categories beside the chosen one's page; `#settings/privacy` opens Privacy. */
 export function settingsView(context: ViewContext, segment: string | undefined): View {
   const element = fromTemplate("settings");
   const current = isPage(segment) ? segment : "general";

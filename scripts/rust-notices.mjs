@@ -56,7 +56,6 @@ export function linkedCrates(metadata) {
   return [...needed].map((id) => byId.get(id)).filter(Boolean);
 }
 
-/** The text of every license file a crate ships, in a stable order. */
 function licenseTexts(dir) {
   if (!dir || !existsSync(dir)) return [];
   return readdirSync(dir)
@@ -65,7 +64,6 @@ function licenseTexts(dir) {
     .map((name) => ({ name, text: readFileSync(join(dir, name), "utf8").trim() }));
 }
 
-/** The notices file for `crates` (`cargo metadata` packages, merged across targets). */
 export function formatNotices(crates, read = (pkg) => licenseTexts(dirname(pkg.manifest_path))) {
   const unique = new Map(crates.map((pkg) => [`${pkg.name} ${pkg.version}`, pkg]));
   const lines = [

@@ -54,11 +54,11 @@ It has two parts: a browser extension and a small native desktop app. No account
 
 ## Activity Ecosystem
 
-Activities live in their own repositories and share one API:
+Activities are maintained in their own repositories, and they all run on the Parousia's local runtime.
 
-**[parousia-project/activities](https://github.com/parousia-project/activities)**
+**[parousia-project/activities](https://github.com/parousia-project/activities)** - Runs under Parousia's native Activity API.
 
-**[premid/activities](https://github.com/premid/activities)**
+**[premid/activities](https://github.com/premid/activities)** - PreMiD's Activities, which runs under a compatibility layer in Parousia.
 
 Each Activity covers a website. It sets its own settings, page data, site access, Discord application, and Rich Presence details.
 
@@ -82,9 +82,9 @@ See [`project/roadmap.md`](project/roadmap.md) for the current roadmap.
 
 ## Contributing
 
-Issues, discussions, and pull requests are welcome. Start with [`CONTRIBUTING.md`](.github/CONTRIBUTING.md).
+Issues, discussions, and pull requests are welcome. Start with [`CONTRIBUTING.md`](.github/CONTRIBUTING.md). Contributors are credited in [`CONTRIBUTORS.md`](CONTRIBUTORS.md).
 
-Report security vulnerabilities privately, as [`SECURITY.md`](.github/SECURITY.md) describes.
+Report security vulnerabilities privately, as described in [`SECURITY.md`](.github/SECURITY.md).
 
 ## License
 

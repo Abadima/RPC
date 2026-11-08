@@ -1,19 +1,10 @@
 //! Spaces out rapid changes within one Activity, for every adapter.
 //!
-//! The Hub wraps each adapter in this one. A change of subject (another
-//! Activity, another Discord Application, or nothing) goes through at once and
-//! throws away anything still waiting, so a platform never shows an Activity
-//! the Hub has moved on from. A change within the Activity that's showing (the
-//! next video, a new track, a seek) goes through at once too, unless the
-//! adapter was told something less than `INTERVAL` ago. Then the newest such
-//! change waits for the interval to end, and a newer one replaces it without
-//! moving that time. So the first change after a calm spell is never delayed,
-//! a burst shows its first and its last, and however steadily changes keep
-//! coming, what's shown is at most one interval behind.
-//!
-//! Nothing runs between changes: one short-lived thread exists only while an
-//! update is waiting. This is not a model of any platform's rate limit; an
-//! adapter still keeps to its platform's own (see `discord`).
+//! A change of subject (another Activity or Application, or nothing) goes at once
+//! and drops anything waiting. A change within the Activity waits only if the
+//! adapter was told something less than `INTERVAL` ago, and a newer one replaces
+//! it: a burst shows its first and last, never more than one interval stale. A
+//! short-lived thread exists only while an update waits.
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
@@ -22,12 +13,9 @@ use std::time::{Duration, Instant};
 use crate::adapters::{AdapterStatus, Platform, PlatformAdapter};
 use crate::app::presence::Activity;
 
-/// The least time between two updates within one Activity.
 const INTERVAL: Duration = Duration::from_secs(2);
 
-/// What the adapter was last told to show, and when.
 struct Shown {
-    /// What makes a new Activity an update of this one, not a new subject.
     id: String,
     client_id: Option<String>,
     at: Instant,
@@ -50,9 +38,7 @@ impl Shown {
 #[derive(Default)]
 struct State {
     shown: Option<Shown>,
-    /// The newest update within `shown`, for when the interval ends.
     waiting: Option<Activity>,
-    /// Whether the timer thread is running.
     timer: bool,
 }
 
@@ -89,11 +75,9 @@ fn lock(state: &Mutex<State>) -> MutexGuard<'_, State> {
 }
 
 impl Shared {
-    /// Tells the adapter now, and drops anything waiting: it's older.
     fn send(&self, state: &mut State, activity: Option<Activity>, now: Instant) {
         state.waiting = None;
         match (&mut state.shown, &activity) {
-            // The same subject: only the time moves.
             (Some(shown), Some(next)) if shown.is_update(next) => shown.at = now,
             _ => state.shown = activity.as_ref().map(|next| Shown::of(next, now)),
         }
@@ -142,10 +126,7 @@ impl PlatformAdapter for Coalesced {
     }
 }
 
-/// Sleeps until the interval since the adapter was last told something ends,
-/// then shows the newest update still waiting. A change of subject sends
-/// that time forward and clears the wait, so this ends having shown nothing
-/// stale, at most one interval later.
+/// A change of subject moves the deadline and clears the wait, so nothing stale is shown.
 fn run_timer(shared: &Shared) {
     loop {
         let mut state = lock(&shared.state);
@@ -174,7 +155,6 @@ mod tests {
 
     const STEP: Duration = Duration::from_millis(150);
 
-    /// What the adapter was told, in order: the Activity's id and details.
     type Told = Option<(String, Option<String>)>;
     type Log = Arc<Mutex<Vec<(Instant, Told)>>>;
 
@@ -234,7 +214,6 @@ mod tests {
         }
     }
 
-    /// Long enough for anything that was going to arrive to have done so.
     fn settle() {
         thread::sleep(STEP * 3);
     }
@@ -285,7 +264,6 @@ mod tests {
         assert!(late < STEP * 2, "and not much after it: {late:?}");
         settle();
         assert_eq!(calls(&log), [told("youtube", "a"), told("youtube", "d")]);
-        // Shown, so the timer has ended and the next update starts afresh.
         assert!(!lock(&coalesced.shared.state).timer);
     }
 

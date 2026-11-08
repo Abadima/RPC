@@ -24,9 +24,7 @@ export const SAME_IN_EVERY_LANGUAGE: ReadonlySet<string> = new Set([
 ]);
 
 export interface Keys {
-  /** Strings with one form. */
   strings: Set<string>;
-  /** Strings written with `tn`, by their plural form. */
   plurals: Set<string>;
 }
 
@@ -36,7 +34,6 @@ const PLURAL = new RegExp(String.raw`(?<![\w.])tn\(\s*[^,()]+,\s*${LITERAL}\s*,\
 
 const ESCAPES: Record<string, string> = { n: "\n", t: "\t" };
 
-/** A string literal's value: its text between the quotes, with the backslash escapes undone. */
 function value(literal: string): string {
   return literal.slice(1, -1).replaceAll(/\\(.)/g, (_, char: string) => ESCAPES[char] ?? char);
 }
@@ -47,7 +44,6 @@ const decode = (text: string): string =>
 
 const words = (text: string): string => text.replaceAll(/\s+/g, " ").trim();
 
-/** What isn't a page's own text: comments, script and style blocks, and tags, found in one pass. */
 const MARKUP = /<!--[\s\S]*?-->|<(?:script|style)\b[\s\S]*?<\/(?:script|style)>|<[^>]*>/g;
 const LABELLED = /\s(?:aria-label|title|placeholder)="([^"]*)"/g;
 

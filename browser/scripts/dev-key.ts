@@ -14,9 +14,7 @@ import { join } from "node:path";
 const KEY_PATH = join(import.meta.dirname, "..", ".dev-key.json");
 
 export interface DevKey {
-  /** base64 SubjectPublicKeyInfo DER, ready to drop into a manifest's "key" field. */
   key: string;
-  /** The extension id Chromium computes from `key`. */
   id: string;
 }
 
@@ -40,7 +38,6 @@ function generate(): DevKey {
   return { key: der.toString("base64"), id: extensionIdFromPublicKeyDer(der) };
 }
 
-/** Loads the cached dev key, generating and persisting one on first use. */
 export async function loadDevKey(): Promise<DevKey> {
   if (existsSync(KEY_PATH)) {
     return JSON.parse(await readFile(KEY_PATH, "utf8")) as DevKey;

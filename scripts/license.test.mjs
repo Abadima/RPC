@@ -10,7 +10,6 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path) => readFileSync(join(root, path), "utf8");
 
-/** Files that legitimately mention another license by name. */
 const OTHER_LICENSES = [
   /^CHANGELOG\.md$/, // records the change from MIT
   /^scripts\/license\.test\.mjs$/,

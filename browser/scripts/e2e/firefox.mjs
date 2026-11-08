@@ -16,7 +16,6 @@ import { STATUS_LINE, STEP_TIMEOUT_MS, sleep, track, waitUntil } from "./lib.mjs
 
 export const FIREFOX_BINARY = process.env.FIREFOX_BIN ?? "/opt/firefox/firefox";
 
-/** Prepares a profile with `extensions`: [{ id, xpi, uuid }]. */
 export async function prepareProfile(profileDir, extensions) {
   await mkdir(join(profileDir, "extensions"), { recursive: true });
   for (const extension of extensions) {
@@ -115,7 +114,6 @@ export async function launchFirefox({ profileDir, env, port = 9444 }) {
     async contexts() {
       return (await send("browsingContext.getTree", {})).contexts;
     },
-    /** A new tab; `background` keeps the current one active. */
     async openTab(url, { background = false } = {}) {
       const { context } = await send("browsingContext.create", { type: "tab", background });
       await send("browsingContext.navigate", { context, url, wait: "complete" });
@@ -124,14 +122,12 @@ export async function launchFirefox({ profileDir, env, port = 9444 }) {
     async navigate(context, url) {
       await send("browsingContext.navigate", { context, url, wait: "complete" });
     },
-    /** Makes `context` its window's active tab. */
     async activate(context) {
       await send("browsingContext.activate", { context });
     },
     async closeTab(context) {
       await send("browsingContext.close", { context });
     },
-    /** Evaluates `expression` in the page and returns its (JSON-able) value. */
     async evaluate(context, expression) {
       const result = await send("script.evaluate", {
         expression: `(async () => JSON.stringify(await (async () => (${expression}))()))()`,
@@ -182,7 +178,6 @@ export async function launchFirefox({ profileDir, env, port = 9444 }) {
   return firefox;
 }
 
-/** Popup helpers over BiDi, mirroring lib.mjs's Playwright ones. */
 export const firefoxPopup = {
   status: (firefox, context) => firefox.evaluate(context, STATUS_LINE),
 
@@ -207,7 +202,6 @@ export const firefoxPopup = {
     await firefox.navigate(context, url);
   },
 
-  /** The "what to do about it" line, or null while it's hidden. */
   help: (firefox, context) =>
     firefox.evaluate(
       context,

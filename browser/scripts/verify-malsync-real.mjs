@@ -1,41 +1,19 @@
-// End-to-end check of MAL-Sync support against the real MAL-Sync and the real
-// Discord-RPC-Extension (its extension and its app, `server.js`), in
-// Chromium (playwright-core's) and the Firefox installed on this machine
-// (Developer Edition, over WebDriver BiDi; see e2e/firefox.mjs), with the
-// Parousia Desktop build and stand-ins for Discord. Run
-// `bun run real-extensions:fetch` once first: it caches the store builds.
+// End-to-end check of MAL-Sync support against the real MAL-Sync and
+// Discord-RPC-Extension (extension and `server.js` app), in playwright-core's
+// Chromium and the Firefox installed here, with Desktop and stand-in Discords.
+// MAL-Sync shows the served anime-odcinki.pl episode as a "Local" entry (no
+// network), its own fallback on the same presence path.
 //
-// MAL-Sync recognizes a page by its own rules, so the page is the one
-// MAL-Sync's AnimeOdcinki page expects (anime-odcinki.pl/anime/<series>/<n>,
-// with the series title in a `.field-name-field-tytul-anime` link), served by
-// the test. Its services aren't reachable (there's no network here), so
-// MAL-Sync shows the episode as a "Local" entry: its own fallback, and the
-// same presence code path as for a series it found.
+// Three sessions per browser: (1) beside Discord-RPC-Extension, where MAL-Sync
+// reaches Discord by itself and, with support on, its reply becomes Parousia's
+// Activity under Parousia's Privacy choices; (2) without it, where MAL-Sync
+// shows only through Parousia; (3) without Desktop, where the app's single
+// slot is shared until support makes the two one.
 //
-// Three sessions per browser, each asking what the real pieces do:
-//
-// 1. Beside Discord-RPC-Extension (Desktop, Parousia, MAL-Sync, Discord-RPC-
-//    Extension and its app): MAL-Sync reaches Discord through Discord-RPC-
-//    Extension by itself, Parousia (with MAL-Sync support off) neither sees
-//    nor can limit that and shows its own Activity next to it, and with
-//    MAL-Sync support on, its reply is Parousia's Activity, under Parousia's
-//    Privacy choices, whether or not MAL-Sync's own Discord setting is on.
-// 2. Without Discord-RPC-Extension (Desktop, Parousia, MAL-Sync): MAL-Sync
-//    has nowhere to show until MAL-Sync support is on.
-// 3. Without Parousia Desktop (Parousia's link to Discord-RPC-Extension's
-//    app, MAL-Sync, Discord-RPC-Extension): the app has one presence slot,
-//    which Parousia's own Activity and MAL-Sync's take from each other,
-//    until MAL-Sync support makes them one.
-//
-// It runs in a private network namespace (`unshare -rn`, with its own
-// loopback), so ports 57179 and 6969 are free whatever is running here, and
-// a real Discord-RPC-Extension app is never touched.
-//
-// `MALSYNC_BROWSER=chromium` or `firefox` runs one browser.
-//
-// Prerequisites: `bun run real-extensions:fetch`, `cargo build` in ../desktop
-// (or PAROUSIA_DESKTOP_BIN), `bun run chromium:setup` for Chromium, Firefox
-// Developer Edition at /opt/firefox (or FIREFOX_BIN) for Firefox. Linux only.
+// Runs in `unshare -rn`, so 57179 and 6969 are free and a real app is never
+// touched. `MALSYNC_BROWSER=chromium|firefox` runs one. Needs `bun run
+// real-extensions:fetch`, `cargo build` in ../desktop (or PAROUSIA_DESKTOP_BIN),
+// `bun run chromium:setup`, and Firefox at /opt/firefox (or FIREFOX_BIN).
 
 import { execFile, spawn, spawnSync } from "node:child_process";
 import { appendFile, cp, mkdir } from "node:fs/promises";
@@ -92,7 +70,6 @@ const UUIDS = {
 const ws = await workspace("pavr");
 const browsers = (process.env.MALSYNC_BROWSER ?? "chromium,firefox").split(",");
 
-/** What a stand-in Discord has shown, for a failure's report. */
 const summary = (discord) =>
   discord.calls.map(
     ({ clientId, activity }) => `${clientId?.slice(0, 4)}:${activity?.name ?? "-"}`,
@@ -264,7 +241,6 @@ async function session(title, { kind, dre, desktop }, body) {
       app,
       browser,
       say: (text) => log(`${browser.name}${dreText}: ${text}`),
-      /** Parousia's preferences, with `patch` on top of what was set before. */
       async prefs(patch) {
         Object.assign(state.preferences, patch);
         await browser.parousia(
@@ -273,12 +249,10 @@ async function session(title, { kind, dre, desktop }, body) {
       },
       defaultActivity: (value) =>
         browser.parousia(`chrome.storage.local.set({ defaultActivity: ${JSON.stringify(value)} })`),
-      /** MAL-Sync's own settings (it keeps them in sync storage). */
       malsyncSetting: (key, value) =>
         browser.malsync(
           `chrome.storage.sync.set({ ${JSON.stringify(`settings/${key}`)}: ${JSON.stringify(value)} })`,
         ),
-      /** The last thing each stand-in Discord was sent, or null. */
       last: (discord) => discord.activities.at(-1) ?? null,
     };
     await body(context);
@@ -318,12 +292,10 @@ async function session(title, { kind, dre, desktop }, body) {
   }
 }
 
-/** Waits for a stand-in Discord to be showing something that passes `check`. */
 const shows = (discord, check, description, timeoutMs = 45_000) =>
   discord.waitFor(check, description, timeoutMs);
 const episode = (activity) => activity?.name === "Sousou no Frieren";
 
-/** The whole of what's been sent to `discord` since `from`, none of it an activity. */
 const quietSince = (discord, from) => discord.activities.slice(from).every((a) => a === null);
 
 try {

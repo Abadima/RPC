@@ -1,7 +1,5 @@
-//! Which Windows user a process runs as. Everything Desktop checks about
-//! "another OS user" on Windows comes down to this: the user SID in a
-//! process's token, compared with this process's own. (A user's own elevated
-//! processes carry the same SID.)
+//! Which Windows user a process runs as: the user SID in its token, compared with
+//! this process's own (a user's elevated processes carry the same SID).
 
 use std::ffi::c_void;
 use std::ptr::null_mut;
@@ -16,7 +14,6 @@ use windows_sys::Win32::System::Threading::{
     GetCurrentProcess, OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
-/// Closes the handle when dropped.
 pub struct Handle(pub HANDLE);
 
 // SAFETY: a kernel handle is a plain number that any thread may use; what's
@@ -32,7 +29,6 @@ impl Drop for Handle {
     }
 }
 
-/// A user's SID, as the bytes Windows hands out.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Sid(Vec<u8>);
 
@@ -64,7 +60,6 @@ impl Sid {
     }
 }
 
-/// The user in a token opened for `TOKEN_QUERY`.
 fn token_user(token: HANDLE) -> Option<Sid> {
     let mut size = 0u32;
     // SAFETY: the first call only asks how much room the answer needs.

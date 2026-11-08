@@ -1,23 +1,16 @@
-//! Desktop's control pipe (Windows): the CLI's way in, and the
-//! single-instance check, like the socket on Linux and macOS. A named pipe
-//! lives in one machine-wide namespace, so what keeps it private is its
-//! access list (this user only, never over the network) and a second check on
-//! the process behind every connection, on both ends: Desktop serves only this
-//! user's processes, and the CLI trusts only this user's Desktop. Browsers
-//! never use it.
-//!
-//! The framing is the Unix socket's (`app/control.rs`): one control request,
-//! one response.
+//! Desktop's control pipe on Windows: the CLI's way in, and the single-instance
+//! check. Pipe names are machine-wide, so privacy comes from its access list (this
+//! user only, never remote) and a check of the process on each end.
 
 use std::io::{self, Read};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::app::config::AppPaths;
 use crate::app::control::{self, ControlRequest, ControlResponse, read_frame, write_frame};
 use crate::app::hub::Hub;
+use crate::app::slots::Slots;
 use crate::link::session::HANDSHAKE_TIMEOUT;
 
 use super::pipe::{self, OwnerOnly, Pipe};
@@ -40,7 +33,6 @@ pub struct Server {
     first: Pipe,
     owner: OwnerOnly,
     name: String,
-    /// How long a connection has to send its request, and to take the reply.
     timeout: Duration,
 }
 
@@ -73,7 +65,6 @@ pub fn start(server: Server, hub: Arc<Hub>) {
     thread::spawn(move || serve(server, &hub));
 }
 
-/// Sends one request to the running Desktop.
 pub fn send(request: &ControlRequest) -> io::Result<ControlResponse> {
     self::request(&pipe_name()?, request)
 }
@@ -82,7 +73,7 @@ pub fn send(request: &ControlRequest) -> io::Result<ControlResponse> {
 pub fn release() {}
 
 fn serve(server: Server, hub: &Arc<Hub>) {
-    let open = Arc::new(AtomicUsize::new(0));
+    let connections = Slots::new(MAX_CONNECTIONS);
     let mut listening = Some(server.first);
     loop {
         let pipe = match listening.take() {
@@ -101,15 +92,8 @@ fn serve(server: Server, hub: &Arc<Hub>) {
         }
         // The next instance exists before this one is served, so the name is never without one.
         listening = pipe::create_server(&server.name, false, &server.owner).ok();
-        if open.fetch_add(1, Ordering::SeqCst) >= MAX_CONNECTIONS {
-            open.fetch_sub(1, Ordering::SeqCst);
-            continue;
-        }
-        let (hub, open, timeout) = (Arc::clone(hub), Arc::clone(&open), server.timeout);
-        thread::spawn(move || {
-            handle(&pipe, &hub, timeout);
-            open.fetch_sub(1, Ordering::SeqCst);
-        });
+        let (hub, timeout) = (Arc::clone(hub), server.timeout);
+        connections.spawn(move || handle(&pipe, &hub, timeout));
     }
 }
 

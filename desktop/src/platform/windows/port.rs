@@ -1,12 +1,6 @@
-//! Checks, against the real Windows network stack, that Desktop's plain
-//! `TcpListener::bind` is enough to keep its port from being taken over. On
-//! Windows another program's `SO_REUSEADDR` can share a port that's in use
-//! (and the newest socket then gets the connections), so this is worth
-//! measuring rather than assuming: the standard library's listener refuses a
-//! program that asks to share its exact address, and a wildcard bind (the
-//! only other way onto the port) is less specific, so connections to
-//! `127.0.0.1` still reach Desktop. Port 57179 itself is only ever bound by
-//! `Server::bind`; these use free ports.
+//! Measures that Desktop's plain `TcpListener::bind` keeps its port on Windows,
+//! where another program's `SO_REUSEADDR` can share a port in use. These tests use
+//! free ports, never 57179.
 
 use std::io::{self, Read, Write};
 use std::mem::zeroed;

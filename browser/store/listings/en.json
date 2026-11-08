@@ -1,0 +1,13 @@
+{
+  "summary": "Your Rich Presence on Discord and beyond.",
+  "description": [
+    "Your Rich Presence on Discord and more.",
+    "Parousia brings your browser activity to Discord Rich Presence. It automatically detects supported websites and can display what you're watching, listening to, playing, or browsing directly on your Discord profile. When no Activity applies, you can show a custom status of your own instead.",
+    "We use Activities to support websites and web applications. Activities can provide rich details such as titles, artists, creators, thumbnails, playback state, timestamps, and links, giving your Discord status more context than a simple browser title.",
+    "Parousia includes compatibility with the open-source PreMiD Activity ecosystem, while also providing its own Activity ecosystem for developers and users.",
+    "This extension is open source and designed around a developer-friendly Activity system. TypeScript developers can create Activities for websites, publish them through the Activity ecosystem, and build integrations without modifying Parousia itself.",
+    "Parousia is designed with privacy in mind and processes activity information locally where possible. This extension communicates with our desktop application, which handles platform integration. No account or sign-in is required to use it, and Parousia does not use analytics or telemetry to track your browsing.",
+    "Ready to bring your browser activity to life? Install Parousia and make your browser activity part of your Discord Rich Presence.",
+    "Parousia is an independent, open-source project and is not affiliated with, endorsed by, or sponsored by Discord Inc."
+  ]
+}

@@ -12,7 +12,6 @@ use crate::app::hub::{Setting, Status};
 /// which peers ignore (see `PresenceWire`), so they never raise it.
 pub const PROTOCOL_VERSION: u32 = 1;
 
-/// This build's release version, sent in `welcome`.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// A release version's major number, or `None` for text that isn't one.
@@ -53,7 +52,6 @@ pub enum ClientMessage {
         /// userscript has no settings to choose from).
         platforms: Option<Vec<Platform>>,
     },
-    /// Answered with `pong`.
     Ping {},
     Status {},
     /// Changes a setting. Only honored on a connection the OS confirmed comes
@@ -183,7 +181,6 @@ pub enum ServerMessage {
     Welcome {
         #[serde(rename = "protocolVersion")]
         protocol_version: u32,
-        /// Desktop's release version, so the extension can say which side to update.
         version: &'static str,
     },
     Reject {
@@ -201,7 +198,6 @@ pub enum RejectReason {
     UnsupportedVersion,
     Malformed,
     Timeout,
-    /// An extension origin that isn't an allowed Parousia build.
     OriginNotAllowed,
     /// Too many messages; the connection is closed.
     RateLimited,
@@ -227,8 +223,6 @@ pub struct ActivityWire {
     pub state: Option<String>,
     pub assets: Option<ActivityAssetsWire>,
     pub timestamps: Option<ActivityTimestampsWire>,
-    /// The Discord Application to show this Activity as, instead of
-    /// Desktop's own.
     #[serde(rename = "discordClientId")]
     pub discord_client_id: Option<String>,
     #[serde(rename = "detailsUrl")]
@@ -244,7 +238,6 @@ pub struct ActivityWire {
     pub party: Option<ActivityPartyWire>,
 }
 
-/// The verb Discord puts before an activity's name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ActivityType {

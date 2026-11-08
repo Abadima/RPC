@@ -7,7 +7,6 @@ import { PROTOCOL_VERSION, type DesktopReport, type RejectReason } from "./deskt
 import type { Timer } from "./desktop-connection";
 
 type Behavior =
-  /** Speaks the protocol. */
   | "normal"
   /** Nothing listening: the channel closes before any message. */
   | "absent"
@@ -28,11 +27,8 @@ export const REPORT: DesktopReport = {
 
 export class FakeDesktop {
   protocolVersion = PROTOCOL_VERSION;
-  /** What `welcome` says Desktop's release is. */
   version = "1.0.0";
-  /** Answer `hello` with this reject instead of `welcome`. */
   rejectHello: RejectReason | null = null;
-  /** Answer `set` with `not_permitted`. */
   refuseSettings = false;
   readonly received: Array<Record<string, unknown>> = [];
   readonly connections: FakeServerConnection[] = [];
@@ -68,7 +64,6 @@ export class FakeServerConnection implements DesktopChannel {
     this.handlers.onMessage(JSON.parse(JSON.stringify(message)));
   }
 
-  /** Desktop (or the network) ends the connection. */
   end(): void {
     if (this.ended || this.closedByClient) return;
     this.ended = true;
@@ -146,9 +141,9 @@ export function fakeChannel(desktop: FakeDesktop, behavior: Behavior = "normal")
 
 export interface ManualTimers {
   setTimer: Timer;
-  /** Runs every timer that's due within `ms` from now, in order. */
   advance(ms: number): void;
   pending(): number;
+  now(): number;
 }
 
 export function manualTimers(): ManualTimers {
@@ -175,10 +170,10 @@ export function manualTimers(): ManualTimers {
       now = until;
     },
     pending: () => timers.size,
+    now: () => now,
   };
 }
 
-/** Lets queued microtasks settle. */
 export async function settle(): Promise<void> {
   for (let i = 0; i < 5; i++) await new Promise((resolve) => setTimeout(resolve, 0));
 }

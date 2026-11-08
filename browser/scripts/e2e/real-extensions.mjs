@@ -41,7 +41,6 @@ const paths = {
   versions: join(cacheDir, "versions.json"),
 };
 
-/** Reads a protobuf message's fields: `[field number, bytes or number]`. */
 function* fields(bytes) {
   let at = 0;
   const varint = () => {
@@ -63,7 +62,6 @@ function* fields(bytes) {
   }
 }
 
-/** A CRX3 file's zip body, the public key it was signed with, and the id that key gives. */
 function readCrx(file) {
   if (file.subarray(0, 4).toString() !== "Cr24") throw new Error("not a CRX file");
   const headerLength = file.readUInt32LE(8);
@@ -94,7 +92,6 @@ async function download(url) {
   return Buffer.from(await response.arrayBuffer());
 }
 
-/** Fetches everything into the cache (the network is needed), and records the versions. */
 export async function fetchRealExtensions(log = console.log) {
   await rm(cacheDir, { recursive: true, force: true });
   await mkdir(cacheDir, { recursive: true });
@@ -160,7 +157,6 @@ export async function fetchRealExtensions(log = console.log) {
   return versions;
 }
 
-/** Where the cached builds are, and their versions; throws, saying how to fetch them, if they aren't there. */
 export async function realExtensions() {
   try {
     const versions = JSON.parse(await readFile(paths.versions, "utf8"));

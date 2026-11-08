@@ -36,7 +36,6 @@ describe("PreMiD PresenceData", () => {
         { label: "Third", url: "https://example.com/3" },
       ],
       type: 3,
-      // Discord shows a party on a Playing activity only.
       party: { partySize: 1, maxPartySize: 2 },
     });
     expect(data && toActivity(entry, data, page, CLIENT)).toEqual({
@@ -53,7 +52,6 @@ describe("PreMiD PresenceData", () => {
         smallImage: "play",
         smallText: "Playing",
       },
-      // Seconds become milliseconds; milliseconds are rounded to the second.
       timestamps: { start: 1_700_000_000_000, end: 1_700_000_212_000 },
       buttons: [{ label: "Watch", url: "https://example.com/watch?v=abc" }],
       type: "watching",
@@ -73,7 +71,6 @@ describe("PreMiD PresenceData", () => {
       statusDisplayType: "details",
       assets: { largeImage: "https://i.example/cover.jpg", largeUrl: "https://example.com/album" },
     });
-    // Playing, the default, and showing the name, the default, are left out.
     const plain = parsePresenceData({ type: 0, statusDisplayType: 0 });
     const activity = plain && toActivity(entry, plain, page, CLIENT);
     expect(activity).not.toHaveProperty("type");
@@ -158,17 +155,14 @@ describe("PreMiD PresenceData", () => {
     expect(limitPageData(activity, ["media", "thumbnails", "creatorIcons"], entry.info)).toEqual(
       activity,
     );
-    // A name the Activity set from the page is what's playing too.
     expect(limitPageData(activity, [], entry.info)).toEqual({
       id: "premid:Example",
       name: "Example",
       url: "https://example.com/watch",
       discordClientId: CLIENT,
       assets: { largeImage: "https://cdn.example/logo.png" },
-      // What kind of Activity it is says nothing about what's playing.
       type: "watching",
     });
-    // Each image's link goes with the image it's on.
     expect(limitPageData(activity, ["media", "thumbnails"], entry.info).assets).toEqual({
       largeImage: "https://i.ytimg.com/vi/x/hq.jpg",
       largeText: "Album",

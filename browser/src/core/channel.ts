@@ -26,7 +26,6 @@ export interface ChannelOpener {
 
 export const DEFAULT_WEBSOCKET_URL = "ws://127.0.0.1:57179/ws";
 
-/** The subset of the WebSocket API a channel uses; a test seam. */
 export interface WebSocketLike {
   readonly readyState: number;
   send(data: string): void;

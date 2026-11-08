@@ -106,7 +106,6 @@ function text(value: string | undefined): string | undefined {
 const web = (value: string | undefined): string | undefined =>
   value !== undefined && /^https?:\/\//i.test(value) && value.length <= MAX_URL ? value : undefined;
 
-/** An image URL, or a Discord asset key (a PreMiD Activity's own Application may have uploaded some). */
 const image = (value: string | undefined): string | undefined =>
   web(value) ?? (value !== undefined && /^[\w-]{1,64}$/.test(value) ? value : undefined);
 
@@ -212,17 +211,11 @@ const ownImage = (value: string): boolean =>
   !/^https?:\/\//i.test(value) || value.startsWith(OWN_ASSETS);
 
 /**
- * What a PreMiD Activity reported, without the page data kinds switched off
- * in Settings > Privacy. Its code reads the page directly, so the kinds are
- * held back here, on the way out:
- *
- * - `media`: what's playing (details, state, their links, buttons, times,
- *   captions, the party, which line the status shows, links on the images,
- *   and a name it set from the page, like a song's title).
- * - `thumbnails`: a large image from the page (its own icon shows instead).
- * - `creatorIcons`: a small image from the page.
- *
- * Its own images (Discord asset keys, PreMiD's asset host) aren't page data and stay.
+ * A PreMiD Activity's report without the page data kinds switched off in
+ * Settings > Privacy, held back here since its code reads the page directly:
+ * `media` (details, state, links, buttons, times, captions, party, status line,
+ * image links, a name set from the page), `thumbnails` (a large image from the
+ * page), `creatorIcons` (a small one). Its own assets aren't page data and stay.
  */
 export function limitPageData(
   activity: Activity,

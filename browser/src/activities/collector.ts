@@ -10,28 +10,19 @@ import {
 import { PlayerBridge, type PlayerClock } from "./player-bridge";
 
 /**
- * Parousia's page-data collector: how a native Activity that declares page
- * data gets it. No Activity code runs in the page; this reads only the kinds
- * the background says it may (declared, not switched off, and the site
- * granted), and only from what pages publish in standard places:
+ * Parousia's page-data collector, for native Activities that declare page data.
+ * No Activity code runs in the page: it reads only the kinds the background
+ * allows, from what pages publish in standard places.
  *
- * - `media`: the page's Media Session (title, artist, album, and whether it
- *   says it's playing) and its playing (or first) `<video>`/`<audio>` element
- *   (which of the two it is, whether it's playing if the session doesn't say,
- *   duration, and the clock as `start` and `end`). A player in an iframe is
- *   out of reach, so where the page's iframe tells the page how it's doing
- *   (`postMessage`), that report is the clock instead (player-bridge.ts).
- * - `thumbnails`: the Media Session's largest `https` artwork, or the page's
- *   `og:image`; and the page's own loaded `<img>`s (their address and alt
- *   text, a few of them in page order), for an Activity that knows where its
- *   site keeps a cover or an avatar. It reads no markup around them.
+ * - `media`: the Media Session, and the playing (or first) `<video>`/`<audio>`
+ *   for the clock; an iframe player's `postMessage` reports stand in for an
+ *   element out of reach (player-bridge.ts).
+ * - `thumbnails`: the session's largest `https` artwork or `og:image`, and a few
+ *   loaded `<img>`s (address and alt text, no markup).
  *
- * It's shared by every native Activity that declares these, and runs only
- * for one that does: injected (as `activities/collector.js`) into the active
- * tab's page, it reads once a second while the page is shown, or while the
- * background says its music or video is kept (`background`), and sends only
- * changes. A song playing through is no change: its `start` and `end`
- * stay put until it's paused or seeked.
+ * Injected into the active tab only for an Activity that declares these, it
+ * reads once a second while the page is shown (or its media is kept) and sends
+ * only changes; a song playing through isn't one.
  */
 export const COLLECTOR_KEY = "__parousiaCollector";
 const TICK_MS = 1000;
@@ -50,9 +41,26 @@ const https = (value: string | null | undefined): string | undefined =>
 const finite = (value: number): number | undefined =>
   Number.isFinite(value) && value >= 0 ? value : undefined;
 
-/** The width in `sizes` ("512x512 256x256"), for picking the largest artwork. */
+const MAX_ARTWORK = 16;
+/** A `sizes` longer than this ("512x512 256x256 …") is no size at all. */
+const MAX_SIZES = 64;
+
 function width(sizes: string | undefined): number {
-  return Math.max(0, ...(sizes ?? "").split(/\s+/).map((size) => Number.parseInt(size, 10) || 0));
+  if (!sizes || sizes.length > MAX_SIZES) return 0;
+  return Math.max(0, ...sizes.split(/\s+/).map((size) => Number.parseInt(size, 10) || 0));
+}
+
+function largestArtwork(artwork: readonly MediaImage[]): string | undefined {
+  let best: string | undefined;
+  let bestWidth = -1;
+  for (const image of artwork.slice(0, MAX_ARTWORK)) {
+    const size = width(image.sizes);
+    if (https(image.src) && size > bestWidth) {
+      best = image.src;
+      bestWidth = size;
+    }
+  }
+  return best;
 }
 
 /** Images smaller than this are icons and spacers, not a cover or an avatar. */
@@ -60,13 +68,14 @@ const MIN_IMAGE_SIDE = 48;
 /** How many `<img>`s are looked at, so a page of thousands can't make a tick slow. */
 const MAX_IMAGE_ELEMENTS = 400;
 
-/** The page's loaded `https` images, in page order: address and alt text, without repeats. */
-export function loadedImages(doc: Pick<Document, "querySelectorAll">): PageImage[] {
+/** `document.images` is live, so reading the first few hundred doesn't walk every image on the page. */
+export function loadedImages(doc: Pick<Document, "images">): PageImage[] {
   const images: PageImage[] = [];
   const seen = new Set<string>();
-  const elements = [...doc.querySelectorAll<HTMLImageElement>("img")].slice(0, MAX_IMAGE_ELEMENTS);
-  for (const element of elements) {
-    if (images.length >= MAX_IMAGES) break;
+  const elements = doc.images;
+  for (let index = 0; index < MAX_IMAGE_ELEMENTS && images.length < MAX_IMAGES; index++) {
+    const element = elements[index];
+    if (element === undefined) break;
     const src = element.currentSrc || element.src || "";
     if (!src.startsWith("https://") || src.length > MAX_IMAGE_URL || seen.has(src)) continue;
     if (!element.complete || element.naturalWidth < MIN_IMAGE_SIDE) continue;
@@ -85,7 +94,7 @@ export function loadedImages(doc: Pick<Document, "querySelectorAll">): PageImage
  */
 export function collect(
   kinds: readonly PageDataKind[],
-  doc: Pick<Document, "querySelector" | "querySelectorAll">,
+  doc: Pick<Document, "querySelector" | "querySelectorAll" | "images">,
   nav: { mediaSession?: { metadata: MediaMetadata | null; playbackState?: string } },
   now: number = Date.now(),
   player: PlayerClock | null = null,
@@ -136,11 +145,8 @@ export function collect(
     if (Object.keys(media).length > 0) data.media = media;
   }
   if (kinds.includes("thumbnails")) {
-    const artwork = [...(session?.artwork ?? [])]
-      .filter((image) => https(image.src))
-      .sort((a, b) => width(b.sizes) - width(a.sizes))[0]?.src;
     const thumbnail =
-      https(artwork) ??
+      https(largestArtwork(session?.artwork ?? [])) ??
       https(doc.querySelector('meta[property="og:image"]')?.getAttribute("content"));
     if (thumbnail) data.thumbnail = thumbnail;
     const images = loadedImages(doc);
@@ -166,12 +172,10 @@ export function unchanged(data: PageData, before: PageData | null): boolean {
   );
 }
 
-/** Collects for one Activity in this document until the background says stop. */
 export function startCollector(activity: string): void {
   let kinds: PageDataKind[] = [];
   let sent: PageData | null = null;
   let closed = false;
-  /** The background keeps this tab's music or video, so it reads even while the tab isn't shown. */
   let background = false;
   let port: chrome.runtime.Port | null = null;
   let timer: ReturnType<typeof setInterval> | null = null;
@@ -193,13 +197,10 @@ export function startCollector(activity: string): void {
     document.removeEventListener("visibilitychange", schedule);
     try {
       port?.disconnect();
-    } catch {
-      // Already gone.
-    }
+    } catch {}
     port = null;
   };
 
-  /** Opens the port (saying hello) unless it's open. */
   const open = (): void => {
     if (closed || port) return;
     try {
@@ -269,7 +270,6 @@ export function startCollector(activity: string): void {
   tick();
 }
 
-/** Sets up `start`, once per document, for the background to call with the Activity's id. */
 export function installCollector(scope: object = globalThis): void {
   if (Reflect.has(scope, COLLECTOR_KEY)) return;
   const started = new Set<string>();

@@ -49,7 +49,6 @@ pub struct Item {
     pub label: String,
     pub enabled: bool,
     pub separator: bool,
-    /// `Some` for a checkmark item.
     pub checked: Option<bool>,
     pub children: Vec<Item>,
 }
@@ -257,7 +256,6 @@ pub fn add_setting(tree: &mut Item, item: Item) {
     }
 }
 
-/// A checkmark item, for `add_setting`.
 #[cfg(windows)]
 pub fn check_item(id: i32, label: &str, checked: bool) -> Item {
     Item::check(id, label, checked)

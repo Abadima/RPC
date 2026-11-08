@@ -19,10 +19,6 @@ import {
 const EXTENSION_ID = "self";
 const EXTENSION_PAGE = "chrome-extension://self/popup.html";
 
-/**
- * A stand-in Activity for arcade.example: "Chess - Arcade" is "Playing Chess",
- * and before the title arrives, "Playing a game".
- */
 function arcade(): ActivityRegistry {
   const registry = new ActivityRegistry();
   registry.register({
@@ -41,7 +37,6 @@ function arcade(): ActivityRegistry {
   return registry;
 }
 
-/** No page scripts: reading pages is tested in activities/host.test.ts. */
 const quietPages: PageBrowser = {
   extensionId: EXTENSION_ID,
   onConnect: () => {},
@@ -88,7 +83,6 @@ function fakeBridge(): DiscordBridge & {
   return bridge;
 }
 
-/** Enough of a DesktopLink to observe what the background script does with it. */
 function fakeLink(): DesktopLink & {
   sent: Presence[];
   platforms: PlatformId[][];
@@ -143,11 +137,9 @@ interface FakeUiPort {
 }
 
 interface FakeTab {
-  /** Unset for a browser page the extension can't see. */
   url?: string;
   incognito?: boolean;
   title?: string;
-  /** Sound is playing in it. */
   audible?: boolean;
   favIconUrl?: string;
 }
@@ -160,9 +152,8 @@ type UpdatedListener = (
 
 function installChromeMock(
   tab: FakeTab = { url: "https://example.com" },
-  /** What `storage.local` holds, by key, and how long a read takes. */
   initial: Record<string, unknown> = {},
-  storageDelayMs = 0,
+  storageDelayMs: number | Record<string, number> = 0,
   /**
    * A browser that is already running: what `storage.session` holds (it outlives the background, which
    * MV3 stops and starts again), the other tabs, and which tab is active.
@@ -171,39 +162,31 @@ function installChromeMock(
     session?: Record<string, unknown>;
     others?: Record<number, FakeTab>;
     active?: number;
-    /** Tabs that have closed. */
     closed?: number[];
   } = {},
 ): {
   connect: (name: string, senderId?: string, senderUrl?: string) => FakeUiPort;
   savePreferences: (value: unknown) => void;
   saveDefault: (value: unknown) => void;
-  /** Which Activities someone turned on or off, as the dashboard saves them. */
   saveStates: (value: unknown) => void;
   tabLookups: () => number;
-  /** Tab 1 unless `tabId` says another. */
+  localReads: () => number;
   update: (
     change: { url?: string; title?: string; audible?: boolean; favIconUrl?: string },
     next?: FakeTab,
     tabId?: number,
   ) => void;
-  /** Closes a tab. */
   remove: (tabId: number) => void;
-  /** How long lookups of one tab take from now on, so a refresh can be overtaken while it waits on it. */
   slowTab: (tabId: number, ms: number) => void;
-  /** What `storage.session` holds now. */
   session: () => Record<string, unknown>;
-  /** Opens a tab in `windowId`, where it becomes that window's active tab. */
   activate: (tabId: number, tab: FakeTab, windowId: number) => void;
   focus: (windowId: number) => void;
-  /** Closes a window without saying where focus went; `focusNow` is what the browser reports after. */
   close: (windowId: number, focusNow: number) => void;
 } {
   const activatedListeners: Array<(info: { tabId: number; windowId: number }) => void> = [];
   const focusListeners: Array<(windowId: number) => void> = [];
   const removedListeners: Array<(windowId: number) => void> = [];
   let lastFocused = 1;
-  /** Tabs besides the first, and each window's active tab (window 1's is tab 1). */
   const others = new Map<number, FakeTab>(
     Object.entries(running.others ?? {}).map(([id, other]) => [Number(id), other]),
   );
@@ -218,6 +201,7 @@ function installChromeMock(
   const slowTabs = new Map<number, number>();
   let current = tab;
   let tabLookups = 0;
+  let localReads = 0;
   globalThis.chrome = {
     tabs: {
       onActivated: {
@@ -230,13 +214,14 @@ function installChromeMock(
       },
       get: (async (tabId: number) => {
         tabLookups++;
+        // The tab as it was when asked: a slow answer can be out of date by the time it arrives.
+        const answer = others.get(tabId) ?? current;
         const delay = slowTabs.get(tabId) ?? 0;
         if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
         if (closed.has(tabId)) throw new Error(`No tab with id: ${tabId}`);
-        return others.get(tabId) ?? current;
+        return answer;
       }) as unknown as typeof chrome.tabs.get,
       query: (async (query: { windowId?: number; active?: boolean }) => {
-        // Every tab, when asked for no particular window or state (as for private tabs).
         if (query.windowId === undefined && query.active === undefined) {
           const every = [{ id: 1, windowId: 1, ...current }];
           for (const [id, other] of others) every.push({ id, windowId: 1, ...other });
@@ -259,10 +244,19 @@ function installChromeMock(
     },
     storage: {
       local: {
-        get: async (key: string) => {
-          if (storageDelayMs > 0)
-            await new Promise((resolve) => setTimeout(resolve, storageDelayMs));
-          return key in stored ? { [key]: stored[key] } : {};
+        get: async (keys: string | string[]) => {
+          localReads++;
+          const wanted = typeof keys === "string" ? [keys] : keys;
+          const delay = Math.max(
+            0,
+            ...wanted.map((key) =>
+              typeof storageDelayMs === "number" ? storageDelayMs : (storageDelayMs[key] ?? 0),
+            ),
+          );
+          if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+          return Object.fromEntries(
+            wanted.filter((key) => key in stored).map((key) => [key, stored[key]]),
+          );
         },
         set: async () => {},
       },
@@ -280,7 +274,6 @@ function installChromeMock(
     runtime: {
       id: EXTENSION_ID,
       getURL: (path: string) => `chrome-extension://${EXTENSION_ID}/${path}`,
-      // The keepalive interval outlives a test that leaves an Activity shared.
       getPlatformInfo: async () => ({ os: "linux", arch: "x64" }),
       onConnect: {
         addListener: (listener: (port: unknown) => void) => connectListeners.push(listener),
@@ -306,6 +299,7 @@ function installChromeMock(
       for (const listener of removedTabListeners) listener(tabId);
     },
     tabLookups: () => tabLookups,
+    localReads: () => localReads,
     activate: (tabId, tab, windowId) => {
       others.set(tabId, tab);
       activeIn.set(windowId, tabId);
@@ -341,7 +335,6 @@ function installChromeMock(
 }
 
 const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
-/** For tests with fake timers, where `tick` would never come: lets every pending promise run. */
 async function settle(): Promise<void> {
   for (let i = 0; i < 30; i++) await Promise.resolve();
 }
@@ -352,7 +345,6 @@ describe("startBackground", () => {
     const link = fakeLink();
     start(link, fakeBridge());
     await tick();
-    // example.com isn't a site any Activity looks at: the only thing to report is "nothing".
     expect(link.sent).toHaveLength(1);
     expect(link.sent[0]?.activity).toBeNull();
   });
@@ -367,7 +359,6 @@ describe("startBackground", () => {
     await tick();
     expect(link.sent.at(-1)?.activity?.assets).toBeUndefined();
 
-    // Tabs report the favicon after the page: it's news only on a page an Activity looks at.
     chromeMock.update(
       { favIconUrl: "https://arcade.example/icons/favicon-192.png?v=4" },
       {
@@ -400,6 +391,73 @@ describe("startBackground", () => {
     await tick();
     expect(chromeMock.tabLookups()).toBe(lookups);
     expect(link.sent).toHaveLength(before);
+  });
+
+  test("nothing is shared on a default before the stored preferences are read", async () => {
+    installChromeMock(
+      { url: "https://arcade.example/chess", title: "Chess - Arcade" },
+      { preferences: { shareMediaDetails: false }, activities: {} },
+      { preferences: 40 },
+    );
+    const link = fakeLink();
+    start(link, fakeBridge());
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(link.sent.map((presence) => presence.activity?.id)).toContain("arcade");
+    for (const presence of link.sent) expect(presence.activity?.details).toBeUndefined();
+  });
+
+  test("a background that starts reads what's stored once, and looks at the tab once", async () => {
+    const chromeMock = installChromeMock({ url: "https://arcade.example/chess", title: "Chess" });
+    const link = fakeLink();
+    start(link, fakeBridge());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(chromeMock.localReads()).toBe(1);
+    expect(chromeMock.tabLookups()).toBe(1);
+    expect(link.sent).toHaveLength(1);
+  });
+
+  test("a tab activated while what's stored is read is the one shared once it's in", async () => {
+    const chromeMock = installChromeMock({ url: "https://example.com", title: "Example" }, {}, 30);
+    const link = fakeLink();
+    start(link, fakeBridge());
+    chromeMock.activate(2, { url: "https://arcade.example/chess", title: "Chess - Arcade" }, 1);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(link.sent.at(-1)?.activity?.details).toBe("Playing Chess");
+  });
+
+  test("a burst of tab events during one slow lookup runs at most one more lookup, and what last fired wins", async () => {
+    const chromeMock = installChromeMock({
+      url: "https://arcade.example/chess",
+      title: "Chess - Arcade",
+    });
+    const link = fakeLink();
+    start(link, fakeBridge());
+    await tick();
+
+    chromeMock.slowTab(1, 40);
+    const title = (n: string): void =>
+      chromeMock.update(
+        { title: `${n} - Arcade` },
+        {
+          url: "https://arcade.example/chess",
+          title: `${n} - Arcade`,
+        },
+      );
+    title("Tafl");
+    title("Shogi");
+    title("Renju");
+    const lookups = chromeMock.tabLookups();
+    expect(lookups).toBeGreaterThanOrEqual(1);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(chromeMock.tabLookups()).toBeLessThan(lookups + 3);
+    expect(chromeMock.tabLookups()).toBeGreaterThan(lookups);
+
+    // Only the last event's title is published. The lookup that was overtaken while it
+    // waited publishes nothing: Desktop would hold the update after it back for 2 seconds.
+    const details = link.sent.map((presence) => presence.activity?.details);
+    expect(details).not.toContain("Playing Tafl");
+    expect(details).not.toContain("Playing Shogi");
+    expect(details.at(-1)).toBe("Playing Renju");
   });
 
   test("an open UI holds the connection and gets every state change", () => {
@@ -502,7 +560,6 @@ describe("startBackground", () => {
     const bridge = fakeBridge();
     start(link, bridge);
     await tick();
-    // Yielding from the start, before Desktop has had a chance to answer.
     expect(bridge.yielding.at(-1)).toBe(true);
     expect(bridge.sent.at(-1)?.activity?.details).toBe("Playing Chess");
 
@@ -511,7 +568,6 @@ describe("startBackground", () => {
     link.setState({ status: "connected" });
     expect(bridge.yielding.at(-1)).toBe(true);
 
-    // Desktop went away: the app takes over, and keeps that through each retry.
     link.setState({ status: "disconnected" });
     expect(bridge.yielding.at(-1)).toBe(false);
     link.setState({ status: "connecting" });
@@ -520,7 +576,6 @@ describe("startBackground", () => {
     link.setState({ status: "connected" });
     expect(bridge.yielding.at(-1)).toBe(true);
 
-    // A Desktop that refuses this build isn't showing anything either.
     link.setState({ status: "not_allowed" });
     expect(bridge.yielding.at(-1)).toBe(false);
     link.setState({ status: "idle" });
@@ -605,7 +660,6 @@ describe("startBackground", () => {
     const since = shown?.timestamps?.start;
     expect(typeof since).toBe("number");
 
-    // Another page no Activity covers: the same Default Activity, not resent.
     const sent = link.sent.length;
     chromeMock.update(
       { url: "https://example.org" },
@@ -614,7 +668,6 @@ describe("startBackground", () => {
     await tick();
     expect(link.sent).toHaveLength(sent);
 
-    // A detected Activity takes over; afterwards the Default Activity starts over.
     chromeMock.update({ url: game }, { url: game, title: "Arcade" });
     await tick();
     expect(link.sent.at(-1)?.activity?.id).toBe("arcade");
@@ -651,29 +704,24 @@ describe("startBackground", () => {
     const link = fakeLink();
     start(link, fakeBridge());
     await tick();
-    // Without an Idle Timeout (the default keeps presence a minute), leaving the browser clears it at once.
     chromeMock.savePreferences({ idleTimeoutMinutes: 0 });
     await tick();
     expect(link.sent.at(-1)?.activity).toBeNull();
 
-    // A tab opening in the background in another window changes nothing.
     chromeMock.activate(2, { url: game, title: "Chess - Arcade" }, 2);
     await tick();
     expect(link.sent.at(-1)?.activity).toBeNull();
 
-    // Focusing that window shares its active tab.
     chromeMock.focus(2);
     await tick();
     await tick();
     expect(link.sent.at(-1)?.activity?.details).toBe("Playing Chess");
 
-    // And back: window 1's active tab again.
     chromeMock.focus(1);
     await tick();
     await tick();
     expect(link.sent.at(-1)?.activity).toBeNull();
 
-    // The focused window closing with no word on where focus went: asked, not assumed.
     chromeMock.focus(2);
     await tick();
     await tick();
@@ -697,19 +745,16 @@ describe("startBackground", () => {
     await tick();
     expect(link.sent.at(-1)?.activity?.details).toBe("Playing Chess");
 
-    // Without an Idle Timeout, which is what this is about: the default keeps presence a minute.
     chromeMock.savePreferences({ idleTimeoutMinutes: 0 });
     await tick();
     chromeMock.focus(-1);
     await tick();
     expect(link.sent.at(-1)?.activity).toBeNull();
 
-    // Music keeps playing while someone looks at Discord, or opens the popup.
     chromeMock.update({ audible: true }, { url: game, title: "Chess - Arcade", audible: true });
     await tick();
     expect(link.sent.at(-1)?.activity?.details).toBe("Playing Chess");
 
-    // What's shared keeps following the tab while they're away.
     chromeMock.update({ title: "Go - Arcade" }, { url: game, title: "Go - Arcade", audible: true });
     await tick();
     expect(link.sent.at(-1)?.activity?.details).toBe("Playing Go");
@@ -768,7 +813,6 @@ describe("startBackground", () => {
       jest.advanceTimersByTime(60_000);
       await settle();
       expect(link.sent.at(-1)?.activity).toBeNull();
-      // Not brought back by the next thing the tab does.
       chromeMock.update({ title: "Chess - Arcade" }, { url: game, title: "Chess - Arcade" });
       await settle();
       expect(link.sent.at(-1)?.activity).toBeNull();
@@ -792,7 +836,6 @@ describe("startBackground", () => {
   });
 });
 
-/** What MAL-Sync answers on an episode it recognized (compat/malsync.ts). */
 const MALSYNC_REPLY = {
   clientId: "606504719212478504",
   presence: {
@@ -859,7 +902,6 @@ describe("MAL-Sync", () => {
       JSON.stringify(presenceWire(link.sent.at(-1) ?? { activity: null, updatedAt: 0 })),
     ).not.toContain("arcade.example");
 
-    // Turned off again: the site's own Activity is back.
     await tick();
     chromeMock.savePreferences({ malSync: false });
     await tick();
@@ -944,7 +986,6 @@ describe("MAL-Sync", () => {
     expect(sent?.name).toBe("MAL-Sync");
     expect(sent?.state).toBeUndefined();
     expect(sent?.buttons).toBeUndefined();
-    // The cover is the series: a picture that says what's being watched.
     expect(sent?.assets?.largeImage).toBeUndefined();
     expect(sent?.assets?.smallImage).toBe("play");
   });
@@ -977,7 +1018,6 @@ describe("backgroundKeepalive", () => {
   });
 });
 
-/** Stand-ins for a music site and a video site, beside `arcade`; `detected` is every run of their code. */
 function players(): { registry: ActivityRegistry; detected: string[] } {
   const detected: string[] = [];
   const registry = arcade();
@@ -1016,7 +1056,6 @@ const CHESS: FakeTab = {
 const MEDIA_ON = { preferences: { showMediaPresence: true } };
 
 describe("Show media presence", () => {
-  /** Starts with `first` as tab 1, and gives back what's shared as it changes. */
   async function open(
     first: FakeTab,
     stored: Record<string, unknown> = MEDIA_ON,
@@ -1049,7 +1088,6 @@ describe("Show media presence", () => {
     chromeMock.activate(2, NOWHERE, 1);
     await tick();
     expect(shown()).toMatchObject({ id: "tunes", details: "Song A" });
-    // Nothing between: the presence was never cleared, so Discord never flickered.
     expect(ids().slice(ids().indexOf("tunes"))).toEqual(["tunes"]);
   });
 
@@ -1159,7 +1197,6 @@ describe("Show media presence", () => {
     const port = chromeMock.connect(UI_PORT_NAME);
     const last = (): unknown =>
       port.posted.filter((m) => (m as { type: string }).type === "activity").at(-1);
-    // On the music's own tab it is simply what the tab shows.
     expect(last()).toEqual({
       type: "activity",
       activity: { id: "tunes", name: "tunes", details: "Song A" },
@@ -1172,7 +1209,6 @@ describe("Show media presence", () => {
       activity: { id: "tunes", name: "tunes", details: "Song A", kept: true },
     });
 
-    // Back on its own tab, the same presence is no longer kept: the UI hears it though nothing was resent.
     chromeMock.activate(1, song("Song A"), 1);
     await tick();
     expect(last()).toEqual({
@@ -1205,7 +1241,6 @@ describe("Show media presence", () => {
     });
 
     test("music that was being kept is kept again, with nothing visited since", async () => {
-      // The background had kept Song A from tab 1 while tab 2 was shared; it stops and starts again.
       const { shown } = await open(song("Song A"), MEDIA_ON, 0, {
         session: { mediaTabs: [1] },
         others: { 2: NOWHERE },
@@ -1351,7 +1386,6 @@ describe("Show media presence", () => {
     });
 
     test("is not run at startup before its switch has been read", async () => {
-      // The stored states arrive late: until they do, every Activity is at its default (on).
       const { chromeMock, detected, shown } = await open(song("Song A"), OFF, 40);
       await new Promise((resolve) => setTimeout(resolve, 120));
       expect(detected).toEqual([]);
@@ -1385,7 +1419,6 @@ describe("Show media presence", () => {
       await tick();
       chromeMock.saveStates({});
       await tick();
-      // The tab is still remembered and still playing, so it counts again.
       expect(shown()).toMatchObject({ id: "tunes", details: "Song A" });
     });
   });
@@ -1464,7 +1497,6 @@ describe("Show media presence", () => {
     expect(shown()).toBeNull();
     const runs = detected.length;
 
-    // Its song changes, and it's visited again: its Activity isn't run, and nothing is shown.
     chromeMock.update({ title: "Song B" }, { ...song("Song B"), incognito: true }, 1);
     await tick();
     chromeMock.activate(3, NOWHERE, 1);
@@ -1479,10 +1511,8 @@ describe("Show media presence", () => {
     await tick();
     expect(shown()?.id).toBe("tunes");
 
-    // The next refresh waits on its lookups; the setting goes off while it does.
     chromeMock.slowTab(1, 60);
     chromeMock.activate(3, NOWHERE, 1);
-    // Let the refresh reach the lookup of the remembered player, then switch the feature off.
     await new Promise((resolve) => setTimeout(resolve, 10));
     chromeMock.savePreferences({ showMediaPresence: false });
     await new Promise((resolve) => setTimeout(resolve, 250));
@@ -1491,7 +1521,6 @@ describe("Show media presence", () => {
 });
 
 describe("Show media presence: a tab that is not shown", () => {
-  /** A music site whose Activity reads what's playing through the collector, so its page has scripts. */
   const tunes: ActivityManifest = {
     info: {
       id: "tunes",
@@ -1504,7 +1533,6 @@ describe("Show media presence: a tab that is not shown", () => {
     match: { patterns: ["https://tunes.example/*"] },
   };
 
-  /** The collector in tab 1 as the background sees it: a port to say hello and send what's playing on. */
   function collectorPort() {
     const listeners: Array<(message: unknown) => void> = [];
     const port = {
@@ -1606,7 +1634,6 @@ describe("Show media presence: a tab that is not shown", () => {
     await tick();
     expect(shown()).toMatchObject({ id: "tunes", details: "Song A" });
 
-    // The tab keeps reading in the background; its next song is news, and the title moves with it.
     port.send({ type: "data", data: { media: { title: "Song B", playing: true } } });
     await settleReports();
     expect(shown()).toMatchObject({ id: "tunes", details: "Song B" });
@@ -1631,7 +1658,6 @@ describe("Show media presence: a tab that is not shown", () => {
     expect(shown()).toMatchObject({ id: "movies", details: "Film" });
     expect(link.sent.length).toBe(from);
 
-    // When the film stops, the song it left behind is the current one, not the old one.
     chromeMock.update({ audible: false }, film("Film", false), 2);
     await tick();
     expect(shown()).toMatchObject({ id: "tunes", details: "Song B" });

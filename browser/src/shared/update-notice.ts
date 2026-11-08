@@ -6,23 +6,16 @@ import { latestDesktopVersion } from "./latest-desktop";
 import { DESKTOP_DOWNLOAD } from "./links";
 
 /**
- * What to tell someone whose Parousia Desktop and extension work together but
- * aren't the same release (core/version.ts): which side is behind, and a
- * choice to ignore it. Dismissing is remembered for that pair of versions, so
- * the next release of either side asks again.
- *
- * Desktop and the extension version on their own, so an extension newer than
- * Desktop is not news by itself: a release pairs a new extension with the
- * Desktop that was current when it shipped. "Update Desktop" is said only when
- * GitHub lists a newer Desktop than the connected one (`latestDesktop`); with
- * no answer, nothing is said.
+ * What to tell someone whose Desktop and extension work together but aren't the
+ * same release (core/version.ts), with a dismissal remembered per pair of
+ * versions. A newer extension beside an older Desktop is normal, so "update
+ * Desktop" is said only when GitHub lists a newer Desktop than the connected
+ * one (`latestDesktop`).
  */
 export interface UpdateNotice {
-  /** The pair of versions it's about, to remember a dismissal by. */
   key: string;
   title: string;
   detail: string;
-  /** Where to get the update, when it's a download. */
   href?: string;
   action?: string;
 }
@@ -128,7 +121,6 @@ export function updateBanner(
   let state: ConnectionState = { status: "idle" };
   let dismissed: string | null = null;
   let loaded = false;
-  /** `undefined` until GitHub has been asked (only when a newer extension would say "update Desktop"). */
   let latest: string | null | undefined;
   let asked = false;
   const show = (): void => {

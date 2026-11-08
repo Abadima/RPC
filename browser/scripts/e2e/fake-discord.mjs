@@ -27,9 +27,7 @@ export async function startFakeDiscord(where) {
   const path = windows ? `${where}0` : join(where, "discord-ipc-0");
   if (!windows) await rm(path, { force: true });
   const handshakes = [];
-  /** Every SET_ACTIVITY's activity, in order: `null` clears. */
   const activities = [];
-  /** The same, with the Application each came from: `{ clientId, activity }`. */
   const calls = [];
   const sockets = new Set();
 
@@ -83,7 +81,6 @@ export async function startFakeDiscord(where) {
     handshakes,
     activities,
     calls,
-    /** Waits until what's shown passes `check`, and returns it. */
     waitFor(check, description, timeoutMs = 30_000) {
       return waitUntil(
         () =>
@@ -92,12 +89,10 @@ export async function startFakeDiscord(where) {
         timeoutMs,
       );
     },
-    /** Discord quitting: every connection ends and the socket or pipe goes away. */
     async quit() {
       for (const socket of sockets) socket.destroy();
       await new Promise((resolve) => server.close(resolve));
     },
-    /** Discord starting again, where it was; what was recorded stays. */
     async reopen() {
       if (!windows) await rm(path, { force: true });
       server = createServer(connection);

@@ -1,0 +1,13 @@
+{
+  "summary": "Discord’da ve ötesinde Rich Presence’ınız.",
+  "description": [
+    "Discord’da ve daha fazlasında Rich Presence’ınız.",
+    "Parousia, tarayıcı etkinliğinizi Discord Rich Presence’a taşır. Desteklenen web sitelerini otomatik olarak algılar; izlediklerinizi, dinlediklerinizi, oynadıklarınızı ya da gezdiğiniz sayfaları doğrudan Discord profilinizde gösterebilir. Hiçbir etkinlik geçerli değilse bunun yerine kendi özel durumunuzu gösterebilirsiniz.",
+    "Web sitelerini ve web uygulamalarını desteklemek için etkinlikler kullanıyoruz. Etkinlikler başlık, sanatçı, içerik üreticisi, küçük resim, oynatma durumu, zaman damgası ve bağlantı gibi zengin ayrıntılar sunabilir. Böylece Discord etkinlik durumunuz, sıradan bir tarayıcı başlığından çok daha fazla bağlam kazanır.",
+    "Parousia, PreMiD’in açık kaynaklı etkinlik ekosistemiyle uyumludur ve geliştiriciler ile kullanıcılar için kendi etkinlik ekosistemini de sunar.",
+    "Bu uzantı açık kaynaklıdır ve geliştirici dostu bir etkinlik sistemi etrafında tasarlanmıştır. TypeScript geliştiricileri web siteleri için etkinlikler oluşturabilir, bunları etkinlik ekosistemi üzerinden yayımlayabilir ve Parousia’nın kendisini değiştirmeden entegrasyonlar geliştirebilir.",
+    "Parousia gizlilik gözetilerek tasarlanmıştır ve etkinlik bilgilerini mümkün olduğunca yerel olarak işler. Uzantı, platform entegrasyonunu üstlenen masaüstü uygulamamızla iletişim kurar. Kullanmak için hesap açmanız ya da oturum açmanız gerekmez; Parousia gezinmenizi izlemek için analiz veya telemetri kullanmaz.",
+    "Tarayıcı etkinliğinizi canlandırmaya hazır mısınız? Parousia’yı yükleyin ve tarayıcıda yaptıklarınızı Discord Rich Presence’ınızın bir parçası yapın.",
+    "Parousia bağımsız, açık kaynaklı bir projedir. Discord Inc. ile bağlantısı yoktur; Discord Inc. tarafından onaylanmamış ya da sponsor edilmemiştir."
+  ]
+}

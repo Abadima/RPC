@@ -121,7 +121,6 @@ function buildZip(entries: ZipEntry[]): Uint8Array {
   return Buffer.concat([...localParts, centralDirectory, eocd]);
 }
 
-/** Zips every file under `sourceDir` (recursively) into `outputPath`, with paths relative to `sourceDir` at the zip root. */
 export async function writeZip(sourceDir: string, outputPath: string): Promise<void> {
   const entries = await collectFiles(sourceDir);
   entries.sort((a, b) => a.path.localeCompare(b.path));

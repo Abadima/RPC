@@ -1,16 +1,13 @@
-//! The `127.0.0.1` port: plain HTTP (`GET /health`) and the WebSocket. Bound
-//! to loopback only, never `0.0.0.0`. Before anything is read from a
-//! connection, it must come from this OS user (where that can be checked, see
-//! `platform/linux/peer.rs`), fit under the connection cap, and not arrive faster than the
-//! accept rate limit.
+//! The `127.0.0.1` port (never `0.0.0.0`): `GET /health` and the WebSocket. Before
+//! anything is read, a connection must pass the accept rate limit and the
+//! connection cap, and come from this OS user where that can be checked.
 
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::app::hub::Hub;
+use crate::app::slots::Slots;
 use crate::link::http;
 use crate::link::rate::TokenBucket;
 use crate::link::ws;
@@ -34,7 +31,7 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub struct Server {
     hub: Arc<Hub>,
-    open: Arc<AtomicUsize>,
+    connections: Slots,
     accepts: Mutex<TokenBucket>,
 }
 
@@ -42,7 +39,7 @@ impl Server {
     pub fn new(hub: Arc<Hub>) -> Self {
         Self {
             hub,
-            open: Arc::new(AtomicUsize::new(0)),
+            connections: Slots::new(MAX_CONNECTIONS),
             accepts: Mutex::new(TokenBucket::new(ACCEPT_BURST, ACCEPTS_PER_SECOND)),
         }
     }
@@ -75,15 +72,8 @@ impl Server {
             Owner::Unknown => false,
             Owner::OtherUser => return,
         };
-        if self.open.fetch_add(1, Ordering::SeqCst) >= MAX_CONNECTIONS {
-            self.open.fetch_sub(1, Ordering::SeqCst);
-            return;
-        }
-        let guard = OpenGuard(Arc::clone(&self.open));
         let hub = Arc::clone(&self.hub);
-
-        thread::spawn(move || {
-            let _guard = guard;
+        self.connections.spawn(move || {
             let mut stream = stream;
             match http::read_request(&mut stream, REQUEST_TIMEOUT) {
                 Ok(http::Request::Upgrade(upgrade)) => {
@@ -98,19 +88,12 @@ impl Server {
     }
 }
 
-struct OpenGuard(Arc<AtomicUsize>);
-
-impl Drop for OpenGuard {
-    fn drop(&mut self) {
-        self.0.fetch_sub(1, Ordering::SeqCst);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::app::hub::tests::{CHROMIUM, test_hub};
     use std::io::{Read, Write};
+    use std::thread;
     use tungstenite::Message;
     use tungstenite::client::ClientRequestBuilder;
     use tungstenite::http::Uri;

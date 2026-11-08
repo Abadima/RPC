@@ -1,0 +1,13 @@
+{
+  "summary": "A sua Rich Presence no Discord e mais além.",
+  "description": [
+    "A sua Rich Presence no Discord e muito mais.",
+    "A Parousia leva a atividade do seu navegador para a Rich Presence do Discord. Deteta automaticamente os sites compatíveis e pode mostrar, diretamente no seu perfil do Discord, o que está a ver, a ouvir, a jogar ou a explorar. Quando nenhuma atividade se aplica, pode mostrar em vez disso um estado personalizado.",
+    "Utilizamos atividades para dar suporte a sites e aplicações web. As atividades podem fornecer detalhes enriquecidos, como títulos, artistas, criadores, miniaturas, estado de reprodução, marcas temporais e ligações. Assim, o seu estado no Discord ganha muito mais contexto do que com o simples título de um separador.",
+    "A Parousia é compatível com o ecossistema de atividades PreMiD, de código aberto, e oferece também o seu próprio ecossistema de atividades para programadores e utilizadores.",
+    "Esta extensão é de código aberto e foi concebida em torno de um sistema de atividades pensado para programadores. Quem programa em TypeScript pode criar atividades para sites, publicá-las através do ecossistema de atividades e desenvolver integrações sem modificar a própria Parousia.",
+    "A Parousia foi concebida a pensar na privacidade e processa as informações de atividade localmente sempre que possível. A extensão comunica com a nossa aplicação para computador, que trata da integração com as plataformas. Não é necessária conta nem início de sessão para a utilizar, e a Parousia não recorre a análises nem a telemetria para monitorizar a sua navegação.",
+    "Pronto para dar vida à atividade do seu navegador? Instale a Parousia e leve o que faz no navegador para a sua Rich Presence no Discord.",
+    "A Parousia é um projeto independente e de código aberto, sem qualquer afiliação, aprovação ou patrocínio da Discord Inc."
+  ]
+}

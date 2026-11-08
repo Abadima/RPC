@@ -3,7 +3,15 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { OFFLINE_ENV, SOURCE_ENV, fetchSources, git, refreshSources, syncSource } from "./sources";
+import {
+  OFFLINE_ENV,
+  SOURCE_ENV,
+  fetchSources,
+  git,
+  readRepository,
+  refreshSources,
+  syncSource,
+} from "./sources";
 
 let root = "";
 let origin = "";
@@ -127,5 +135,98 @@ describe("Activity sources follow main, and a failed fetch never costs a working
         else process.env[key] = before[key];
       }
     }
+  });
+});
+
+describe("a pinned source builds from the pin, not from `main`'s newest", () => {
+  let pinned = "";
+  const repo = (revision: string): { repository: string; branch: string; revision?: string } => ({
+    repository: origin,
+    branch: "main",
+    ...(revision !== undefined && { revision }),
+  });
+
+  test("a fresh checkout lands on the pin even though `main` is ahead of it", async () => {
+    pinned = join(root, "cache-pin");
+    const first = await git(["rev-parse", "HEAD"], origin);
+    const a = await syncSource(repo(first), pinned, log, quiet);
+    expect(a).toEqual({ commit: first, previous: null, stale: false });
+    expect(await git(["rev-parse", "HEAD"], pinned)).toBe(first);
+    expect(existsSync(join(pinned, "websites/C/Three/metadata.json"))).toBe(true);
+  });
+
+  test("a synced pin doesn't follow `main`: it stays and the drift is reported", async () => {
+    const pin = await git(["rev-parse", "HEAD"], pinned);
+    await commit(origin, { "websites/D/Four/metadata.json": "{}" }, "fourth");
+    lines.length = 0;
+    const result = await syncSource(repo(pin), pinned, log, quiet);
+    expect(result).toEqual({ commit: pin, previous: pin, stale: false });
+    expect(await git(["rev-parse", "HEAD"], pinned)).toBe(pin);
+    expect(existsSync(join(pinned, "websites/D/Four/metadata.json"))).toBe(false);
+    expect(lines.join("\n")).toContain("keeping the pinned");
+    expect(lines.join("\n")).toContain("edit activity-sources.json to move it");
+  });
+
+  test("an unreachable repository keeps a pinned checkout exactly as it was", async () => {
+    const pin = await git(["rev-parse", "HEAD"], pinned);
+    await rename(origin, `${origin}.away`);
+    try {
+      lines.length = 0;
+      const result = await syncSource(repo(pin), pinned, log, quiet);
+      expect(result).toEqual({ commit: pin, previous: pin, stale: true });
+      expect(await git(["rev-parse", "HEAD"], pinned)).toBe(pin);
+      expect(lines.join("\n")).toContain("couldn't fetch");
+    } finally {
+      await rename(`${origin}.away`, origin);
+    }
+  });
+
+  test("a checkout that wandered off its pin is brought back, and a pin on the tip is an ordinary checkout", async () => {
+    const pin = await git(["rev-parse", "HEAD"], pinned);
+    await mkdir(join(pinned, "websites/X/Stray"), { recursive: true });
+    await writeFile(join(pinned, "websites/X/Stray/metadata.json"), "{}");
+    await git(["add", "-A"], pinned);
+    await git(
+      ["-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "stray"],
+      pinned,
+    );
+    const wandered = await git(["rev-parse", "HEAD"], pinned);
+    expect(wandered).not.toBe(pin);
+    const result = await syncSource(repo(pin), pinned, log, quiet);
+    expect(result).toEqual({ commit: pin, previous: wandered, stale: false });
+    expect(await git(["rev-parse", "HEAD"], pinned)).toBe(pin);
+
+    const tip = await commit(origin, { "websites/E/Five/metadata.json": "{}" }, "fifth");
+    lines.length = 0;
+    const advanced = await syncSource(repo(tip), pinned, log, quiet);
+    expect(advanced).toEqual({ commit: tip, previous: pin, stale: false });
+    expect(lines.join("\n")).not.toContain("keeping the pinned");
+  });
+
+  test("an unusable pinned commit is refused, not overridden by `main`", async () => {
+    const before = await git(["rev-parse", "HEAD"], pinned);
+    await git(["rm", "-rq", "websites"], origin);
+    const naked = await commit(origin, { "README.md": "no websites" }, "naked");
+    const result = await syncSource(repo(naked), pinned, log, quiet);
+    expect(result.stale).toBe(true);
+    expect(result.commit).toBe(before);
+    expect(await git(["rev-parse", "HEAD"], pinned)).toBe(before);
+  });
+
+  test("readRepository checks a pin's shape", () => {
+    expect(() =>
+      readRepository("parousia", {
+        repository: "https://github.com/a/b",
+        branch: "main",
+        revision: "short",
+      }),
+    ).toThrow("full 40-character commit id");
+    expect(
+      readRepository("parousia", {
+        repository: "https://github.com/a/b",
+        branch: "main",
+        revision: "0".repeat(40),
+      }),
+    ).toEqual({ repository: "https://github.com/a/b", branch: "main", revision: "0".repeat(40) });
   });
 });

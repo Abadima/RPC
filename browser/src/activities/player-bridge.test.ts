@@ -5,7 +5,6 @@ import { PlayerBridge, SILENT_MS, parsePlayerMessage, type FrameLike } from "./p
 const SOURCE = { name: "the iframe's window" };
 const PLAYER = "https://plyr.animex.one";
 
-/** A frame, as `document.querySelectorAll("iframe")` gives it. */
 function frame(
   src: string,
   window: unknown = SOURCE,
@@ -38,7 +37,6 @@ const log = (currentTime: number, duration = 1447.04) => ({
   duration,
 });
 
-/** A bridge over one iframe, which stays the same element as it does in a page. */
 const bridgeFor = (src: string) => {
   const frames = [frame(src)];
   return new PlayerBridge(() => frames);
@@ -128,7 +126,6 @@ describe("what a player's message says", () => {
     ]) {
       expect(parsePlayerMessage(data)).toBeNull();
     }
-    // Bad extras are left out; the reading stands.
     expect(parsePlayerMessage(anmx("progress", { duration: -5, playbackRate: 0 }))).toEqual({
       type: "reading",
       time: 0,
@@ -153,7 +150,6 @@ describe("the player bridge", () => {
       start: T0 - 600_000,
       end: T0 - 600_000 + 1447_000,
     });
-    // It plays on between its reports (every five seconds): the same clock, not a new one.
     expect(bridge.clock(T0 + 3000)).toEqual(bridge.clock(T0));
     expect(send(bridge, anmx("progress", { currentTime: 605.1 }), T0 + 5100)).toBe(false);
     expect(bridge.clock(T0 + 5100)?.start).toBe(T0 - 600_000);
@@ -171,7 +167,6 @@ describe("the player bridge", () => {
     );
     expect(send(bridge, anmx("play", { paused: false, currentTime: 100 }), T0 + 61_000)).toBe(true);
     expect(bridge.clock(T0 + 61_000)?.start).toBe(T0 + 61_000 - 100_000);
-    // Seeking while it plays moves the clock too.
     expect(send(bridge, anmx("seeked", { currentTime: 900 }), T0 + 70_000)).toBe(true);
     expect(bridge.clock(T0 + 70_000)?.start).toBe(T0 + 70_000 - 900_000);
   });
@@ -188,7 +183,6 @@ describe("the player bridge", () => {
     send(bridge, anmx("progress", { currentTime: 10 }), T0);
     expect(bridge.clock(T0)?.playing).toBe(true);
 
-    // The player says it's switching (and the page reloads it at the same spot).
     expect(send(bridge, anmx("providerchange", { language: "dub" }), T0 + 1000)).toBe(true);
     expect(bridge.clock(T0 + 1000)).toBeNull();
     frames[0]!.src = `${PLAYER}/e/1/1?lang=dub&t=10`;
@@ -225,11 +219,9 @@ describe("the player bridge", () => {
     send(bridge, anmx("progress", { currentTime: 798 }), T0);
     expect(bridge.clock(T0)?.playing).toBe(true);
 
-    // The address is the next episode's; the old player is still on screen, still playing the old one.
     where = "/watch/show-1-episode-2";
     expect(bridge.clock(T0 + 1500)).toBeNull();
 
-    // The new episode's player speaks (the page's script swaps it in): its word counts.
     frames[0] = frame(`${PLAYER}/e/1/2`);
     send(bridge, anmx("progress", { currentTime: 5 }), T0 + 8000);
     expect(bridge.clock(T0 + 8000)).toMatchObject({ playing: true, start: T0 + 8000 - 5000 });
@@ -246,7 +238,6 @@ describe("the player bridge", () => {
 
     const quiet = bridge.clock(T0 + 780 + SILENT_MS + 1);
     expect(quiet).toEqual({ playing: false, duration: 1447.04 });
-    // And it's talking again once it plays.
     send(bridge, log(1.8), T0 + 10_000, "https://megaplay.buzz");
     expect(bridge.clock(T0 + 10_000)?.playing).toBe(true);
   });
@@ -277,9 +268,9 @@ describe("the player bridge", () => {
 
 describe("the collector with a player in a frame", () => {
   const doc = (media: unknown[] = []) =>
-    ({ querySelectorAll: () => media, querySelector: () => null }) as unknown as Pick<
+    ({ querySelectorAll: () => media, querySelector: () => null, images: [] }) as unknown as Pick<
       Document,
-      "querySelector" | "querySelectorAll"
+      "querySelector" | "querySelectorAll" | "images"
     >;
   const clock = { playing: true, duration: 1447.04, start: T0 - 600_000, end: T0 + 847_000 };
 

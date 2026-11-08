@@ -58,7 +58,6 @@ export function displayedState(
     : { state: next, checking: false };
 }
 
-/** Drives the status dot and badge colors (see theme.css, `data-tone`). */
 export type ConnectionTone = "idle" | "busy" | "good" | "warn" | "bad";
 
 interface StatusView {
@@ -122,11 +121,9 @@ export function connectionBadge(
 export interface ConnectionHelp {
   title: string;
   detail: string;
-  /** A command to run, shown as copyable code. */
   command?: string;
 }
 
-/** What to do about a state, if anything; `origin` is this extension's own. */
 export function connectionHelp(state: ConnectionState, origin: string): ConnectionHelp | null {
   switch (state.status) {
     case "not_allowed":
@@ -152,7 +149,6 @@ export function connectionHelp(state: ConnectionState, origin: string): Connecti
   }
 }
 
-/** Discord-RPC-Extension's app, as the Platforms page and Overview describe it. */
 /**
  * How Parousia Desktop's adapter for `platform` is doing, from its last
  * report: `null` without a report (Desktop not connected) or an adapter.
@@ -205,10 +201,6 @@ export function discordBridgeLabel(state: BridgeState): string {
   }
 }
 
-/**
- * Applies a state to an indicator dot and label. The dot's color comes from
- * CSS keyed off `data-tone` (see theme.css).
- */
 export function renderConnectionStatus(
   dot: HTMLElement,
   label: HTMLElement,

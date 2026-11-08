@@ -20,9 +20,7 @@ import {
  * since the extension runs what it includes: any problem stops the build.
  */
 
-/** A checked native Activity: its manifest, and its module for the bundle. */
 export interface NativeFound {
-  /** Its website, as the folder's id: the same website in PreMiD's repository has the same one. */
   site: string;
   manifest: ActivityManifest;
   modulePath: string;
@@ -104,7 +102,6 @@ function parseSetting(value: unknown, problems: string[]): ActivitySetting | nul
   return setting;
 }
 
-/** metadata.json from `websites/<letter>/<folder>/`, as a manifest, or what's wrong with it. */
 export function parseNativeMetadata(
   value: unknown,
   folder: string,
@@ -231,7 +228,6 @@ export function parseNativeMetadata(
   return { manifest, problems };
 }
 
-/** A website's folder as a native Activity, or what's wrong with it. */
 export async function adaptNative(
   folder: WebsiteFolder,
 ): Promise<{ found?: NativeFound; problems: string[] }> {

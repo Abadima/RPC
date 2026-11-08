@@ -28,7 +28,6 @@ export interface PageImage {
   alt?: string;
 }
 
-/** What Parousia's collector read from a page, only of the kinds its Activity may take. */
 export interface PageData {
   media?: PageMedia;
   /** An `https` image of what's shown. */
@@ -41,7 +40,6 @@ export interface PageData {
   images?: PageImage[];
 }
 
-/** What an Activity sees of a page: its URL, and its title (which `tabs` exposes, like the URL). */
 export interface Page {
   url: URL;
   title: string;
@@ -49,13 +47,11 @@ export interface Page {
   favicon?: string;
   /** The page data kinds the Activity has here: declared, allowed in Settings > Privacy, and the site granted. */
   granted?: readonly PageDataKind[];
-  /** What Parousia's collector read (native Activities that take page data). */
   data?: PageData;
   /** What a PreMiD Activity's script in this tab last reported (see `src/premid/`). */
   reported?: Activity | null;
 }
 
-/** An Activity's settings, each as set or at its default; a choice is its index. */
 export type SettingValues = Readonly<Record<string, SettingValue>>;
 
 export type ActivityMatcher = (url: URL) => boolean;
@@ -74,7 +70,6 @@ export interface RegisteredActivity {
 export class ActivityRegistry {
   private readonly activities = new Map<string, RegisteredActivity>();
 
-  /** Adds an Activity, replacing one with the same id in place. */
   register(activity: RegisteredActivity): void {
     this.activities.set(activity.info.id, activity);
   }
@@ -83,12 +78,10 @@ export class ActivityRegistry {
     this.activities.delete(id);
   }
 
-  /** A registered Activity's catalog entry. */
   get(id: string): ActivityInfo | null {
     return this.activities.get(id)?.info ?? null;
   }
 
-  /** Every registered Activity's catalog entry, in registration order. */
   list(): ActivityInfo[] {
     return [...this.activities.values()].map((activity) => activity.info);
   }

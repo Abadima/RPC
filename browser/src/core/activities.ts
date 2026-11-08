@@ -15,7 +15,6 @@ export function builtInActivities(): ActivityRegistry {
   return registry;
 }
 
-/** The native Activities' manifests, for the page host (the ones that take page data). */
 export function builtInManifests(): ActivityManifest[] {
   return native.map(({ manifest }) => manifest);
 }

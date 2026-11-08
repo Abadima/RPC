@@ -6,32 +6,19 @@ import { parsePresenceData, toActivity } from "../premid/presence-data";
 import { onFirefox } from "./browser-family";
 
 /**
- * MAL-Sync compatibility (github.com/MALSync/MALSync): what it recognizes on
- * anime and manga sites shows as the Activity, in place of the site's own.
- * Nothing in `core/` knows this exists but the runtime's `external` hook.
- * Checked against its source (src/index-webextension/serviceworker.ts,
- * src/pages-sync/syncPage.ts) and the shipped Firefox 0.12.5 build:
+ * MAL-Sync compatibility: what it recognizes on anime and manga sites shows as
+ * the Activity. Checked against its source and the Firefox 0.12.5 build:
  *
- * - MAL-Sync never talks to Discord-RPC-Extension's app or its port 6969. Its
- *   content script registers with Discord-RPC-Extension's own browser
- *   extension (`runtime.sendMessage(<their id>, { mode: "active" })`, only
- *   with MAL-Sync's "Discord Rich Presence" setting on), and that extension
- *   asks back every 15 s.
- * - The asking is a cross-extension message to MAL-Sync's background,
- *   `{ tab, info }`, which relays it to that tab's content script and returns
- *   the reply: `{ clientId, presence }`, or `{}` when the page isn't one it
- *   has recognized. It checks neither who asks nor MAL-Sync's own "Discord
- *   Rich Presence" setting, and its manifest has no `externally_connectable`,
- *   so any extension can ask.
- * - So Parousia asks the same way, for the tab it shares, and takes the reply
- *   as its Activity. Nothing registers, nothing is listened for, and Parousia
- *   sends only a tab number: the browser delivers a reply to the extension
- *   that asked only from the extension asked, so no sender check is needed.
+ * - Its background answers a cross-extension `{ tab, info }` with that tab's
+ *   `{ clientId, presence }`, or `{}`; it checks neither the asker nor its own
+ *   Discord setting, and has no `externally_connectable`.
+ * - So Parousia asks the same way, for the tab it shares, sending only a tab
+ *   number. The browser delivers the reply only from the extension asked, so no
+ *   sender check is needed.
  *
- * MAL-Sync's reply is an untrusted page's reading, so it goes through the
- * same parsing and bounds as a PreMiD Activity's (`premid/presence-data.ts`,
- * whose field names it shares), and only Discord Applications MAL-Sync itself
- * uses are kept: a reply naming another is turned down whole.
+ * The reply is an untrusted page's reading: it gets a PreMiD Activity's parsing
+ * and bounds (`premid/presence-data.ts`), and a reply naming a Discord
+ * Application MAL-Sync doesn't use is refused whole.
  */
 
 /** MAL-Sync's published extension IDs (Chrome Web Store, and the id of its listing on addons.mozilla.org). */
@@ -157,10 +144,8 @@ function steady(next: Activity, previous: Activity | null): Activity {
 }
 
 export interface MalSyncOptions {
-  /** Asks MAL-Sync for `tabId`'s presence; by default through the browser. */
   ask?: (tabId: number) => Promise<unknown>;
   setTimer?: Timer;
-  /** Called when what MAL-Sync shows changes by itself, from an answer arriving. */
   onChange: () => void;
 }
 
@@ -210,7 +195,6 @@ export class MalSyncSource {
     this.#restart();
   }
 
-  /** What MAL-Sync last showed for the page being watched, if it still does. */
   current(): Activity | null {
     return this.#current;
   }

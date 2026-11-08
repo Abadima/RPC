@@ -74,7 +74,6 @@ describe("withSiteImage", () => {
 
   test("shows the site's logo where the Activity has no large image", () => {
     expect(withSiteImage(base, { icon: ICON })).toEqual({ ...base, assets: { largeImage: ICON } });
-    // Captions and the small image stay.
     expect(
       withSiteImage(
         { ...base, assets: { largeText: "Album", smallImage: "play" } },
@@ -102,7 +101,6 @@ describe("withSiteImage", () => {
       expect(withSiteImage(activity, {}, favicon).assets?.largeImage).toBe(favicon);
       expect(withSiteImage(activity, {}).assets).toEqual({ largeText: "Album" });
     }
-    // A malformed icon doesn't block the favicon either.
     expect(withSiteImage(base, { icon: "https://" }, favicon).assets?.largeImage).toBe(favicon);
   });
 
@@ -112,7 +110,6 @@ describe("withSiteImage", () => {
     expect(withSiteImage(base, {}, favicon).assets?.largeImage).toBe(
       "https://www.example.com/static/favicon-196.png",
     );
-    // An icon that can't be shown doesn't block the favicon.
     expect(
       withSiteImage(base, { icon: "http://x.example/a.png" }, favicon).assets?.largeImage,
     ).toBe("https://www.example.com/static/favicon-196.png");

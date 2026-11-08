@@ -1,9 +1,6 @@
-//! Start at login (Windows): a value under this user's `Run` key, the same
-//! list Task Manager's Startup tab shows and can switch off. It's per user and
-//! needs no administrator rights, and Windows runs it with no arguments, which
-//! is a plain launch with the tray. Nothing else is installed or scheduled, and
-//! nothing runs in the background to keep it: the entry is read when the tray
-//! menu opens and changed when someone clicks it.
+//! Start at login: a value under this user's `Run` key (Task Manager's Startup
+//! tab), with no arguments, which is a plain launch with the tray. Read when the
+//! tray menu opens and written on a click; nothing runs to keep it.
 
 use std::io;
 use std::path::Path;
@@ -22,7 +19,6 @@ const VALUE: &str = "Parousia Desktop";
 /// More than any real path or this entry would be; a value longer is someone else's.
 const MAX_CHARS: usize = 1024;
 
-/// An open registry key, closed when dropped.
 struct Key(HKEY);
 
 impl Key {
@@ -139,12 +135,10 @@ fn enabled_at(subkey: &str, exe: &Path) -> bool {
     matches!((read(subkey), command(exe)), (Ok(Some(value)), Ok(ours)) if value == ours)
 }
 
-/// Whether Windows starts this copy of Desktop at login.
 pub fn is_enabled() -> bool {
     std::env::current_exe().is_ok_and(|exe| enabled_at(RUN_KEY, &exe))
 }
 
-/// Turns start at login on (for this copy of Desktop) or off.
 pub fn set_enabled(enabled: bool) -> io::Result<()> {
     write(RUN_KEY, &std::env::current_exe()?, enabled)
 }

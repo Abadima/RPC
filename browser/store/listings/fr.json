@@ -1,0 +1,13 @@
+{
+  "summary": "Votre Rich Presence sur Discord et au-delà.",
+  "description": [
+    "Votre Rich Presence sur Discord et bien plus encore.",
+    "Parousia fait entrer l’activité de votre navigateur dans la Rich Presence de Discord. L’extension détecte automatiquement les sites web pris en charge et peut afficher directement sur votre profil Discord ce que vous regardez, ce que vous écoutez, à quoi vous jouez ou les pages que vous parcourez. Quand aucune activité ne s’applique, vous pouvez afficher à la place un statut personnalisé.",
+    "Nous utilisons des activités pour prendre en charge les sites web et les applications web. Une activité peut fournir des détails riches, comme les titres, les artistes, les créateurs, les miniatures, l’état de lecture, les horodatages et les liens. Votre statut Discord gagne ainsi bien plus de contexte que le simple titre d’un onglet.",
+    "Parousia est compatible avec l’écosystème open source d’activités PreMiD et propose en parallèle son propre écosystème d’activités, pour les développeurs comme pour les utilisateurs.",
+    "Cette extension est open source et repose sur un système d’activités pensé pour les développeurs. Les développeurs TypeScript peuvent créer des activités pour des sites web, les publier via l’écosystème d’activités et concevoir des intégrations sans modifier Parousia lui-même.",
+    "La vie privée est au cœur de la conception de Parousia, qui traite les informations d’activité en local dans la mesure du possible. L’extension communique avec notre application de bureau, qui gère l’intégration avec les plateformes. Aucun compte ni connexion n’est requis pour l’utiliser, et Parousia n’emploie ni outil d’analyse ni télémétrie pour suivre votre navigation.",
+    "Prêt à donner vie à l’activité de votre navigateur ? Installez Parousia et faites de ce que vous faites dans votre navigateur une partie de votre Rich Presence Discord.",
+    "Parousia est un projet indépendant et open source, qui n’est ni affilié à Discord Inc., ni approuvé ou parrainé par cette société."
+  ]
+}

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ActivityInfo } from "../core/activity";
 import {
   PAGE_SIZE,
+  fittedSize,
   indexActivities,
   pageNumbers,
   pageOf,
@@ -111,10 +112,15 @@ describe("pageNumbers", () => {
 
 describe("fitting the screen", () => {
   test("counts the rows that fit, with a floor for short windows", () => {
-    // 4K: about 1,700 px of room for 64 px cards with 12 px gaps.
     expect(rowsThatFit(1700, 64, 12)).toBe(22);
     expect(rowsThatFit(100, 64, 12)).toBe(3);
     expect(rowsThatFit(500, 0, 12)).toBe(3);
+  });
+
+  test("a page is whole rows of its columns", () => {
+    expect(fittedSize(4, 1700, 64, 12)).toBe(88);
+    expect(fittedSize(1, 100, 64, 12)).toBe(3);
+    expect(fittedSize(0, 1700, 64, 12)).toBe(22);
   });
 
   test("keeps the first card shown when the page size changes", () => {

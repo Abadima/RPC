@@ -1,5 +1,5 @@
 import { t } from "../core/i18n";
-import { renderPresence, type PresenceSnapshot } from "../shared/presence-view";
+import { renderPresence, stopPresence, type PresenceSnapshot } from "../shared/presence-view";
 import {
   connectionBadge,
   discordBridgeLabel,
@@ -38,6 +38,9 @@ export function overviewView(context: ViewContext): View {
         shownSnapshot = snapshot;
         renderPresence(slot(element, "presence"), snapshot, presenceIcons);
       }
+    },
+    destroy() {
+      stopPresence(slot(element, "presence"));
     },
   };
 }

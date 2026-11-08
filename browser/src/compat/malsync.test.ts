@@ -90,7 +90,6 @@ describe("parseMalSyncReply", () => {
     const activity = parseMalSyncReply(
       reply({
         details: "x".repeat(10_000),
-        // Parsing keeps a presence's first two buttons, so the bad ones follow the good.
         buttons: [
           { label: "One", url: "https://a.example/1" },
           { label: "Bad", url: "javascript:alert(1)" },
@@ -158,7 +157,6 @@ describe("MalSyncSource", () => {
   const settle = async (): Promise<void> => {
     for (let i = 0; i < 20; i++) await Promise.resolve();
   };
-  /** Time passing a second at a time: a retry is scheduled only once the answer to the last question has landed. */
   async function elapse(timers: { advance: (ms: number) => void }, ms: number): Promise<void> {
     for (let spent = 0; spent < ms; spent += 1000) {
       timers.advance(1000);
@@ -189,7 +187,6 @@ describe("MalSyncSource", () => {
     await settle();
     expect(changes()).toBe(1);
 
-    // The player's clock drifts a little between questions: the same playback.
     answer(() => reply({ startTimestamp: START + 1200, endTimestamp: START + 1_441_200 }));
     timers.advance(15_000);
     await settle();
@@ -197,7 +194,6 @@ describe("MalSyncSource", () => {
     expect(changes()).toBe(1);
     expect(source.current()?.timestamps).toEqual({ start: START, end: START + 1_440_000 });
 
-    // Paused: a different Activity.
     answer(() =>
       reply({
         smallImageKey: "pause",
@@ -211,7 +207,6 @@ describe("MalSyncSource", () => {
     expect(changes()).toBe(2);
     expect(source.current()?.assets?.smallImage).toBe("pause");
 
-    // Resumed after a seek: far enough to be a new clock.
     answer(() => reply({ startTimestamp: START - 600_000, endTimestamp: START + 840_000 }));
     timers.advance(15_000);
     await settle();
@@ -329,7 +324,6 @@ describe("MalSyncSource", () => {
     expect(timers.pending()).toBe(0);
     expect(source.current()).toBeNull();
     await elapse(timers, 60_000);
-    // Once for each time there was a tab to ask about, and nothing since.
     expect(asked).toHaveLength(2);
   });
 });

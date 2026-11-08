@@ -29,7 +29,6 @@ function arch(hosts = ["archlinux.org"], regExp = ARCH) {
 describe("which sites an Activity asks access for", () => {
   test("a regExp that takes subdomains asks for them, and the host itself", () => {
     expect(originsFor(["archlinux.org"], ARCH)).toEqual(["*://*.archlinux.org/*"]);
-    // At least one subdomain label, as Wikipedia's family does.
     expect(
       originsFor(["wikibooks.org"], "^https?[:][/][/]([a-z0-9-]+[.])+wikibooks[.]org[/]"),
     ).toEqual(["*://*.wikibooks.org/*"]);

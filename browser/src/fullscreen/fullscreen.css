@@ -93,7 +93,6 @@ html {
   padding: 2.5rem 3rem 6rem;
 }
 
-/* The not-found screen, as in the popup: one centered column. */
 .main .offline {
   width: 100%;
   max-width: 34rem;
@@ -139,7 +138,6 @@ html {
   align-items: start;
 }
 
-/* Default Activity: the form beside a preview that stays in view. */
 .default-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
@@ -271,8 +269,6 @@ html {
   color: var(--text-faint);
   font-size: 0.9231rem;
 }
-
-/* Search with the Filter button beside it */
 
 .catalog-tools {
   display: flex;

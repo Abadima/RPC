@@ -1,7 +1,5 @@
-//! The adapter against a fake Discord: a Unix socket (or, on Windows, a named
-//! pipe) speaking Discord's framing, recording what it's sent and answering
-//! like the real app. The same tests run on both, so the transports are held
-//! to the same behavior, including a restart being noticed at once.
+//! The adapter against a fake Discord, over a Unix socket or a named pipe, so both
+//! transports are held to the same behavior.
 
 use std::io::Write;
 
@@ -20,8 +18,6 @@ const FAST: Timing = Timing {
     per_window: 3,
 };
 
-/// The fake's end of the transport: where Discord would listen, and the
-/// connections it accepts.
 #[cfg(unix)]
 mod fake {
     use std::io::{self, Read, Write};
@@ -76,7 +72,6 @@ mod fake {
             Endpoints::at(self.path.parent().unwrap().to_path_buf())
         }
 
-        /// Listens; `on_conn` serves each connection, numbered from 1, on its own thread.
         pub fn start(&self, on_conn: impl Fn(Conn, usize) + Send + Clone + 'static) {
             let _ = std::fs::remove_file(&self.path);
             let listener = UnixListener::bind(&self.path).unwrap();
@@ -100,12 +95,10 @@ mod fake {
             });
         }
 
-        /// A connection by its number, to write to.
         pub fn conn(&self, number: usize) -> Conn {
             lock(&self.conns)[number - 1].handle()
         }
 
-        /// Discord quitting: every connection ends and the socket goes away.
         pub fn stop(&self) {
             self.running.store(false, Ordering::SeqCst);
             for conn in lock(&self.conns).drain(..) {
@@ -174,7 +167,6 @@ mod fake {
             Endpoints::at(self.prefix.clone())
         }
 
-        /// Listens; `on_conn` serves each connection, numbered from 1, on its own thread.
         pub fn start(&self, on_conn: impl Fn(Conn, usize) + Send + Clone + 'static) {
             let name = format!("{}0", self.prefix);
             let owner = OwnerOnly::new().unwrap();
@@ -219,12 +211,10 @@ mod fake {
             });
         }
 
-        /// A connection by its number, to write to.
         pub fn conn(&self, number: usize) -> Conn {
             lock(&self.conns)[number - 1].handle()
         }
 
-        /// Discord quitting: every connection ends and the pipe goes away.
         pub fn stop(&self) {
             self.running.store(false, Ordering::SeqCst);
             if let Some(pipe) = lock(&self.listening).take() {
@@ -246,7 +236,6 @@ struct Received {
 
 #[derive(Default)]
 struct Behavior {
-    /// Client ids whose handshake is refused, like Discord's "Invalid Client ID".
     refuse: Vec<String>,
     fail_activities: bool,
 }
@@ -276,7 +265,6 @@ impl FakeDiscord {
             .start(move |stream, conn| serve(stream, conn, &received, &behavior));
     }
 
-    /// Discord quitting: every connection ends and the socket goes away.
     fn stop(&self) {
         self.server.stop();
     }
@@ -434,7 +422,6 @@ fn shows_an_activity_clears_it_and_lets_go_after_the_linger() {
     assert_eq!(discord.handshakes().len(), 1, "one connection throughout");
     wait_for("the worker to end", || !worker_running(&adapter));
 
-    // The next Activity starts it again.
     adapter.show(Some(activity("Tablut")));
     wait_for("the next activity", || discord.activities().len() == 3);
     assert_eq!(discord.handshakes().len(), 2);
@@ -480,7 +467,6 @@ fn an_activity_with_its_own_application_reconnects_as_it() {
     let last = discord.received().into_iter().last().unwrap();
     assert_eq!(last.conn, 2, "sent on the new connection");
 
-    // Back to an Activity without one: Parousia's Application again.
     adapter.show(Some(activity("Tablut")));
     wait_for("the third activity", || discord.activities().len() == 3);
     assert_eq!(

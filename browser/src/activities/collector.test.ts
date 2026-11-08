@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { collect, loadedImages, startCollector, unchanged } from "./collector";
 
-/** Enough of a document: its media elements, and an og:image. */
 function page(
   media: Array<{ paused: boolean; currentTime: number; duration: number }>,
   ogImage?: string,
@@ -9,7 +8,8 @@ function page(
   return {
     querySelectorAll: () => media,
     querySelector: () => (ogImage ? { getAttribute: () => ogImage } : null),
-  } as unknown as Pick<Document, "querySelector" | "querySelectorAll">;
+    images: [],
+  } as unknown as Pick<Document, "querySelector" | "querySelectorAll" | "images">;
 }
 
 const session = {
@@ -68,7 +68,6 @@ describe("the page-data collector", () => {
     expect(media?.duration).toBe(200.4);
     expect(media?.start).toBe(1_699_999_958_000);
     expect(media?.end).toBe(1_699_999_958_000 + 200_000);
-    // Paused: no clock to show.
     const paused = collect(
       ["media"],
       page([{ paused: true, currentTime: 42.5, duration: 200 }]),
@@ -88,7 +87,6 @@ describe("the page-data collector", () => {
     expect(collect(["media"], page(element), said("none")).media?.playing).toBe(true);
     const idle = [{ paused: true, currentTime: 0, duration: 10 }];
     expect(collect(["media"], page(idle), said("playing")).media?.playing).toBe(true);
-    // No element at all (a page that only sets the session): the session still says.
     expect(collect(["media"], page([]), said("playing")).media).toEqual({
       title: "Song",
       artist: "Artist",
@@ -125,6 +123,21 @@ describe("the page-data collector", () => {
     expect(unchanged(paused, paused)).toBe(true);
   });
 
+  test("artwork a page lists without end costs a bounded look, and never throws", () => {
+    const long = `${"9".repeat(200_000)}x1`;
+    const artwork = Array.from({ length: 10_000 }, (_, index) => ({
+      src: `https://img.example/${index}.jpg`,
+      sizes: index === 3 ? "1024x1024" : long,
+    }));
+    artwork.splice(20, 0, { src: "https://img.example/late.jpg", sizes: "4096x4096" });
+    const huge = {
+      mediaSession: { metadata: { title: "Song", artwork } as unknown as MediaMetadata },
+    };
+    expect(collect(["thumbnails"], page([]), huge)).toEqual({
+      thumbnail: "https://img.example/3.jpg",
+    });
+  });
+
   test("takes the largest https artwork, or the page's og:image", () => {
     expect(collect(["thumbnails"], page([]), session)).toEqual({
       thumbnail: "https://img.example/512.jpg",
@@ -145,7 +158,8 @@ describe("the page-data collector", () => {
       naturalHeight: side,
     });
     const doc = {
-      querySelectorAll: () => [
+      querySelectorAll: () => [],
+      images: [
         img("https://site.example/logo.png", "", 20), // an icon
         img("https://site.example/cover-large.jpg", "  Show cover  "),
         img("https://site.example/cover-large.jpg", "again"), // repeated
@@ -155,7 +169,7 @@ describe("the page-data collector", () => {
         { src: "", currentSrc: "", alt: "", complete: true, naturalWidth: 200, naturalHeight: 200 },
         img(`https://site.example/${"x".repeat(400)}.jpg`, "too long"),
       ],
-    } as unknown as Pick<Document, "querySelectorAll">;
+    } as unknown as Pick<Document, "querySelectorAll" | "images">;
     expect(loadedImages(doc)).toEqual([
       { src: "https://site.example/cover-large.jpg", alt: "Show cover" },
       { src: "https://site.example/avatar.png", alt: "Abadima" },
@@ -175,8 +189,25 @@ describe("the page-data collector", () => {
       naturalWidth: 100,
       naturalHeight: 100,
     }));
-    const doc = { querySelectorAll: () => many } as unknown as Pick<Document, "querySelectorAll">;
+    const doc = { images: many } as unknown as Pick<Document, "images">;
     expect(loadedImages(doc)).toHaveLength(24);
+  });
+
+  test("looks at the first 400 images only, however many the page has", () => {
+    const read: number[] = [];
+    const tiny = { currentSrc: "", src: "", alt: "", complete: true, naturalWidth: 1 };
+    const images = new Proxy([] as unknown[], {
+      get: (target, key) => {
+        if (typeof key === "string" && /^\d+$/.test(key)) {
+          read.push(Number(key));
+          return Number(key) < 5000 ? tiny : undefined;
+        }
+        return Reflect.get(target, key);
+      },
+    });
+    expect(loadedImages({ images } as unknown as Pick<Document, "images">)).toEqual([]);
+    expect(read).toHaveLength(400);
+    expect(Math.max(...read)).toBe(399);
   });
 
   test("reads nothing it isn't allowed", () => {
@@ -207,7 +238,6 @@ describe("the collector in a tab that is not shown", () => {
     }
   });
 
-  /** A page playing a song, started for one Activity, with the messages it sends and gets through its port. */
   function playing() {
     const posted: Array<{ type: string; data?: { media?: { title?: string } } }> = [];
     const receivers: Array<(message: unknown) => void> = [];
@@ -265,26 +295,22 @@ describe("the collector in a tab that is not shown", () => {
     await tick();
     expect(titles()).toEqual(["Song A", "Song B"]);
 
-    // Left in the background, it reads nothing: a skipped song wasn't news.
     setHidden(true);
     setTitle("Song C");
     await tick();
     expect(titles()).toEqual(["Song A", "Song B"]);
 
-    // Kept: it reads now, and again every second, while hidden.
     receive({ type: "background", on: true });
     expect(titles()).toEqual(["Song A", "Song B", "Song C"]);
     setTitle("Song D");
     await tick();
     expect(titles()).toEqual(["Song A", "Song B", "Song C", "Song D"]);
 
-    // No longer kept: quiet again.
     receive({ type: "background", on: false });
     setTitle("Song E");
     await tick();
     expect(titles()).toEqual(["Song A", "Song B", "Song C", "Song D"]);
 
-    // Shown again, it catches up.
     setHidden(false);
     await tick();
     expect(titles().at(-1)).toBe("Song E");

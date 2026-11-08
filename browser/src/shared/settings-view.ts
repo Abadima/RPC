@@ -17,7 +17,7 @@ import { faSliders } from "@fortawesome/free-solid-svg-icons/faSliders";
 import { faTowerBroadcast } from "@fortawesome/free-solid-svg-icons/faTowerBroadcast";
 import { PAGE_DATA_KINDS, type PageDataKind } from "../core/activity";
 import type { DesktopReport, DesktopSetting } from "../core/desktop-protocol";
-import { LANGUAGES, LANGUAGE_NAMES, msg, t, type LanguagePreference } from "../core/i18n";
+import { LANGUAGE_NAMES, PACKAGED, msg, t, type LanguagePreference } from "../core/i18n";
 import type { BridgeState } from "../core/ui-port";
 import { desktopPlatformLabel, discordBridgeLabel } from "./connection-status";
 import {
@@ -103,7 +103,6 @@ export const SETTINGS_PAGES: readonly PageInfo[] = [
   },
 ];
 
-/** How each kind of page data reads in Settings > Privacy. */
 export const DATA_LABELS: Record<PageDataKind, { title: string; detail: string }> = {
   media: {
     title: msg("What's playing"),
@@ -121,7 +120,6 @@ export const DATA_LABELS: Record<PageDataKind, { title: string; detail: string }
   },
 };
 
-/** How each theme reads in Settings > Appearance; the ids are in appearance.ts, which theme.js shares. */
 export const THEME_LABELS: Record<ThemeId, { name: string; description: string }> = {
   atelier: {
     name: msg("Atelier"),
@@ -165,7 +163,6 @@ export interface SettingsActions {
 export interface SettingsModel {
   context(): SettingsContext;
   actions: SettingsActions;
-  /** Feed every Desktop report (or `null`) from the background here. */
   onReport(report: DesktopReport | null): void;
   onDiscord(state: BridgeState): void;
   subscribe(listener: (context: SettingsContext) => void): void;
@@ -221,8 +218,6 @@ export function createSettingsModel(
   };
 }
 
-// Building blocks
-
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className = "",
@@ -244,7 +239,6 @@ export function settingText(title: string, detail: string): HTMLElement {
   return text;
 }
 
-/** A row whose whole area toggles its switch. */
 export function switchRow(
   title: string,
   detail: string,
@@ -263,7 +257,6 @@ export function switchRow(
 
 let controlRows = 0;
 
-/** A row with a control that isn't a single input, named by the row's title. */
 export function controlRow(title: string, detail: string, control: HTMLElement): HTMLElement {
   const row = el("div", "setting");
   const text = settingText(title, detail);
@@ -300,12 +293,9 @@ export function group(...rows: HTMLElement[]): HTMLElement {
   return box;
 }
 
-// Pages
-
 export interface SettingsPageView {
   element: HTMLElement;
   update(context: SettingsContext): void;
-  /** Called when leaving the page. */
   destroy?(): void;
 }
 
@@ -313,7 +303,7 @@ function generalPage(actions: SettingsActions): SettingsPageView {
   const language = select<LanguagePreference>(
     [
       ["auto", t("Automatic")],
-      ...LANGUAGES.map((code): [LanguagePreference, string] => [code, LANGUAGE_NAMES[code]]),
+      ...PACKAGED.map((code): [LanguagePreference, string] => [code, LANGUAGE_NAMES[code]]),
     ],
     (value) => actions.savePreferences({ language: value }),
   );
@@ -368,7 +358,6 @@ function generalPage(actions: SettingsActions): SettingsPageView {
   };
 }
 
-/** A small picture of a theme, drawn with that theme's own tokens (data-theme scopes them). */
 function themePreview(theme: ThemeId): HTMLElement {
   const preview = el("span", "theme-preview");
   preview.dataset.theme = theme;
@@ -523,7 +512,6 @@ function privacyPage(actions: SettingsActions): SettingsPageView {
 
 function platformsPage(actions: SettingsActions): SettingsPageView {
   const inputs = new Map<PlatformId, HTMLInputElement>();
-  /** What Parousia Desktop last said about each platform. */
   const statuses = new Map<PlatformId, HTMLElement>();
   let currentPlatforms = DEFAULT_PREFERENCES.platforms;
   const rows = PLATFORM_IDS.map((id) => {
@@ -753,7 +741,6 @@ export function settingsPage(
   }
 }
 
-/** The category rows, as buttons; `current` marks the one on show (the dashboard's two panes). */
 export function categoryList(
   onOpen: (page: SettingsPageId) => void,
   current?: SettingsPageId,

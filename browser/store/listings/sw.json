@@ -1,0 +1,13 @@
+{
+  "summary": "Rich Presence yako kwenye Discord na kwingineko.",
+  "description": [
+    "Rich Presence yako kwenye Discord na zaidi.",
+    "Parousia huleta shughuli za kivinjari chako kwenye Discord Rich Presence. Hutambua tovuti zinazoungwa mkono kiotomatiki na inaweza kuonyesha moja kwa moja kwenye wasifu wako wa Discord unachotazama, unachosikiliza, unachocheza au unachovinjari. Shughuli zisipotumika, unaweza kuonyesha hali maalum yako badala yake.",
+    "Tunatumia shughuli kusaidia tovuti na programu za wavuti. Shughuli zinaweza kutoa maelezo tele kama vile mada, wasanii, waundaji, vijipicha, hali ya uchezaji, alama za muda na viungo. Hivyo hali yako ya Discord hupata muktadha mwingi zaidi kuliko kichwa cha kawaida cha kivinjari.",
+    "Parousia inaoana na mfumo ikolojia wa shughuli wa PreMiD wenye chanzo huria, huku ikitoa pia mfumo wake wa shughuli kwa wasanidi programu na watumiaji.",
+    "Kiendelezi hiki kina chanzo huria na kimeundwa kuzunguka mfumo wa shughuli rafiki kwa wasanidi programu. Wasanidi programu wa TypeScript wanaweza kuunda shughuli za tovuti, kuzichapisha kupitia mfumo wa shughuli na kujenga miunganisho bila kubadilisha Parousia yenyewe.",
+    "Parousia imeundwa kwa kuzingatia faragha na huchakata taarifa za shughuli ndani ya kifaa chako inapowezekana. Kiendelezi hiki huwasiliana na programu yetu ya kompyuta, ambayo hushughulikia ujumuishaji wa majukwaa. Hakuna akaunti wala kuingia kunakohitajika ili kukitumia, na Parousia haitumii uchanganuzi wala telemetri kufuatilia kuvinjari kwako.",
+    "Uko tayari kuipa uhai shughuli ya kivinjari chako? Sakinisha Parousia na acha unachofanya kwenye kivinjari kiwe sehemu ya Discord Rich Presence yako.",
+    "Parousia ni mradi huru wenye chanzo huria, na haujaunganishwa na Discord Inc., wala haujaidhinishwa au kufadhiliwa nayo."
+  ]
+}

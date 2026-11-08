@@ -1,0 +1,13 @@
+{
+  "summary": "Rich Presence-ul dvs. pe Discord și nu numai.",
+  "description": [
+    "Rich Presence-ul dvs. pe Discord și multe altele.",
+    "Parousia aduce activitatea din browser în Discord Rich Presence. Extensia detectează automat site-urile compatibile și poate afișa direct în profilul dvs. Discord ce vizionați, ce ascultați, la ce jucați sau ce site-uri răsfoiți. Când nicio activitate nu se aplică, puteți afișa în schimb un status personalizat.",
+    "Folosim activități pentru a oferi suport site-urilor și aplicațiilor web. Activitățile pot oferi detalii bogate, cum ar fi titluri, artiști, creatori, miniaturi, starea redării, marcaje de timp și linkuri. Astfel, statusul dvs. Discord primește mult mai mult context decât un simplu titlu de filă din browser.",
+    "Parousia funcționează cu ecosistemul open source de activități PreMiD și oferă în plus propriul ecosistem de activități, pentru dezvoltatori și utilizatori.",
+    "Această extensie este open source și se bazează pe un sistem de activități prietenos cu dezvoltatorii. Dezvoltatorii TypeScript pot crea activități pentru site-uri, le pot publica prin ecosistemul de activități și pot construi integrări fără a modifica Parousia.",
+    "Parousia este concepută cu gândul la confidențialitate și procesează informațiile despre activitate local, atunci când este posibil. Extensia comunică cu aplicația noastră desktop, care se ocupă de integrarea cu platformele. Nu este nevoie de cont sau de autentificare pentru a o folosi, iar Parousia nu folosește analize sau telemetrie pentru a vă urmări navigarea.",
+    "Sunteți gata să dați viață activității din browser? Instalați Parousia și faceți din ceea ce faceți în browser o parte din Discord Rich Presence-ul dvs.",
+    "Parousia este un proiect independent, open source, care nu este afiliat cu Discord Inc. și nu este aprobat sau sponsorizat de aceasta."
+  ]
+}

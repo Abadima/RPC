@@ -6,6 +6,16 @@ import { buildActivities } from "./scripts/activities/build";
 import { loadDevKey } from "./scripts/dev-key";
 import { iconsPlugin } from "./scripts/icons";
 import { packLocale } from "./scripts/locales";
+import { atJsonFloor } from "./scripts/json";
+import {
+  PACKAGE_LANGUAGES,
+  STORE_LOCALES,
+  SUMMARY_MESSAGE,
+  chromeMessages,
+  loadListings,
+  type PackageTarget,
+} from "./scripts/store";
+import { LANGUAGES, type Language } from "./src/core/i18n";
 import { userscriptHeader, type HeaderSource } from "./scripts/userscript-header";
 import { writeZip } from "./scripts/zip";
 
@@ -34,20 +44,32 @@ async function writeManifest(target: string, targetDir: string, dev: boolean): P
     console.log(`[build]   allow it: \`Parousia-Desktop allow chrome-extension://${devKey.id}\``);
   }
 
-  await Bun.write(join(targetDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  if (target === "chromium") {
+    // The Web Store dashboard lists a language for the listing only if the package
+    // has its `_locales/<code>/`, and reads the summary from the manifest's
+    // description there (see writeStoreLocales). Firefox Add-ons keeps its listing
+    // languages in the Developer Hub, so that package stays as it is.
+    manifest.default_locale = "en";
+    manifest.description = `__MSG_${SUMMARY_MESSAGE}__`;
+  }
+
+  await Bun.write(join(targetDir, "manifest.json"), JSON.stringify(manifest));
 }
 
-/** `PAROUSIA_BUILD_DIR` builds somewhere else, for checks that need a build of their own. */
 const outDir = process.env.PAROUSIA_BUILD_DIR ?? "dist";
 const extensionTargets = ["chromium", "firefox"] as const;
-/** The one logo, shared with the repository's brand assets. */
 const logo = join("..", "assets", "brand", "parousia-rounded.svg");
 /** Chromium shows only raster manifest icons (an SVG or WebP one falls back to the puzzle piece); `icons/` holds the PNGs. */
 const chromiumIconSizes = [16, 32, 48, 128] as const;
 const popupFonts = ["poppins-400.woff2", "poppins-600.woff2", "OFL.txt"] as const;
 
-/** Resolves `parousia:activities` (the native Activities); set once per build. */
 let plugins: Bun.BunPlugin[] = [];
+/**
+ * The languages the platform's package carries dictionaries for, injected as
+ * `PACKAGED_LANGUAGES` into every bundle of the target (PACKAGE_LANGUAGES in
+ * scripts/store.ts). The userscript, bundled outside the loop, gets all.
+ */
+let packagedLanguages: readonly Language[] = LANGUAGES;
 
 async function bundle(
   entrypoint: string,
@@ -64,7 +86,13 @@ async function bundle(
     target: "browser",
     format,
     ...(naming && { naming }),
-    ...(define && { define }),
+    // Bun reads each define value as the JSON it names and hands the bundle the
+    // constant, so the array goes in as its JSON *text* and `PACKAGED` parses
+    // it at runtime; an array here arrives as a bare `en,am,…` string instead.
+    define: {
+      PACKAGED_LANGUAGES: JSON.stringify(JSON.stringify(packagedLanguages)),
+      ...define,
+    },
     minify: true,
     plugins,
   });
@@ -89,7 +117,6 @@ async function writeFonts(targetDir: string): Promise<void> {
   }
 }
 
-/** Minified: the sources keep their comments, the build doesn't ship them. Fonts stay as files. */
 async function writeCss(source: string, targetDir: string): Promise<void> {
   const result = await Bun.build({
     entrypoints: [source],
@@ -124,17 +151,40 @@ async function writeFullscreen(targetDir: string): Promise<void> {
   await writeCss(join("src", "fullscreen", "fullscreen.css"), targetDir);
 }
 
-/** The popup and dashboard's translations (src/core/i18n.ts): one file per language, fetched when it's the chosen one. */
-async function writeLocales(targetDir: string): Promise<void> {
+/**
+ * The screens' dictionaries for the target's package (`locales/<code>.json`):
+ * only the languages the platform's own list names (PACKAGE_LANGUAGES in
+ * scripts/store.ts), so a package doesn't carry text its browser can't run:
+ * Firefox has no Amharic or Swahili, Chromium takes every language today, and
+ * a language may reach one package and not the other.
+ */
+async function writeLocales(target: PackageTarget, targetDir: string): Promise<void> {
   const localesDir = join(targetDir, "locales");
   await mkdir(localesDir, { recursive: true });
-  for await (const file of new Bun.Glob("*.json").scan({ cwd: join("src", "locales") })) {
-    const source = await Bun.file(join("src", "locales", file)).text();
-    await Bun.write(join(localesDir, file), packLocale(source));
+  for (const language of PACKAGE_LANGUAGES[target]) {
+    // English's dictionary is the source's keys (i18n.ts), so there's nothing to write.
+    if (language === "en") continue;
+    const source = await Bun.file(join("src", "locales", `${language}.json`)).text();
+    await Bun.write(join(localesDir, `${language}.json`), atJsonFloor(packLocale(source)));
   }
 }
 
-/** The project's license and what else an extension carries, inside the package itself. */
+/**
+ * The Chromium package's `_locales/`: the store summary in each language, which
+ * is all Chrome reads from it. The extension's own screens use `locales/`.
+ * What lands here follows the same set the package's dictionaries do
+ * (PACKAGE_LANGUAGES): a store listing the browser's own list doesn't name
+ * stays a paste-file (`bun run store export`), and the package stays smaller.
+ */
+async function writeStoreLocales(targetDir: string): Promise<void> {
+  const listings = await loadListings();
+  for (const language of PACKAGE_LANGUAGES.chromium) {
+    const dir = join(targetDir, "_locales", STORE_LOCALES[language].chrome);
+    await mkdir(dir, { recursive: true });
+    await Bun.write(join(dir, "messages.json"), atJsonFloor(chromeMessages(listings[language])));
+  }
+}
+
 async function writeLegal(targetDir: string): Promise<void> {
   await copyFile(join("..", "LICENSE"), join(targetDir, "LICENSE"));
   await copyFile("THIRD-PARTY-NOTICES.txt", join(targetDir, "THIRD-PARTY-NOTICES.txt"));
@@ -146,7 +196,6 @@ async function writeIcons(
 ): Promise<void> {
   const iconsDir = join(targetDir, "icons");
   await mkdir(iconsDir, { recursive: true });
-  // The popup, the dashboard, and Firefox's manifest use the vector logo.
   await copyFile(logo, join(iconsDir, "parousia.svg"));
   if (target !== "chromium") return;
   for (const size of chromiumIconSizes) {
@@ -173,7 +222,6 @@ async function writeUserscript(targetDir: string): Promise<void> {
 
 async function build(dev: boolean): Promise<void> {
   await rm(outDir, { recursive: true, force: true });
-  // Native Activities are bundled in; PreMiD's are packaged files (see scripts/activities/).
   const activities = await buildActivities();
   for (const line of activities.summary) console.log(`[build] ${line}`);
   plugins = [activities.plugin, iconsPlugin];
@@ -181,6 +229,7 @@ async function build(dev: boolean): Promise<void> {
   for (const target of extensionTargets) {
     const targetDir = join(outDir, target);
     await mkdir(targetDir, { recursive: true });
+    packagedLanguages = PACKAGE_LANGUAGES[target];
     await bundle(join("src", "platforms", `${target}.ts`), targetDir);
     await writeIcons(target, targetDir);
     await writeLegal(targetDir);
@@ -188,14 +237,15 @@ async function build(dev: boolean): Promise<void> {
     await writeTheme(targetDir);
     await writePopup(targetDir);
     await writeFullscreen(targetDir);
-    await writeLocales(targetDir);
+    await writeLocales(target, targetDir);
+    if (target === "chromium") await writeStoreLocales(targetDir);
     await activities.writeTo(targetDir);
     await writeManifest(target, targetDir, dev);
 
-    // Store uploads (AMO, Chrome Web Store) and release assets.
     await writeZip(targetDir, join(outDir, `${target}.zip`));
   }
 
+  packagedLanguages = PACKAGE_LANGUAGES.userscript;
   await writeUserscript(join(outDir, "userscript"));
 
   console.log("[build] done");

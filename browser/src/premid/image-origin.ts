@@ -1,19 +1,11 @@
 /**
- * Where an inline image came from. PreMiD's Activity API lets an Activity
- * hand over an image as an address, a base64 string, a Blob, or an element,
- * and PreMiD hosts the ones that aren't addresses on its own image service
- * (`POST pd.premid.app/create/base64`), so what travels afterwards is a short
- * address. Parousia has no image host and sends nothing to anyone's, so it
- * goes the other way: an inline image that is really a picture the page
- * already serves (YouTube draws its thumbnail onto a canvas only to pad it
- * square, from `https://i3.ytimg.com/vi/<id>/mqdefault.jpg`) is sent as that
- * address, which Discord fetches itself. One that isn't, a screenshot of a
- * video or a picture made from scratch, has no address and is left out.
- *
- * This watches the three ways such an image is made in the world PreMiD's
- * code runs in: an `https` image drawn onto a canvas that's then exported
- * (`toDataURL`, `toBlob`), and a fetched image's Blob. A canvas that drew
- * anything but one `https` image has no origin.
+ * Where an inline image came from. PreMiD hosts an Activity's inline image
+ * (base64, a Blob, an element) on its image service; Parousia sends nothing to
+ * any image host, so an inline image that's really a picture the page serves
+ * (YouTube draws `i3.ytimg.com/vi/<id>/mqdefault.jpg` onto a canvas to pad it)
+ * is sent as that `https` address, and any other is left out. Watched: an
+ * `https` image drawn onto a canvas then exported (`toDataURL`, `toBlob`), and a
+ * fetched image's Blob.
  */
 const MAX_TRACKED = 16;
 const MAX_ADDRESS_CHARS = 2048;
@@ -28,7 +20,6 @@ interface Drawn {
 }
 const canvases = new WeakMap<object, Drawn>();
 
-/** A method as `patch` hands it over: call it on `self`. */
 type Original = (self: unknown, args: unknown[]) => unknown;
 type Method = (this: unknown, ...args: unknown[]) => unknown;
 
@@ -40,7 +31,6 @@ function httpsAddress(value: unknown): string | undefined {
     : undefined;
 }
 
-/** The address an inline image came from, if it's known: a data URL or a Blob this has seen made. */
 export function originOf(value: unknown): string | undefined {
   if (typeof value === "string") return exported.get(value);
   if (typeof value === "object" && value !== null) return blobs.get(value);
@@ -54,7 +44,6 @@ function addressOf(canvas: unknown): string | undefined {
   return drawn.sources.values().next().value;
 }
 
-/** The prototype of the class `scope` has under `name` (the browser's own, or a fake in a test). */
 function prototypeOf(scope: object, name: string): unknown {
   const constructor: unknown = Reflect.get(scope, name);
   return typeof constructor === "function" ||
@@ -63,7 +52,6 @@ function prototypeOf(scope: object, name: string): unknown {
     : undefined;
 }
 
-/** Starts watching (once per world). */
 export function trackImageOrigins(scope: object): void {
   const remember = (map: "data" | "blob", key: string | object, address: string): void => {
     if (map === "blob" && typeof key === "object") {
@@ -157,7 +145,6 @@ export function trackImageOrigins(scope: object): void {
   );
 }
 
-/** Replaces `prototype[name]` with `wrap(original)`, keeping `this` for the original. */
 function patch(prototype: unknown, name: string, wrap: (original: Original) => Method): void {
   if (typeof prototype !== "object" || prototype === null) return;
   const original: unknown = Reflect.get(prototype, name);

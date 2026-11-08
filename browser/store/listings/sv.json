@@ -1,0 +1,13 @@
+{
+  "summary": "Din Rich Presence på Discord och längre än så.",
+  "description": [
+    "Din Rich Presence på Discord och mer därtill.",
+    "Parousia för in din webbläsaraktivitet i Discord Rich Presence. Tillägget känner automatiskt igen webbplatser som stöds och kan visa direkt på din Discord-profil vad du tittar på, lyssnar på, spelar eller surfar på. När ingen aktivitet passar kan du i stället visa en egen anpassad status.",
+    "Vi använder aktiviteter för att stödja webbplatser och webbappar. Aktiviteter kan ge rika detaljer som titlar, artister, skapare, miniatyrbilder, uppspelningsstatus, tidsstämplar och länkar. Då får din Discord-status mycket mer sammanhang än med en vanlig webbläsartitel.",
+    "Parousia fungerar med PreMiD:s ekosystem av aktiviteter med öppen källkod och har dessutom ett eget aktivitetsekosystem för utvecklare och användare.",
+    "Tillägget har öppen källkod och är byggt kring ett aktivitetssystem som är enkelt för utvecklare att arbeta med. TypeScript-utvecklare kan skapa aktiviteter för webbplatser, publicera dem via aktivitetsekosystemet och bygga integrationer utan att ändra i Parousia.",
+    "Integritet har funnits med från början i utformningen av Parousia, som bearbetar aktivitetsinformation lokalt där det går. Tillägget kommunicerar med vår skrivbordsapp, som sköter integrationen med plattformarna. Inget konto eller någon inloggning behövs för att använda det, och Parousia använder varken analys eller telemetri för att spåra ditt surfande.",
+    "Redo att väcka din webbläsaraktivitet till liv? Installera Parousia och gör det du gör i webbläsaren till en del av din Discord Rich Presence.",
+    "Parousia är ett oberoende projekt med öppen källkod. Det är inte knutet till Discord Inc. och varken godkänt eller sponsrat av företaget."
+  ]
+}

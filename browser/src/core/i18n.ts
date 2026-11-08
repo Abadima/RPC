@@ -1,26 +1,63 @@
 /**
- * The popup and dashboard's words. English is the key itself, so the code
- * reads as it always did and English costs nothing to load; every other
- * language is `locales/<code>.json`, fetched once when a view opens, mapping
- * an English string to its translation. A string with no entry stays English.
+ * The popup and dashboard's words. English is the key itself, so English
+ * costs nothing to load; each other language is `locales/<code>.json`, fetched
+ * once per view, mapping an English string to its translation. A string with no
+ * entry stays English.
  *
  * - `t("Show {name}", { name })` fills `{name}`.
- * - `tn(n, "{n} Activity", "{n} Activities")` picks the form for `n`: English
- *   by itself, and in other languages the entry for the plural form, which is
- *   an object with a string for each plural category the language has (`one`,
- *   `few`, `many`, `other`).
- * - `msg("Settings")` marks a string that's defined away from where it's
- *   shown (a table); show it with `t(…)`.
+ * - `tn(n, one, other)` picks a plural form; a translation of `other` is an
+ *   object with a string per plural category the language has.
+ * - `msg("Settings")` marks a string shown elsewhere (a table) with `t`.
  *
- * Only strings written as literals are found by the check that every language
- * has every string (i18n.test.ts), so a message is never built by joining.
+ * The completeness check (i18n.test.ts) finds only literals, so a message is
+ * never built by joining.
  */
 
-/** What the popup and dashboard can be shown in; each but English has `locales/<code>.json`. */
-export const LANGUAGES = ["en", "de", "fr", "ja", "ro", "ru", "sv", "zh"] as const;
+export const LANGUAGES = [
+  "en",
+  "am",
+  "ar",
+  "ca",
+  "de",
+  "el",
+  "es",
+  "es-419",
+  "et",
+  "fa",
+  "fr",
+  "ja",
+  "ko",
+  "lt",
+  "lv",
+  "nl",
+  "pl",
+  "pt-BR",
+  "pt-PT",
+  "ro",
+  "ru",
+  "sl",
+  "sv",
+  "sw",
+  "tr",
+  "zh",
+] as const;
 export type Language = (typeof LANGUAGES)[number];
 /** `auto` follows the browser's own language. */
 export type LanguagePreference = Language | "auto";
+
+declare const PACKAGED_LANGUAGES: string | undefined;
+
+/**
+ * The languages the package this code runs in carries dictionaries for, that
+ * a view may list and a stored preference may name. A platform runtime's
+ * build defines it (build.ts, `PACKAGE_LANGUAGES` in scripts/store.ts);
+ * anywhere else, such as the tests or a bundle whose build didn't define it,
+ * it's every language.
+ */
+export const PACKAGED: readonly Language[] =
+  typeof PACKAGED_LANGUAGES === "undefined"
+    ? LANGUAGES
+    : (JSON.parse(PACKAGED_LANGUAGES) as readonly Language[]);
 
 type PluralForms = Partial<Record<Intl.LDMLPluralRule, string>>;
 export type Dictionary = Readonly<Record<string, string | PluralForms>>;
@@ -28,12 +65,30 @@ type Variables = Readonly<Record<string, string | number>>;
 
 export const LANGUAGE_NAMES: Readonly<Record<Language, string>> = {
   en: "English",
+  am: "አማርኛ",
+  ar: "العربية",
+  ca: "Català",
   de: "Deutsch",
+  el: "Ελληνικά",
+  es: "Español",
+  "es-419": "Español (América Latina)",
+  et: "Eesti",
+  fa: "فارسی",
   fr: "Français",
   ja: "日本語",
+  ko: "한국어",
+  lt: "Lietuvių",
+  lv: "Latviešu",
+  nl: "Nederlands",
+  pl: "Polski",
+  "pt-BR": "Português (Brasil)",
+  "pt-PT": "Português (Portugal)",
   ro: "Română",
   ru: "Русский",
+  sl: "Slovenščina",
   sv: "Svenska",
+  sw: "Kiswahili",
+  tr: "Türkçe",
   zh: "中文",
 };
 
@@ -42,7 +97,6 @@ let dictionary: Dictionary = {};
 let numbers = new Intl.NumberFormat("en");
 let plurals = new Intl.PluralRules("en");
 
-/** Switches to `next`, whose strings are `strings` (none for English). */
 export function setLanguage(next: Language, strings: Dictionary = {}): void {
   language = next;
   dictionary = strings;
@@ -80,14 +134,48 @@ export function tn(count: number, one: string, other: string, variables?: Variab
   return fill(template, { n: count, ...variables });
 }
 
-/** Marks `key` for translation where it's defined; the caller shows it with `t`. */
 export const msg = (key: string): string => key;
+
+/** Regions whose Spanish is `es-419` on automatic (`419` is Latin America's own code; `ar` is Argentina). */
+const SPANISH_LATIN_AMERICA: ReadonlySet<string> = new Set([
+  "ar",
+  "bo",
+  "cl",
+  "co",
+  "cr",
+  "cu",
+  "do",
+  "419",
+  "ec",
+  "gt",
+  "hn",
+  "mx",
+  "ni",
+  "pa",
+  "pe",
+  "pr",
+  "py",
+  "sv",
+  "us",
+  "uy",
+  "ve",
+]);
 
 /** The language a preference means, given the browser's own (`en-GB`, `zh-Hans-CN`, …). */
 export function resolveLanguage(preference: LanguagePreference, browser: string): Language {
   if (preference !== "auto") return preference;
-  const primary = browser.toLowerCase().split(/[-_]/)[0];
-  return LANGUAGES.find((candidate) => candidate === primary) ?? "en";
+  const wanted = browser.toLowerCase();
+  const [primary, region] = wanted.split(/[-_]/);
+  return (
+    LANGUAGES.find((candidate) => candidate.toLowerCase() === wanted) ??
+    LANGUAGES.find((candidate) => candidate.toLowerCase() === `${primary}-${region}`) ??
+    (primary === "es" && region !== undefined && SPANISH_LATIN_AMERICA.has(region)
+      ? "es-419"
+      : undefined) ??
+    LANGUAGES.find((candidate) => candidate.toLowerCase() === primary) ??
+    LANGUAGES.find((candidate) => candidate.toLowerCase().startsWith(`${primary}-`)) ??
+    "en"
+  );
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> =>

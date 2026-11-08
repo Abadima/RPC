@@ -1,22 +1,46 @@
 # VERSION 1
 
-## V1.2.0 - IN DEVELOPMENT
+## V1.3.0 - IN DEVELOPMENT
 
-This release carries the browser extension and userscript **1.2.0** and Parousia Desktop **1.0.2**. Versions are set in the manifests, `package.json`, and `desktop/Cargo.toml`; `scripts/release-check.mjs` checks they agree with the tag.
+This release carries the browser extension and userscript **1.3.0** and Parousia Desktop **1.0.3**.
 
 ### ✨ New Features
 
-- **Activity Versions:** Every Activity's page in the dashboard shows its version, taken from its own `metadata.json`: Parousia's native Activities and the bundled PreMiD ones alike. Only each Activity's manifest carries it, so the catalog the dashboard lists and searches doesn't grow.
-- **Site Activity Beside the Default Activity:** While the Default Activity is shared, the popup still shows the tab's own Activity when its site has one. Turn it on there, or see why it can't run (access not granted, or nothing to share yet).
-- **Show Media Presence:** A new switch in `Settings > Privacy`, off by default. With it on, music or video you were playing stays on your profile when you move to a site that has no Activity (or a browser page), until the sound stops, its tab closes, or its Activity is turned off. Only an Activity that presents as listening or watching, or that has an end time, counts, and only while the tab is making sound. An Activity on the tab you're looking at comes first, and the Default Activity only shows when no music or video is kept. With several players, the one you looked at last is shown. Private windows follow their own setting. Nothing is injected into the tab it comes from. A song skipped in a tab you left reaches Discord, the music stays when the extension's background restarts, and the popup still offers the current site's own Activity beside it, so you can turn it on or allow it without turning this off.
-- **Plainer Wording:** Shorter, more direct text across the popup, dashboard, settings, and every translation. Terms are consistent: "Activity" for a site's integration, "presence" for what's shown on Discord. Parousia Desktop's port, pipe, and tray messages are shorter too (Desktop 1.0.2).
+- **More Languages:** The popup and dashboard are now available in 24 languages: **Amharic**, **Arabic**, **Catalan**, **Dutch**, **Estonian**, **Greek**, **Korean**, **Latvian**, **Lithuanian**, **Persian**, **Polish**, **Slovenian**, **Swahili**, and **Turkish**, plus **Spanish** (Spain and Latin America) and **Portuguese** (Brazil and Portugal), alongside German, French, Japanese, Romanian, Russian, Swedish, and Simplified Chinese. Every language is complete and has been revised for accuracy and consistency. The Polish translation is by [t07bon](https://github.com/t07bon). **Automatic** follows your browser's language and region: a Brazilian browser gets Brazilian Portuguese, and a Latin American one gets Latin American Spanish. Activity descriptions PreMiD has translated show in your language too.
+- **Store Listing Text in 25 Languages:** The summary and description for the Chrome Web Store and Firefox Add-ons are written for every language the extension has, in `browser/store/`, with the steps to enter them in each dashboard. The Chromium package now carries the translated summary (5.5 KB), which the Web Store needs before it offers a language for the listing. The listings themselves change only when they are entered in the dashboards.
+- **Right-to-Left Layout (Known Limitation):** Arabic and Persian are translated, but the layout isn't mirrored for right-to-left reading yet.
 
 ### 🛡️ Stability & Privacy
 
-- **Discord Connection (Linux and macOS):** A Discord that stops reading its socket no longer holds Desktop's Discord connection forever. A write it doesn't take within 5 seconds ends the connection, and Desktop retries as it does after a Discord restart. Windows already did this. This is a Desktop change, so it ships in Parousia Desktop **1.0.2**. Update Desktop with the extension: with Show media presence on, the connection to Discord stays open for hours, so on Desktop 1.0.1 a Discord that stops listening is much easier to hit.
-- **Switches Are Read Before Anything Runs:** When the extension started, an Activity ran on its default until its stored switch loaded, so one you had turned off could run once on the first tab. The extension now waits for the stored switches before any Activity is run or injected.
-- **Paused Private Tabs Run Nothing:** With `Settings > Privacy > Private windows` on "Pause activity", no Activity runs for a private tab: its code isn't called and its page scripts aren't injected. Scripts already running there stop when you change the setting. Before, they ran and the result was dropped.
-- **What a Switch Guarantees:** `project/threat-model.md` (Disabled Activities) lists exactly what stops when an Activity is off, and what doesn't.
+- **Your Settings Load First:** When the extension started, it could share a presence once with the default settings before yours had loaded, including media details or page data you had turned off. It now reads your settings before anything is shared.
+- **Presence Stays Up on Busy Pages:** A page that changes constantly (a ticking title, for example) could make Desktop close the connection and drop your presence for about 10 seconds at a time. The extension now paces its updates to stay within Desktop's limits.
+- **The Userscript Follows Page Titles:** On sites whose Activity reads the tab title, such as GAM.ONL and Fluxer, the userscript now picks up the title once the page has loaded and follows it as it changes.
+- **Safer Activity Builds:** Activities are built only from reviewed, pinned revisions of their sources, and an Activity's build can't read files outside its own folder. PreMiD Activities whose URL patterns could stall on a crafted address are refused; none of today's are affected.
+- **Tighter Page Access:** A PreMiD Activity's requests for page data can't be used to run text as code in the page, and a page script that floods the extension with messages has the excess dropped.
+- **Sturdier Desktop (Desktop 1.0.3):** Desktop keeps serving if the system refuses to start a thread for one connection, and text a page chooses (such as an Activity's name) can no longer break lines or slip invisible direction marks into Desktop's terminal output, tray, and notifications.
+- **Dashboard Fixes:** The elapsed-time clock stops when you leave a dashboard page, the Activities page draws at its final size straight away, and the filter count uses your language's number format.
+
+### ⚡ Performance
+
+- **Lighter Extension:** A smaller download and background, less work on image-heavy pages, fewer repeated reads of Activity data in the dashboard, and less work when many tab events arrive at once.
+- **Lighter Desktop (Desktop 1.0.3):** On Linux, Desktop checks which user a connection belongs to much faster, and the download is smaller. The tray on Linux and Windows no longer updates for every new song or video within the same Activity, and Desktop does less work for each update it sends to Discord.
+
+## [V1.2.0](https://github.com/Abadima/RPC/releases/tag/v1.2.0) - RELEASED
+
+This release carries the browser extension and userscript **1.2.0** and Parousia Desktop **1.0.2**.
+
+### ✨ New Features
+
+- **Activity Versions:** Every Activity's page in the dashboard shows its version.
+- **Site Activity Beside the Default Activity:** While the Default Activity is shared, the popup still shows the tab's own Activity when its site has one, so you can turn it on there or see why it can't run.
+- **Show Media Presence:** A new switch in `Settings > Privacy`, off by default. With it on, music or video you were playing stays on your profile when you move to a site without an Activity, until the sound stops, its tab closes, or its Activity is turned off. An Activity on the current tab comes first; with several players, the one you looked at last is shown; private windows follow their own setting.
+- **Plainer Wording:** Shorter, more direct text across the popup, dashboard, settings, every translation, and Desktop's messages, with consistent terms: "Activity" for a site's integration, "presence" for what Discord shows.
+
+### 🛡️ Stability & Privacy
+
+- **Discord Connection (Linux and macOS, Desktop 1.0.2):** A Discord that stops reading its socket no longer holds Desktop's connection forever: after 5 seconds Desktop reconnects, as it already did on Windows. Update Desktop with the extension if you use Show media presence, which keeps that connection open for hours.
+- **Switches Are Read Before Anything Runs:** An Activity you had turned off could run once on the first tab after the extension started. The extension now waits for your switches before running or injecting anything.
+- **Paused Private Tabs Run Nothing:** With `Settings > Privacy > Private windows` on "Pause activity", no Activity runs in a private tab at all, and scripts already running there stop when you change the setting.
 
 ## [V1.1.0](https://github.com/Abadima/RPC/releases/tag/v1.1.0) - V1 FIRST STABLE RELEASE
 
@@ -32,7 +56,7 @@ This release carries the browser extension and userscript **1.1.0** (the Firefox
 
 - **Expanded Activity Info:** PreMiD and native activities now send activity types (_Listening to, Watching, Competing in_), status lines, party sizes ("2 of 5"), and image links to Discord.
 
-- **Version Update Notices:** Extension and Desktop minor/patch versions remain compatible. Update notices only appear when an update is actually needed. The extension checks GitHub's latest release at most once per day to determine whether a newer Desktop version is available. The request is unauthenticated, sends no user or page data, and failed checks show nothing. Both notices include a "Not now" option.
+- **Version Update Notices:** Extension and Desktop minor and patch versions stay compatible, and a notice appears only when an update is actually needed, with a "Not now" option. To tell whether a newer Desktop exists, the extension checks GitHub's latest release at most once a day, unauthenticated and without any user or page data.
 
 ### ⚡ Performance & Usability Improvements
 
@@ -56,7 +80,7 @@ This release carries the browser extension and userscript **1.1.0** (the Firefox
 
 - **WebSocket Hardening:** Desktop now validates the WebSocket upgrade itself before handing the connection to the WebSocket implementation, while rejecting malformed or ambiguous requests.
 
-- **Desktop Optimization:** Reduced the Linux release binary by approximately 13%, reduced runtime memory usage, and improved presence message parsing performance by approximately 28%.
+- **Desktop Optimization:** A smaller Linux release binary, lower memory use, and faster presence parsing.
 
 - **Browser Optimization:** Reduced browser bundle sizes and popup/dashboard memory usage through smaller wrappers, optimized assets, and reduced duplicated runtime data.
 
@@ -70,7 +94,7 @@ This release carries the browser extension and userscript **1.1.0** (the Firefox
 
 - **Firefox Add-ons:** Parousia is now on [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/parousia/). Desktop still asks you to allow a Firefox install once, since Firefox gives every install its own identity. The Chrome Web Store listing is in review; until it is up, the Chromium extension loads from `parousia-chromium.zip`.
 
-- **Separate Versions:** Parousia Desktop and the extension now have their own version numbers (Desktop **1.0.1**, extension and userscript **1.1.0**). A release is named for the extension's, which Chromium's manifest, `package.json`, and the userscript carry, and its notes name the Desktop it contains. Firefox's build is **1.1.0.1**: Mozilla takes each version only once and already has a 1.1.0 from before the update-notice change, so this one goes out as a revision of it. It is the same release as 1.1.0 everywhere else.
+- **Separate Versions:** Parousia Desktop and the extension now have their own version numbers (Desktop **1.0.1**, extension and userscript **1.1.0**). A release is named for the extension's version, and its notes name the Desktop it contains. Firefox's build is **1.1.0.1**, the same release under the revision number Mozilla required.
 
 - **Cross-Version Compatibility:** Extension and Desktop remain connected across different minor/patch/beta versions; only major version differences force a disconnection.
 
@@ -84,7 +108,7 @@ This release carries the browser extension and userscript **1.1.0** (the Firefox
 
 - **Browser Extension & Userscript Support:** Available for Chromium browsers, Firefox, and userscript managers (Violentmonkey, Tampermonkey, ScriptCat) via local WebSocket connections (`127.0.0.1:57179`).
 
-- **Comprehensive Activity Library:** Supports both native activities and over 1,400 PreMiD activities running natively without requiring third-party servers.
+- **Activity Library:** Supports both native activities and over 1,400 PreMiD activities running natively without requiring third-party servers.
 
 - **Granular Privacy & Site Controls:**
   - Site reading permissions are opt-in per site with optional global access.

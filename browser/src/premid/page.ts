@@ -1,5 +1,5 @@
 import type { SettingValue } from "../core/activity";
-import { BRIDGE_KEY } from "../activities/manifest";
+import { BRIDGE_KEY, premidId } from "../activities/manifest";
 import {
   MAX_MESSAGE,
   PREMID_FRAME_PORT,
@@ -14,18 +14,13 @@ import { originOf, trackImageOrigins } from "./image-origin";
 import type { PresenceDataWire } from "./presence-data";
 
 /**
- * PreMiD's Activity API (github.com/PreMiD/Activities, `@types/premid`), in
- * the page: the `Presence`, `iFrame`, and `Slideshow` classes an unmodified
- * PreMiD Activity is written against, feeding Parousia's background instead
- * of PreMiD's. The background injects this (as `premid/runtime.js`) into the
- * content-script world of a page a turned-on Activity matches, then the
- * Activity's own script, which the build wraps to receive these classes from
- * `bind` (scripts/activities/premid.ts).
- *
- * Kept small on purpose: ticks run once a second and only while the page is
- * visible; what's sent is what changed. Not provided, so an Activity's
- * `supports()` checks see them missing: `onRequest`, and `execInPage` with a
- * function (it would need the page to evaluate code); the declarative form is.
+ * PreMiD's Activity API in the page (`Presence`, `iFrame`, `Slideshow`) for
+ * unmodified PreMiD Activities, feeding Parousia's background instead of
+ * PreMiD's. Injected as `premid/runtime.js` into the content-script world of a
+ * page a turned-on Activity matches, before the Activity's wrapped script
+ * (scripts/activities/premid.ts). Ticks run once a second, only while the page
+ * is visible, and send only changes. Not provided: `onRequest`, and
+ * `execInPage` with a function (the page would have to evaluate code).
  */
 
 /** English strings from PreMiD's `general.json`, defined by the build. */
@@ -43,7 +38,6 @@ const TICK_MS = 1000;
  */
 export const STALE_MS = 30_000;
 export const STALE_AFTER_MOVE_MS = 6000;
-/** How long to wait for the background to answer before going on without it. */
 const ANSWER_MS = 5000;
 export const MIN_SLIDE_TIME = 5000;
 /** The PreMiD extension version whose API this matches (activity names, detail and state links). */
@@ -54,8 +48,6 @@ type Data = Record<string, unknown>;
 
 const isObject = (value: unknown): value is Data =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-
-// Ticking: every Presence and iFrame in this document, together.
 
 const tickers = new Set<() => Promise<void>>();
 const inFlight = new Set<() => Promise<void>>();
@@ -99,7 +91,6 @@ export async function runUpdates(
 
 const tick = (): Promise<void> => runUpdates(tickers);
 
-/** The background says whether to keep reading while the page isn't shown (`ToPage`, `background`). */
 function keepReading(on: boolean): void {
   background = on;
   schedule();
@@ -141,7 +132,6 @@ function listen(listeners: Map<string, Listener[]>, event: unknown, listener: un
   listeners.set(event, list);
 }
 
-/** `runtime.connect`, taken when the runtime installs, before any Activity's code runs. */
 let connect: ((info: { name: string }) => chrome.runtime.Port) | null = null;
 
 /**
@@ -168,20 +158,12 @@ export function withholdStorage(scope: object = globalThis): void {
 const IMAGE_SERVICE = "https://pd.premid.app/create/";
 
 /**
- * PreMiD's Activities shorten a long image address (Discord takes at most
- * 256 characters) by asking PreMiD's image service for a short one
- * (`GET pd.premid.app/create/<address>`), and a few upload a picture they
- * drew (`POST pd.premid.app/create/image`). Parousia talks to no PreMiD
- * server, so those requests are answered here, in the world PreMiD's code
- * runs in, and never leave the browser:
- *
- * - a shortening asks for the address back, which the Activity uses as it
- *   would have used the short one (Desktop leaves out an image that's too
- *   long for Discord, and the rest of the presence still shows);
- * - an upload gets an empty answer, so there's no image and everything else shows.
- *
- * Every Activity already falls back to the long address if the service
- * fails; this does what that does, without the request.
+ * PreMiD's Activities shorten a long image address through PreMiD's image
+ * service (`GET pd.premid.app/create/<address>`), and a few upload a picture
+ * (`POST .../create/image`). Parousia talks to no PreMiD server, so both are
+ * answered here and never leave the browser: a shortening gets the address
+ * back, an upload an empty answer. Every Activity already falls back that way
+ * when the service fails.
  */
 export function answerImageService(scope: {
   fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -209,7 +191,6 @@ class Channel {
     private readonly name: string,
     private readonly hello: () => object,
     private readonly receive: (message: ToPage) => void,
-    /** The background forgot this page (it restarted): send everything again. */
     private readonly lost: () => void,
   ) {}
 
@@ -258,7 +239,6 @@ class Channel {
   }
 }
 
-/** Page answers (`getPageVariable`, `execInPage`) by nonce, giving up after `ANSWER_MS`. */
 class Answers {
   private nonce = 0;
   private readonly waiting = new Map<number, (value: unknown) => void>();
@@ -295,8 +275,6 @@ function execSpec(channel: Channel, answers: Answers, spec: unknown): Promise<un
     ? answers.ask(channel, parsed)
     : Promise.reject(new Error("unsupported execInPage spec"));
 }
-
-// PresenceData, as the background takes it.
 
 const TEXT_FIELDS = ["name", "details", "state", "largeImageText", "smallImageText"] as const;
 const IMAGE_FIELDS = ["largeImageKey", "smallImageKey"] as const;
@@ -402,8 +380,6 @@ export function fitPresenceData(data: Data | null): PresenceDataWire | null | un
   return JSON.stringify(rest).length <= MAX_MESSAGE ? rest : undefined;
 }
 
-// Slideshows
-
 export class SlideshowSlide {
   private _interval: number;
 
@@ -438,7 +414,6 @@ export class Slideshow {
   private index = 0;
   private shownAt = 0;
 
-  /** The slide due now, or `null` with no slides. */
   current(now = Date.now()): Data | null {
     if (this.slides.length === 0) return null;
     let slide = this.slides[this.index % this.slides.length];
@@ -516,11 +491,9 @@ export interface PremidApi {
 const log = (activity: string, message: unknown): void =>
   console.debug(`[Parousia/PreMiD ${activity}]`, message);
 
-/** The API for one Activity, whose own strings (its `<service>.json`) the build hands over. */
 export function createApi(
   activity: string,
   strings: Readonly<Record<string, string>>,
-  /** Collects every channel the Activity opens, for `installBridge` to tell when it's been stopped. */
   channels: Channel[] = [],
 ): PremidApi {
   const general = typeof __PREMID_STRINGS__ === "undefined" ? {} : __PREMID_STRINGS__;
@@ -531,13 +504,10 @@ export function createApi(
     private readonly answers = new Answers();
     private readonly channel: Channel;
     private source: Data | Slideshow | null = null;
-    /** What the background has, as JSON; `null` once it has to be sent again. */
     private sent: string | null = null;
     private settings: Record<string, SettingValue> | null = null;
-    /** Which settings it has hidden (`true`) or shown, as the background was last told. */
     private readonly hiding = new Map<string, boolean>();
     private readonly settingsWaiting: Array<() => void> = [];
-    /** When, and on which page address, the Activity last called `setActivity` or `clearActivity`. */
     private updatedAt = Date.now();
     private updatedOn = location.href;
 
@@ -581,7 +551,6 @@ export function createApi(
       this.watchFrames();
     };
 
-    /** Drops what the Activity last reported once it has gone stale (see `STALE_MS`). */
     private expire(): void {
       if (this.source === null || this.source instanceof Slideshow) return;
       const limit = location.href === this.updatedOn ? STALE_MS : STALE_AFTER_MOVE_MS;
@@ -593,7 +562,6 @@ export function createApi(
       this.updatedOn = location.href;
     }
 
-    /** Which iframes the page has, so ones that load later get the Activity's iframe script too. */
     private frames = "";
 
     private watchFrames(): void {
@@ -621,7 +589,6 @@ export function createApi(
       }
     }
 
-    /** Sends what the Activity shows now, if the background doesn't have it yet. */
     private flush(): void {
       const data = this.source instanceof Slideshow ? this.source.current() : this.source;
       const wire = fitPresenceData(data);
@@ -803,42 +770,19 @@ export function createApi(
   return { Presence, iFrame, Slideshow, SlideshowSlide, MIN_SLIDE_TIME };
 }
 
-/**
- * The API as the arguments a wrapped script is called with, in the order of
- * its parameters (`wrapScript`): the wrapper only names them, since it's
- * repeated in every one of the 1,500 packaged scripts.
- */
-export type PremidArgs = readonly [
-  PremidApi["Presence"],
-  PremidApi["iFrame"],
-  PremidApi["Slideshow"],
-  PremidApi["SlideshowSlide"],
-  PremidApi["MIN_SLIDE_TIME"],
-];
-
-const argsOf = (api: PremidApi): PremidArgs => [
-  api.Presence,
-  api.iFrame,
-  api.Slideshow,
-  api.SlideshowSlide,
-  api.MIN_SLIDE_TIME,
-];
-
-/** An Activity's script, wrapped: called with the API it's bound to. */
-export type PremidScript = (...api: PremidArgs) => void;
+/** An Activity's script, wrapped: called with the API it's bound to, of which it names only what it uses (`wrapScript`). */
+export type PremidScript = (api: PremidApi) => void;
 
 export interface PremidBridge {
-  /** Runs an Activity's page script with its API, unless it already runs in this document. `strings` may be left out when there are none. */
-  bind(activity: string, script: PremidScript, strings?: Readonly<Record<string, string>>): void;
-  /** The same for its iframe script, only ever inside an iframe. */
-  bindFrame(
-    activity: string,
-    script: PremidScript,
-    strings?: Readonly<Record<string, string>>,
-  ): void;
+  /**
+   * Runs an Activity's page script with its API, unless it already runs in
+   * this document. `name` is its id without `premid:`, which every packaged
+   * script would otherwise repeat. `strings` may be left out when there are none.
+   */
+  bind(name: string, script: PremidScript, strings?: Readonly<Record<string, string>>): void;
+  bindFrame(name: string, script: PremidScript, strings?: Readonly<Record<string, string>>): void;
 }
 
-/** Sets up the bridge each wrapped Activity script calls, once per document (and world). */
 export function installBridge(scope: object = globalThis): void {
   if (Reflect.has(scope, BRIDGE_KEY)) return;
   const runtime = chrome.runtime;
@@ -863,13 +807,13 @@ export function installBridge(scope: object = globalThis): void {
   };
   const topFrame = window.top === window;
   const bridge: PremidBridge = {
-    bind: (activity, script, strings = {}) => {
-      const channels = topFrame ? claim(`page:${activity}`) : null;
-      if (channels) script(...argsOf(createApi(activity, strings, channels)));
+    bind: (name, script, strings = {}) => {
+      const channels = topFrame ? claim(`page:${name}`) : null;
+      if (channels) script(createApi(premidId(name), strings, channels));
     },
-    bindFrame: (activity, script, strings = {}) => {
-      const channels = topFrame ? null : claim(`frame:${activity}`);
-      if (channels) script(...argsOf(createApi(activity, strings, channels)));
+    bindFrame: (name, script, strings = {}) => {
+      const channels = topFrame ? null : claim(`frame:${name}`);
+      if (channels) script(createApi(premidId(name), strings, channels));
     },
   };
   Reflect.set(scope, BRIDGE_KEY, bridge);

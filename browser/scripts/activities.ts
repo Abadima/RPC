@@ -5,19 +5,18 @@ import type { NativeFound } from "./activities/native";
 import { BROWSER_DIR, CACHE_DIR, fetchSources } from "./activities/sources";
 
 /**
- * `bun run activities:fetch`: moves every Activity source's checkout to the
- * newest commit on its `main` branch (activity-sources.json). A source that
- * can't be reached keeps the checkout it has, and only one that was never
- * fetched makes this fail.
+ * `bun run activities:fetch`: moves every Activity source's checkout to its
+ * pinned revision (activity-sources.json) and says when `main` has moved past
+ * the pin. A source that can't be reached keeps the checkout it has; only one
+ * that was never fetched makes this fail.
  *
  * `bun run activities:check`: finds, checks, and compiles every Activity the
- * way the build does, lists every PreMiD Activity left out and why, and
- * type-checks each native Activity against this extension's own copy of the
- * Activity API (src/core/api.ts), so parousia-project/activities can't drift
- * from it unnoticed.
+ * way the build does (refusing a checkout that isn't at its pin), lists every
+ * PreMiD Activity left out and why, and type-checks each native Activity
+ * against this extension's copy of the Activity API (src/core/api.ts), so
+ * parousia-project/activities can't drift from it unnoticed.
  */
 
-/** Type-checks native Activities with `"parousia"` pointing at src/core/api.ts. */
 async function typecheck(native: readonly NativeFound[]): Promise<boolean> {
   const dir = join(CACHE_DIR, "check");
   await mkdir(dir, { recursive: true });

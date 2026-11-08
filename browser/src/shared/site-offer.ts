@@ -1,10 +1,5 @@
 import type { ActivityStatus } from "./activity-catalog";
 
-/**
- * What's being shared: nothing; something that isn't the tab's own Activity
- * (the Default Activity, or music or video kept from another tab); or the
- * tab's own.
- */
 export type Sharing = "nothing" | "other" | "activity";
 /** `none`: nothing about the site. `note`: its Activity is on, and nothing is shared. `offer`: a card to turn it on, or to say why it can't run. */
 export type SiteOffer = "none" | "note" | "offer";

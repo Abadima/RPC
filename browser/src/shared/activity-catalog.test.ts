@@ -10,6 +10,8 @@ import {
   enableAll,
   findActivity,
   listed,
+  loadCatalog,
+  resetActivityReads,
   turnOff,
   turnOn,
 } from "./activity-catalog";
@@ -42,6 +44,10 @@ const catalog = [native, premid, music];
 const files: Record<string, unknown> = {
   "activities/hosts.txt":
     "music.example\tpremid:Music\nvideo.example\tvideo\nwww.video.example\tpremid:Video",
+  "activities/catalog.json": {
+    sources: { parousia: "825355b6983e", premid: "ce94323cfba7" },
+    activities: catalog,
+  },
   "activities/manifests/v.json": {
     video: {
       info: native,
@@ -67,17 +73,15 @@ interface Browser {
   requests: Array<{ origins?: string[]; permissions?: string[] }>;
   removed: Array<{ origins?: string[]; permissions?: string[] }>;
   answer: boolean;
-  /** Origins the browser really grants when it says yes; all of them by default. */
   grantOnly?: string[];
-  /** Origins granted now, as `permissions.getAll` reports them. */
   granted: string[];
-  /** How many times the Activities' state was written. */
   writes: number;
 }
 
 let browser: Browser;
 
 beforeEach(() => {
+  resetActivityReads();
   browser = { stored: {}, requests: [], removed: [], answer: true, granted: [], writes: 0 };
   globalThis.chrome = {
     runtime: { getURL: (path: string) => `chrome-extension://self/${path}` },
@@ -156,7 +160,6 @@ describe("turning Activities on and off", () => {
       video: { use: premid.id },
     };
     await turnOff(music, catalog, granted(music.origins ?? []));
-    // www.video.example still serves PreMiD's Video, which is on.
     expect(browser.removed).toEqual([{ origins: ["*://music.example/*"], permissions: [] }]);
 
     browser.removed = [];
@@ -205,10 +208,43 @@ describe("the Activity for a tab", () => {
     expect((await findActivity(watch, {}))?.id).toBe("video");
     expect((await findActivity(watch, { video: { use: premid.id } }))?.id).toBe(premid.id);
     expect((await findActivity(new URL("https://music.example/album/1"), {}))?.id).toBe(music.id);
-    // A host it covers, on a page its matcher doesn't: nothing.
     expect(await findActivity(new URL("https://www.video.example/about"), {})).toBeNull();
     expect(await findActivity(new URL("https://elsewhere.example/"), {})).toBeNull();
     expect(await findActivity(new URL("chrome://settings/"), {})).toBeNull();
+  });
+
+  test("pages opened together share one fetch, and a failed one fetches again next time", async () => {
+    const filesAt = globalThis.fetch;
+    const catalogPath = "chrome-extension://self/activities/catalog.json";
+    let fetches = 0;
+    let broken = false;
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      fetches += 1;
+      if (broken && String(input) === catalogPath) return new Response("gone", { status: 404 });
+      return filesAt(input as string);
+    }) as typeof fetch;
+    const watch = new URL("https://www.video.example/watch?v=1");
+    try {
+      const [a, b] = await Promise.all([findActivity(watch, {}), findActivity(watch, {})]);
+      expect(a?.id).toBe("video");
+      expect(b?.id).toBe("video");
+
+      // A fetch that misses isn't remembered: the next ask fetches again.
+      broken = true;
+      const atMiss = fetches;
+      expect(await loadCatalog()).toEqual([]);
+      expect(fetches).toBe(atMiss + 1);
+      broken = false;
+
+      expect((await loadCatalog()).length).toBe(catalog.length);
+      const whole = fetches;
+      const [shared, also] = await Promise.all([loadCatalog(), loadCatalog()]);
+      expect(shared).toEqual(also);
+      await loadCatalog();
+      expect(fetches).toBe(whole);
+    } finally {
+      globalThis.fetch = filesAt;
+    }
   });
 
   test("is off, on, or on but missing access to the page's site", () => {
@@ -217,7 +253,6 @@ describe("the Activity for a tab", () => {
     const on = { [music.id]: { on: true } };
     expect(activityStatus(music, on, NO_GRANTS, album)).toBe("needs-access");
     expect(activityStatus(music, on, granted(["*://music.example/*"]), album)).toBe("on");
-    // Without a page: every one of its sites.
     expect(activityStatus(music, on, granted(["*://music.example/*"]))).toBe("needs-access");
     expect(activityStatus(native, {}, NO_GRANTS)).toBe("on");
   });
@@ -241,10 +276,8 @@ describe("enabling and disabling many at once", () => {
 
   test("a plan covers what is off or missing sites, what is on, and the sites to ask for once", () => {
     const plan = bulkPlan(everything, { chat: { on: false }, [music.id]: { on: true } }, NO_GRANTS);
-    // Chat is off; Music is on without its sites; News is off; Video (native) is on.
     expect(plan.enable.map((info) => info.id)).toEqual(["chat", music.id, news.id]);
     expect(plan.disable.map((info) => info.id)).toEqual([music.id, "video"]);
-    // Music's second site is News's too, and is asked for once.
     expect(plan.sites).toEqual([
       "*://music.example/*",
       "*://www.video.example/*",
@@ -313,8 +346,6 @@ describe("enabling and disabling many at once", () => {
       video: { use: premid.id },
     };
     const both = granted(["*://music.example/*", "*://news.example/*", "*://www.video.example/*"]);
-    // Chat (on by default, needs nothing), Music, and News go; PreMiD's Video, which is not
-    // among them, keeps www.video.example.
     expect(await disableAll([music, news, chat], catalog, both)).toBe(3);
     expect(states().chat).toEqual({ on: false });
     expect(states()[music.id]).toEqual({ on: false });

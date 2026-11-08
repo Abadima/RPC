@@ -1,5 +1,3 @@
-//! Where Desktop keeps its files, and its settings (`config.json`).
-
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -56,7 +54,6 @@ impl AppPaths {
     }
 }
 
-/// Also tightens a directory that already exists with looser permissions.
 pub fn create_private_dir(path: &Path) -> io::Result<()> {
     fs::create_dir_all(path)?;
     platform::fs::restrict_dir(path)

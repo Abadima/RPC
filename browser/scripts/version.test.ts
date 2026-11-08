@@ -45,18 +45,17 @@ describe("the extension's version", () => {
   });
 
   test("is the release, or a store revision of it, in Firefox's manifest", async () => {
-    // Mozilla takes each version once, so a fix to a released build goes out as 1.1.0.1.
     const release = (await read("chromium.json")).version;
     const firefox = (await read("firefox.json")).version;
     expect(firefox).toMatch(STORE_VERSION);
     expect(firefox === release || firefox.startsWith(`${release}.`)).toBe(true);
   });
 
-  test("is the 1.2.0 release", async () => {
+  test("is the 1.3.0 release", async () => {
     // Bump this with the manifests and package.json when the next release is cut.
     // Desktop versions on its own (desktop/Cargo.toml); the tag is the extension's.
-    expect((await read("chromium.json")).version).toBe("1.2.0");
-    expect((await read("firefox.json")).version).toBe("1.2.0");
+    expect((await read("chromium.json")).version).toBe("1.3.0");
+    expect((await read("firefox.json")).version).toBe("1.3.0");
   });
 
   test("is the userscript's version too", async () => {

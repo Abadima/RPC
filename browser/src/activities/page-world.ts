@@ -57,8 +57,11 @@ export async function readPage(spec: PageSpec, max: number): Promise<string | nu
       const dot = spec.call.lastIndexOf(".");
       const owner = dot < 0 ? globalThis : at(globalThis, spec.call.slice(0, dot));
       const fn = at(owner, spec.call.slice(dot + 1));
+      // The owner too: `eval.call` resolves to Function.prototype.call, which no
+      // list can hold, and calling it on `eval` runs the text. A page object's
+      // own `call` method has a page object as its owner, so it still works.
       result =
-        typeof fn === "function" && !evaluators.includes(fn)
+        typeof fn === "function" && !evaluators.includes(fn) && !evaluators.includes(owner)
           ? await Reflect.apply(fn, owner, spec.args ?? [])
           : undefined;
     }

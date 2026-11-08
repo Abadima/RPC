@@ -1,28 +1,15 @@
-// End-to-end check of the MAL-Sync integration in the Firefox installed on
-// this machine (Developer Edition, over WebDriver BiDi; see e2e/firefox.mjs),
-// with Parousia Desktop and a stand-in Discord.
+// End-to-end check of the MAL-Sync integration in the Firefox installed here
+// (Developer Edition, over WebDriver BiDi), with Desktop and a stand-in
+// Discord. A stand-in extension under MAL-Sync's Firefox id runs the shipped
+// build's `onMessageExternal` relay and answers like `syncPage.ts`, so this
+// checks the browser's part: Parousia's cross-extension question, the reply,
+// and Discord through Desktop.
 //
-// MAL-Sync itself needs its account and real streaming sites, so a stand-in
-// extension takes its place under MAL-Sync's published Firefox id: its
-// background is the shipped build's `onMessageExternal` handler as it is (a
-// relay to the tab's content script), and its content script answers like
-// `syncPage.ts`'s `presence` on an episode page and with `{}` elsewhere. What
-// this checks is the browser's part: a cross-extension message from
-// Parousia's event page reaching another extension, its reply coming back,
-// and the reply reaching Discord through Desktop.
-//
-// Covers: MAL-Sync's reply shown as the Activity under its own Discord
-// Application, with nothing of the page's address in it; the switch in
-// Settings turning it on and off; a page it has nothing for showing nothing
-// and then being left alone; and MAL-Sync not being installed at all.
-//
-// It runs in a private network namespace (`unshare -rn`, with its own
-// loopback), so port 57179 is free whatever is running here. BiDi can't
-// intercept requests, so pages come from a local HTTP proxy that answers for
-// any host.
-//
-// Prerequisites: `cargo build` in ../desktop (or PAROUSIA_DESKTOP_BIN) and
-// Firefox Developer Edition at /opt/firefox (or FIREFOX_BIN). Linux only.
+// Covers: the reply shown under MAL-Sync's Application, without the page's
+// address; the Settings switch; a page with nothing (asked, then left alone);
+// MAL-Sync not installed. Runs in `unshare -rn`; pages come from a local proxy
+// (BiDi can't intercept requests). Needs `cargo build` in ../desktop (or
+// PAROUSIA_DESKTOP_BIN) and Firefox at /opt/firefox (or FIREFOX_BIN).
 
 import { execFile, spawnSync } from "node:child_process";
 import { appendFile, mkdir, writeFile } from "node:fs/promises";
@@ -64,7 +51,6 @@ const run = promisify(execFile);
 const PAROUSIA_ID = "parousia@abadima.dev";
 const PAROUSIA_UUID = "8d7c6b5a-4e3f-4a2b-9c1d-0e1f2a3b4c5d";
 const EXTENSION = `moz-extension://${PAROUSIA_UUID}`;
-/** MAL-Sync's id on addons.mozilla.org (compat/malsync.ts). */
 const MALSYNC_ID = "{c84d89d9-a826-4015-957b-affebd9eb603}";
 const MALSYNC_UUID = "1f2e3d4c-5b6a-4789-8a9b-0c1d2e3f4a5b";
 const MALSYNC_CLIENT = "606504719212478504";
@@ -172,7 +158,6 @@ try {
   await desktop.waitFor(/listening on 127\.0\.0\.1:57179/);
   await control(ws, "allow", EXTENSION);
 
-  /** Firefox with Parousia, and MAL-Sync's stand-in when `withMalSync`. */
   async function launch(withMalSync) {
     const profileDir = join(ws.dir, withMalSync ? "firefox-with" : "firefox-without");
     await prepareProfile(profileDir, [

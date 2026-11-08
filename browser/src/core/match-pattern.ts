@@ -8,7 +8,9 @@ const PATTERN = /^(\*|https?):\/\/(\*\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)*)(\/.*)$/;
 
 const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** A test for `pattern`, or `null` when it isn't a pattern for particular sites. */
+/** Longer paths aren't tested, as `compileMatch` caps whole URLs. */
+const MAX_PATH = 2048;
+
 export function compileMatchPattern(pattern: string): ((url: URL) => boolean) | null {
   const parts = PATTERN.exec(pattern);
   if (!parts) return null;
@@ -19,10 +21,10 @@ export function compileMatchPattern(pattern: string): ((url: URL) => boolean) | 
       ? url.protocol === "https:" || url.protocol === "http:"
       : url.protocol === `${scheme}:`) &&
     (url.hostname === host || (subdomains !== undefined && url.hostname.endsWith(`.${host}`))) &&
+    url.pathname.length + url.search.length <= MAX_PATH &&
     pathPattern.test(url.pathname + url.search);
 }
 
-/** A test for any of `patterns`, each already checked with `compileMatchPattern`. */
 export function matchPatterns(patterns: readonly string[]): (url: URL) => boolean {
   const tests = patterns.map((pattern) => {
     const test = compileMatchPattern(pattern);

@@ -2,16 +2,11 @@ import type { PreferenceArea } from "../core/preferences";
 import { parseRelease } from "../core/version";
 
 /**
- * The newest Parousia Desktop there is, from GitHub's latest release. Desktop
- * and the extension version on their own, so the release's tag is not
- * Desktop's: the release workflow puts Desktop's version in the notes as
- * `<!-- parousia-desktop: 1.0.1 -->`, which is what's read here.
- *
- * The only request the extension makes to anyone but the computer it runs on,
- * and only from a popup or dashboard that is about to say "update Desktop".
- * It is unauthenticated and carries no cookies, referrer, or identifier. The
- * answer is kept for a day (an hour after a failure), so a user makes about one
- * a day at most.
+ * The newest Parousia Desktop, from GitHub's latest release, whose notes carry
+ * Desktop's own version (`<!-- parousia-desktop: X.Y.Z -->`, written by the
+ * release workflow). The extension's only request to anyone but this computer,
+ * made only by a view about to say "update Desktop": unauthenticated, no
+ * cookies, referrer, or identifier, cached a day (an hour after a failure).
  */
 export const RELEASES_API = "https://api.github.com/repos/Abadima/RPC/releases/latest";
 
@@ -58,7 +53,6 @@ export interface LatestDesktopOptions {
   now?: () => number;
 }
 
-/** The newest Desktop version, or `null` when it can't be told (offline, rate limited, no such note). */
 export async function latestDesktopVersion({
   fetcher = (url, init) => fetch(url, init),
   area = chrome.storage.local,
@@ -68,9 +62,7 @@ export async function latestDesktopVersion({
   let remembered: Remembered | null = null;
   try {
     remembered = parseRemembered((await area.get(STORAGE_KEY))[STORAGE_KEY]);
-  } catch {
-    // No cache: ask.
-  }
+  } catch {}
   if (remembered && current - remembered.at >= 0) {
     const age = current - remembered.at;
     if (age < (remembered.version === null ? RETRY_MS : FRESH_MS)) return remembered.version;

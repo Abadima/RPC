@@ -10,7 +10,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseVersion } from "./release-check.mjs";
 
-/** The body of the `## ` section `matches` accepts the heading of, trimmed, or `null` if there's none. */
 function section(changelog, matches) {
   const lines = changelog.split(/\r?\n/);
   const start = lines.findIndex((line) => line.startsWith("## ") && matches(line.slice(3)));

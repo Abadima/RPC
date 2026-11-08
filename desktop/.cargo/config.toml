@@ -6,3 +6,12 @@ rustflags = ["-C", "target-feature=+crt-static"]
 
 [target.aarch64-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static"]
+
+# The Linux release binaries are static PIEs, which relocate themselves at
+# start: packed (RELR) relocations take 296 bytes where plain ones took
+# 22 KB, about 20 KB off each download. musl has applied them since 1.2.4.
+[target.x86_64-unknown-linux-musl]
+rustflags = ["-C", "link-arg=-Wl,-z,pack-relative-relocs"]
+
+[target.aarch64-unknown-linux-musl]
+rustflags = ["-C", "link-arg=-Wl,-z,pack-relative-relocs"]

@@ -81,15 +81,12 @@ function openDashboard(section = ""): void {
 }
 
 const origin = new URL(chrome.runtime.getURL("")).origin;
-/** What's shown, which lags the real state while a retry is in flight (see displayedState). */
 let state: ConnectionState = { status: "idle" };
-/** What the background is sharing; `undefined` until it says. */
 let shared: UiActivity | null | undefined;
 let sharing = false;
 
 const settings = createSettingsModel((setting, value) => background.setSetting(setting, value));
 
-/** The footer, as in the design: "Connected to Parousia Desktop v1.0.0" once the version is known. */
 function renderFooter(): void {
   renderConnectionStatus(
     byId("status-dot"),
@@ -122,7 +119,6 @@ const background = connectToBackground(
     settings.onDiscord(discord);
     renderDiscordAside(byId("discord-aside"), discord);
   },
-  // What's being shared, as Privacy settings allow; the background pushes every change.
   (activity) => {
     shared = activity;
     sharing = activity !== null;
@@ -210,7 +206,6 @@ function renderOffer({ info, status }: Found): void {
   action.disabled = busy;
 }
 
-/** Looks for an Activity for the tab the popup belongs to, when nothing is being shared. */
 let lookups = 0;
 async function findForTab(): Promise<void> {
   const lookup = ++lookups;
@@ -269,7 +264,6 @@ void Promise.all([
   if (sharingNow() !== "activity") void findForTab();
 });
 
-// Views: home, the settings list, one settings page, and the shared Activity's settings.
 const homeView = byId("home-view");
 const settingsView = byId("settings-view");
 const settingsSlot = byId("settings-slot");
@@ -295,7 +289,6 @@ function showHome(): void {
   byId("settings-button").focus();
 }
 
-/** The shared Activity's own settings, the same as on its page in the dashboard. */
 async function showConfigure(activity: UiActivity): Promise<void> {
   if (activity.id === DEFAULT_ACTIVITY_ID) {
     openDashboard("#default");

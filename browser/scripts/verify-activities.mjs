@@ -1,49 +1,20 @@
-// End-to-end check of Activities, with real processes: an extension build in
-// playwright-core's isolated Chromium, the Parousia Desktop debug build, and
-// a stand-in Discord (e2e/fake-discord.mjs). Pages are served by the test;
-// no network is needed.
+// End-to-end check of Activities with real processes: its own extension build in
+// playwright-core's Chromium (real PreMiD Activities, the native fixtures, and a
+// native DiscordJS Guide written here so a website is in both sources), the
+// Desktop debug build, and a stand-in Discord. Pages are served by the test.
 //
-// The build is its own: real PreMiD Activities from the fetched checkout, the
-// native test Activities in scripts/activities/fixtures/parousia, and one
-// more native Activity written here for DiscordJS Guide, a website PreMiD
-// has too, so the build has a website in both sources.
+// Covers: a website in both sources (native until PreMiD's is chosen); a real
+// PreMiD Activity reading and following a page, and what its code can't reach;
+// an Activity on without its site (unavailable, and said so); a native page
+// reader turned on from the popup; Settings > Privacy; the popup's sharing
+// states; the Default Activity; Show media presence with a tab that really
+// plays (a skipped song in a hidden tab, two players, a background restart);
+// the dashboard's switches, icons, site access, and layouts.
 //
-// Covers:
-// - A website in both sources: listed once, the native one running until
-//   PreMiD's is chosen in the dashboard, then only PreMiD's, as its own
-//   Discord Application.
-// - PreMiD: a real, unmodified Activity reading the page, following a
-//   change, and what its code can't reach; an Activity that's on without its
-//   site granted is unavailable (nothing injected, nothing shown), and the
-//   popup and dashboard say so and offer to ask again.
-// - Native: an Activity that reads pages is off until turned on, which the
-//   popup does in one click; the collector reads the page's Media Session.
-// - Settings > Privacy: what Activities may read, for all of them at once.
-// - The popup: "Now sharing" only while something's shared, "Configure
-//   activity" for an Activity with settings, and a quiet line otherwise.
-// - The Default Activity: written in the dashboard, shared where no Activity
-//   is, and gone once it's off.
-// - Show media presence, with a tab that really makes sound: the song stays on
-//   Discord on a site without an Activity, a song skipped in a tab nobody is
-//   looking at reaches Discord (headless Chromium never hides a tab, so the tab
-//   switch is played back into the extension's own world: see `setHidden`),
-//   of two players only the one shared last shows, the song comes back when
-//   the extension's background is stopped and starts again,
-//   and the popup beside music (or the Default Activity) still offers the
-//   site's own Activity.
-// - The dashboard: switches, icons and their fallback, site access in
-//   Settings only ("all websites" off), and the layout from phone to
-//   ultrawide.
-//
-// A browser grants a site only through a prompt automation can't answer, so
-// this build's manifest already holds the sites it tests as if granted
-// (Jummbox's deliberately not). Everything after that is the real path.
-//
-// `ACTIVITIES_BROWSER=flatpak` runs the same checks in the Flatpak Ungoogled
-// Chromium installed on this machine (over CDP) instead of playwright-core's.
-//
-// Prerequisites: `bun run activities:fetch`, and `cargo build` in ../desktop.
-// Linux only; port 57179 must be free.
+// A prompt can't be answered by automation, so the manifest holds the tested
+// sites as granted (Jummbox's deliberately not). `ACTIVITIES_BROWSER=flatpak`
+// uses the Flatpak Ungoogled Chromium over CDP. Needs `bun run
+// activities:fetch` and `cargo build` in ../desktop; Linux, port 57179 free.
 
 import { chromium } from "playwright-core";
 import { execFile, spawn } from "node:child_process";
@@ -82,7 +53,6 @@ const TUNES_PAGE = "https://tunes.example/listen/1";
 const EXAMPLE_PAGE = "https://example.site/docs";
 const NOTHING_PAGE = "https://nothing.example/";
 const COVER = "https://img.example/cover.png";
-/** A 1×1 PNG, served as any icon the dashboard asks for. */
 const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
   "base64",
@@ -135,7 +105,6 @@ async function launchBrowser(profileDir, extensionDir) {
     context: browser.contexts()[0],
     name: `Flatpak Ungoogled Chromium ${browser.version()}`,
     async close() {
-      // `browser.close()` only disconnects from a CDP-attached browser.
       const session = await browser.newBrowserCDPSession();
       await session.send("Browser.close").catch(() => {});
       await Promise.race([new Promise((resolve) => child.once("exit", resolve)), sleep(10_000)]);
@@ -151,10 +120,8 @@ let desktop;
 let context;
 let launched;
 
-/** Waits for Discord to show something passing `check`, and returns it. */
 const shown = (check, description) => discord.waitFor(check, description);
 
-/** Serves `body` as HTML for every page under `origin`. */
 async function serve(page, origin, body) {
   await page.route(`${origin}/**`, (route) => route.fulfill({ contentType: "text/html", body }));
 }
@@ -284,7 +251,6 @@ try {
       ? route.fulfill({ contentType: "image/png", body: PNG })
       : route.abort(),
   );
-  /** The dashboard, in front: a background tab isn't laid out in a real browser. */
   const openDashboard = async (hash) => {
     await dashboard.bringToFront();
     await dashboard.goto(`${extension}/fullscreen.html${hash}`);
@@ -626,7 +592,6 @@ try {
   const setDefault = (activity) =>
     worker.evaluate((next) => chrome.storage.local.set({ defaultActivity: next }), activity);
   const detailsSent = () => discord.activities.map((a) => a?.details ?? null);
-  /** A music page that really plays a tone, with `skipTo` to change song as a player does and `stopTone` to end the sound. */
   const player = async (title) => {
     const page = await context.newPage();
     await serve(
@@ -929,7 +894,7 @@ try {
   await bulk("Enable all").click();
   const question = (await dashboard.textContent('[data-slot="bulk-body"]')) ?? "";
   assert(
-    question.includes("None needs access to a new site"),
+    question.includes("No additional site access is needed"),
     `enabling ones whose sites are granted says it will not ask (${question})`,
   );
   await dashboard.locator('[data-slot="bulk-body"] button', { hasText: /^Enable \d/ }).click();

@@ -1,13 +1,6 @@
-//! Named pipes, opened for overlapped I/O. A synchronous pipe handle can't be
-//! read on one thread while another writes to it (the write waits for the
-//! read), which is why Discord quitting could only be noticed at the next
-//! update. With overlapped I/O a reader thread can wait on Discord's pipe
-//! forever while the adapter writes, and a stalled peer costs a timeout, not a
-//! stuck thread: every call can be given a deadline, and `cancel` ends a wait
-//! from another thread.
-//!
-//! Both ends use it: Desktop's control pipe (`control.rs`) and the Discord
-//! app's (`discord.rs`).
+//! Named pipes opened for overlapped I/O: a reader can wait on a pipe while another
+//! thread writes, every call can have a deadline, and `cancel` ends a wait from
+//! another thread. Used by the control pipe and for Discord.
 
 use std::ffi::c_void;
 use std::io::{self, Read, Write};
@@ -47,7 +40,6 @@ pub struct Pipe {
     handle: Handle,
 }
 
-/// An event for one overlapped call to signal.
 struct Event(Handle);
 
 impl Event {
@@ -182,7 +174,6 @@ impl Pipe {
         (unsafe { GetNamedPipeClientProcessId(self.raw(), &mut pid) } != 0).then_some(pid)
     }
 
-    /// Waits for a client to connect to this server instance.
     pub fn accept(&self, timeout: Option<Duration>) -> io::Result<()> {
         self.overlapped(timeout, &[ERROR_PIPE_CONNECTED], |overlapped| {
             // SAFETY: `overlapped` is alive until the call completes.
@@ -197,7 +188,6 @@ enum Limit {
     Until(Instant),
 }
 
-/// A pipe with the deadline its reads and writes share.
 pub struct Io<'a> {
     pipe: &'a Pipe,
     limit: Limit,

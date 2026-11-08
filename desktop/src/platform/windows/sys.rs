@@ -1,7 +1,5 @@
-//! What the Windows build needs that a console program doesn't: the release
-//! exe is a GUI-subsystem program (no console window when launched from the
-//! Start menu or at login), so a terminal has to be reattached for commands
-//! run from one, and a startup failure needs somewhere to be seen.
+//! The release exe is a GUI-subsystem program: commands typed in a terminal
+//! reattach to it, and a startup failure with nowhere to print shows a message box.
 
 use std::iter::once;
 use std::ptr::{null, null_mut};

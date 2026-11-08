@@ -1,9 +1,6 @@
-//! Which OS user this process runs as, and which one is on the other end of a
-//! Unix socket, both as the kernel has them. A socket's peer is the user the
-//! process that made its listening end ran as, so a path that was swapped for
-//! someone else's socket between a check of the file and the connect is still
-//! caught. (std's `UnixStream::peer_cred` isn't stable yet, and the C library
-//! these come from is the one std already links.)
+//! This process's uid, and the uid on the other end of a Unix socket as the kernel
+//! has it, which still catches a path swapped for someone else's socket between
+//! the file check and the connect. (std's `peer_cred` isn't stable.)
 
 use std::io;
 use std::os::fd::AsRawFd;
@@ -24,12 +21,10 @@ unsafe extern "C" {
     fn getpeereid(fd: i32, uid: *mut u32, gid: *mut u32) -> i32;
 }
 
-/// The effective uid: whose files and sockets this process may use.
 pub fn current_uid() -> u32 {
     geteuid()
 }
 
-/// The uid of the process listening at the other end of `stream`.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn peer_uid(stream: &UnixStream) -> io::Result<u32> {
     // `SOL_SOCKET` and `SO_PEERCRED`: most architectures share one numbering,
@@ -91,7 +86,6 @@ pub fn peer_uid(stream: &UnixStream) -> io::Result<u32> {
     Ok(cred.uid)
 }
 
-/// The uid of the process listening at the other end of `stream`.
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn peer_uid(stream: &UnixStream) -> io::Result<u32> {
     let (mut uid, mut gid) = (u32::MAX, u32::MAX);

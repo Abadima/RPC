@@ -1,0 +1,13 @@
+{
+  "summary": "Jūsų Rich Presence platformoje Discord ir už jos ribų.",
+  "description": [
+    "Jūsų Rich Presence platformoje Discord ir ne tik.",
+    "Parousia perkelia jūsų naršyklės veiklą į Discord Rich Presence. Ji automatiškai aptinka palaikomas svetaines ir gali tiesiogiai jūsų Discord profilyje rodyti, ką žiūrite, ką klausote, ką žaidžiate ar ką naršote. Kai nė viena veikla netinka, vietoj jos galite rodyti savo pasirinktinę būseną.",
+    "Svetainėms ir interneto programoms palaikyti naudojame veiklas. Veiklos gali pateikti išsamią informaciją, pavyzdžiui, pavadinimus, atlikėjus, kūrėjus, miniatiūras, atkūrimo būseną, laiko žymas ir nuorodas. Todėl jūsų Discord būsena gauna daug daugiau konteksto nei paprastas naršyklės pavadinimas.",
+    "Parousia suderinama su atvirojo kodo PreMiD veiklų ekosistema ir kartu siūlo savo veiklų ekosistemą programuotojams ir naudotojams.",
+    "Šis plėtinys yra atvirojo kodo ir sukurtas aplink programuotojams patogią veiklų sistemą. TypeScript programuotojai gali kurti svetainių veiklas, skelbti jas per veiklų ekosistemą ir kurti integracijas nekeisdami paties Parousia.",
+    "Kuriant Parousia buvo galvojama apie privatumą, todėl veiklos informacija, kai tik įmanoma, apdorojama vietoje. Plėtinys bendrauja su mūsų darbalaukio programa, kuri atsako už integraciją su platformomis. Naudoti nereikia paskyros ar prisijungimo, o Parousia nenaudoja analitikos ar telemetrijos jūsų naršymui sekti.",
+    "Pasiruošę atgaivinti naršyklės veiklą? Įdiekite Parousia ir paverskite tai, ką darote naršyklėje, savo Discord Rich Presence dalimi.",
+    "Parousia yra nepriklausomas atvirojo kodo projektas, nesusijęs su Discord Inc. ir jos nepatvirtintas bei neremiamas."
+  ]
+}

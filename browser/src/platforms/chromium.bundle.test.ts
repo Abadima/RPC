@@ -16,7 +16,6 @@ describe("chromium bundle", () => {
       target: "browser",
       format: "esm",
       minify: true,
-      // No Activities: this is about the bundle itself.
       plugins: [activitiesPlugin([])],
     });
     expect(result.success).toBe(true);
@@ -25,7 +24,6 @@ describe("chromium bundle", () => {
     const noop = { addListener: (): void => {} };
     const opened: string[] = [];
     const connectListeners: Array<(port: unknown) => void> = [];
-    // Nothing answers, like a machine without Desktop running.
     globalThis.WebSocket = class {
       readyState = 0;
       onclose: (() => void) | null = null;
@@ -76,7 +74,6 @@ describe("chromium bundle", () => {
       for (let i = 0; i < 5; i++) await new Promise((resolve) => setTimeout(resolve, 0));
     };
     await settle();
-    // Nothing is detected, so nothing needs Desktop: no connection at all.
     expect(opened).toEqual([]);
 
     const posted: unknown[] = [];
@@ -90,9 +87,7 @@ describe("chromium bundle", () => {
       });
     }
     await settle();
-    // Desktop, and Discord-RPC-Extension's app.
     expect(opened.toSorted()).toEqual(["ws://127.0.0.1:57179/ws", "ws://127.0.0.1:6969"]);
-    // Both links end up unreachable (nothing in this test answers either socket).
     expect(posted).toContainEqual({ type: "state", state: { status: "disconnected" } });
     expect(posted).toContainEqual({
       type: "discord",

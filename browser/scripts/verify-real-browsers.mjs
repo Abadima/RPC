@@ -1,27 +1,14 @@
-// End-to-end check against browsers installed on this machine, not
-// automation builds: Firefox (Developer Edition, whose signature check can be
-// turned off for Parousia's unsigned build) over WebDriver BiDi, the Flatpak
-// Ungoogled Chromium over CDP, and the userscript inside Violentmonkey (the
-// AMO-signed release) in that Firefox. Every browser gets a throwaway
-// profile, and Desktop a throwaway data directory. Desktop runs with its
-// tray on the real session bus, so its icon and notifications appear while
-// this runs. Local only: needs those installs, a desktop session, and a free
-// port 57179.
+// End-to-end check against browsers installed here, not automation builds:
+// Firefox Developer Edition over BiDi, the Flatpak Ungoogled Chromium over CDP,
+// and the userscript in Violentmonkey, each with a throwaway profile, and
+// Desktop with its tray on the real session bus.
 //
-// Covers: Firefox's per-install moz-extension origin refused until allowed,
-// with the popup naming the exact command; the Flatpak sandbox's Chromium
-// refused as an unrecognized build and allowed from the tray menu; the
-// userscript in Violentmonkey, refused until userscripts are turned on from
-// the extension's dashboard; three clients at once and resource use; the
-// tray's userscripts toggle; and the real jena.systems in both browsers
-// reaching Discord through Desktop, held for HOLD_MINUTES (3 by default)
-// with no extension page open and no tab events, so only the background
-// keepalive keeps each browser sharing (MV3 lifetime).
-//
-// "Discord" is a stand-in socket (e2e/fake-discord.mjs), never a real one;
-// `discord:verify` is the check against a real Discord.
-//
-// Prerequisites: `bun run build` here, `cargo build` in ../desktop.
+// Covers: Firefox's per-install origin refused until allowed; the Flatpak
+// Chromium allowed from the tray; the userscript refused until userscripts are
+// on; three clients and resource use; the tray's userscripts toggle; the real
+// jena.systems held for HOLD_MINUTES (3) with only the keepalive (MV3
+// lifetime). Discord is a stand-in socket. Needs `bun run build`, `cargo build`
+// in ../desktop, a desktop session, and a free port 57179.
 
 import { chromium } from "playwright-core";
 import { execFile, spawn } from "node:child_process";
@@ -179,7 +166,6 @@ async function runMenuCommand(firefox, pageContext, label) {
 
 // --- The tray menu over D-Bus ---
 
-/** The tray menu's items, flattened: [{ id, label, toggleState }]. */
 async function trayItems(trayName) {
   const { stdout } = await run("busctl", [
     "--user",

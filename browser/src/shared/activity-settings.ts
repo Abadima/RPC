@@ -55,7 +55,6 @@ function settingRow(
   }
 }
 
-/** The rows for `info`'s settings that show now (its `when` conditions, what its script hid), each saved as it changes. */
 export function activitySettingRows(info: ActivityInfo, states: ActivityStates): HTMLElement[] {
   const values = settingValues(info, states);
   const hidden = states[info.id]?.hidden ?? [];

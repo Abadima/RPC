@@ -1,0 +1,13 @@
+{
+  "summary": "Jūsu Rich Presence platformā Discord un ārpus tās.",
+  "description": [
+    "Jūsu Rich Presence platformā Discord un ne tikai.",
+    "Parousia pārnes jūsu pārlūka aktivitāti uz Discord Rich Presence. Tā automātiski atpazīst atbalstītās vietnes un var tieši jūsu Discord profilā parādīt, ko skatāties, klausāties, spēlējat vai pārlūkojat. Ja neviena aktivitāte neattiecas, varat rādīt savu pielāgotu statusu.",
+    "Vietņu un tīmekļa lietotņu atbalstam mēs izmantojam aktivitātes. Aktivitātes var sniegt bagātīgu informāciju, piemēram, nosaukumus, izpildītājus, veidotājus, sīktēlus, atskaņošanas stāvokli, laikspiedolus un saites. Tā jūsu Discord statuss iegūst daudz vairāk konteksta nekā vienkāršs pārlūka nosaukums.",
+    "Parousia ir saderīga ar atvērtā koda PreMiD aktivitāšu ekosistēmu un papildus piedāvā savu aktivitāšu ekosistēmu izstrādātājiem un lietotājiem.",
+    "Šis paplašinājums ir atvērtā koda un veidots ap izstrādātājiem draudzīgu aktivitāšu sistēmu. TypeScript izstrādātāji var veidot aktivitātes vietnēm, publicēt tās aktivitāšu ekosistēmā un izveidot integrācijas, nemainot pašu Parousia.",
+    "Parousia izstrādāta, domājot par privātumu, un aktivitātes informāciju, kad vien iespējams, apstrādā lokāli. Paplašinājums sazinās ar mūsu darbvirsmas lietotni, kas nodrošina integrāciju ar platformām. Lai to izmantotu, nav vajadzīgs konts vai pierakstīšanās, un Parousia neizmanto analītiku vai telemetriju, lai izsekotu jūsu pārlūkošanu.",
+    "Gatavi atdzīvināt savu pārlūka aktivitāti? Instalējiet paplašinājumu Parousia un padariet to, ko darāt pārlūkā, par savu Discord Rich Presence daļu.",
+    "Parousia ir neatkarīgs atvērtā koda projekts, kas nav saistīts ar uzņēmumu Discord Inc., un tas to neapstiprina un nesponsorē."
+  ]
+}

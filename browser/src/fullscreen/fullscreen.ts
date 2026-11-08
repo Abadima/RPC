@@ -79,7 +79,6 @@ const background = connectToBackground(
   },
   settings.onReport,
   settings.onDiscord,
-  // What's being shared, as Privacy settings allow; the background pushes every change.
   (activity) => update({ snapshot: presenceSnapshot(activity) }),
 );
 
@@ -100,7 +99,6 @@ const context: ViewContext = {
 };
 const root = byId("view");
 
-/** An Activity id from the hash; a malformed one just finds no Activity. */
 function decodeSegment(segment: string): string {
   try {
     return decodeURIComponent(segment);

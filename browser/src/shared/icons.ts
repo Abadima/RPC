@@ -23,7 +23,6 @@ export function icon(definition: IconDefinition): SVGSVGElement {
   return svg;
 }
 
-/** Fills every `[data-icon]` placeholder under `root` from `icons`, by name. */
 export function fillIcons(root: ParentNode, icons: Record<string, IconDefinition>): void {
   for (const slot of root.querySelectorAll<HTMLElement>("[data-icon]")) {
     const definition = icons[slot.dataset.icon ?? ""];

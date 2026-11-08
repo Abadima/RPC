@@ -16,6 +16,15 @@ export const RETRY_DELAY_MS = 10_000;
 const HANDSHAKE_TIMEOUT_MS = 5000;
 /** How long an unneeded connection stays open, so switching tabs doesn't reconnect every time. */
 const LINGER_MS = 30_000;
+/**
+ * The least time between two Presence messages. Desktop closes a connection
+ * that sends more than 5 a second after a burst of 20 (`link/session.rs`),
+ * and a page can change faster (a title that ticks). The latest one waits
+ * out the rest of the interval, so the first change after a quiet spell
+ * still goes at once; within one Activity, Desktop shows one change per 2 s
+ * anyway.
+ */
+const PRESENCE_INTERVAL_MS = 250;
 
 /**
  * - `idle`: not connected because nothing needs Desktop right now.
@@ -37,26 +46,21 @@ export type DesktopStatus =
 
 export interface ConnectionState {
   status: DesktopStatus;
-  /** While connected: Desktop's release version. */
   desktopVersion?: string;
-  /** While connected: which side is behind the other, when one is. */
   update?: UpdateNotice;
 }
 
-/** Runs `run` after `delayMs`; returns a cancel function. */
 export type Timer = (run: () => void, delayMs: number) => () => void;
 
 export interface DesktopConnectionOptions {
   channel: ChannelOpener;
-  /** Shown in Desktop's client list, e.g. "Firefox on Linux". */
   clientName: string;
   /** This extension's release version, which Desktop checks the major of. */
   version: string;
-  /** Test seam; defaults to `setTimeout`. */
   setTimer?: Timer;
+  now?: () => number;
 }
 
-/** What the background script and UI need from the connection. */
 export interface DesktopLink extends PresenceTransport {
   /** Where Desktop may show this browser's Presence (Settings > Platforms). */
   setPlatforms(platforms: readonly PlatformId[]): void;
@@ -96,8 +100,11 @@ export class DesktopConnection implements DesktopLink {
   readonly #clientName: string;
   readonly #version: string;
   readonly #setTimer: Timer;
+  readonly #now: () => number;
 
   #latest: Presence | null = null;
+  #sentAt = Number.NEGATIVE_INFINITY;
+  #cancelPresence: (() => void) | null = null;
   /** `null` until chosen: Desktop then shows it everywhere. */
   #platforms: readonly PlatformId[] | null = null;
   #uiDemand = 0;
@@ -108,7 +115,6 @@ export class DesktopConnection implements DesktopLink {
   #paused = false;
   #cancelRetry: (() => void) | null = null;
   #cancelLinger: (() => void) | null = null;
-  /** Replies to `status`/`set`, which Desktop answers in order. */
   readonly #pending: Array<(report: DesktopReport | null) => void> = [];
   #state: ConnectionState = { status: "idle" };
   readonly #listeners = new Set<(state: ConnectionState) => void>();
@@ -118,6 +124,7 @@ export class DesktopConnection implements DesktopLink {
     this.#clientName = options.clientName;
     this.#version = options.version;
     this.#setTimer = options.setTimer ?? defaultTimer;
+    this.#now = options.now ?? (() => performance.now());
   }
 
   /** Only the latest Presence matters: it's sent now if connected, and again after every reconnect. */
@@ -177,7 +184,6 @@ export class DesktopConnection implements DesktopLink {
     return this.#state;
   }
 
-  /** The listener isn't called with the current state; read `getState()` for that. */
   onStateChange(listener: (state: ConnectionState) => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
@@ -202,7 +208,6 @@ export class DesktopConnection implements DesktopLink {
     this.#evaluate();
   }
 
-  /** Stops for good (tests, teardown). */
   close(): void {
     this.#stopped = true;
     this.#endSession();
@@ -226,7 +231,6 @@ export class DesktopConnection implements DesktopLink {
     return this.#uiDemand > 0 || this.#latest?.activity != null;
   }
 
-  /** Reconciles what's open with what's needed. Called after anything changes. */
   #evaluate(): void {
     if (this.#halted()) return;
     if (!this.#wanted()) {
@@ -247,7 +251,6 @@ export class DesktopConnection implements DesktopLink {
 
   #open(): void {
     const session: Session = { channel: idleChannel, ready: false, cancelTimeout: null };
-    /** Nothing usable answered: give up on this attempt and retry later. */
     const failed = (): void => {
       if (this.#session !== session) return;
       this.#endSession();
@@ -324,7 +327,17 @@ export class DesktopConnection implements DesktopLink {
 
   #sendPresence(): void {
     const latest = this.#latest;
-    if (!latest || !this.#session?.ready) return;
+    if (!latest || !this.#session?.ready || this.#cancelPresence) return;
+    const wait = this.#sentAt + PRESENCE_INTERVAL_MS - this.#now();
+    if (wait > 0) {
+      // Whatever is latest when it fires is what goes.
+      this.#cancelPresence = this.#setTimer(() => {
+        this.#cancelPresence = null;
+        this.#sendPresence();
+      }, wait);
+      return;
+    }
+    this.#sentAt = this.#now();
     const presence = presenceWire(latest);
     const platforms = this.#platforms;
     this.#session.channel.send(
@@ -352,6 +365,10 @@ export class DesktopConnection implements DesktopLink {
   #endSession(): void {
     const session = this.#session;
     this.#stopLinger();
+    // Desktop's limit is per connection: the next one starts afresh.
+    this.#cancelPresence?.();
+    this.#cancelPresence = null;
+    this.#sentAt = Number.NEGATIVE_INFINITY;
     for (const resolve of this.#pending.splice(0)) resolve(null);
     if (!session) return;
     this.#session = null;

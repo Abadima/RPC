@@ -1,5 +1,5 @@
 import { t } from "../core/i18n";
-import { renderPresence } from "../shared/presence-view";
+import { renderPresence, stopPresence } from "../shared/presence-view";
 import {
   DEFAULT_ACTIVITY_LIMITS,
   EMPTY_DEFAULT_ACTIVITY,
@@ -31,7 +31,6 @@ interface Field {
   error: HTMLElement;
 }
 
-/** A labelled text box with room under it for what's wrong. */
 function field(
   id: string,
   label: string,
@@ -158,7 +157,6 @@ export function defaultView(): View {
   actions.append(save, status);
   form.append(actions);
 
-  /** What the form says now, on or off as saved. */
   function read(): DefaultActivity {
     const value = (name: TextField): string => fields[name].input.value;
     return {
@@ -191,7 +189,6 @@ export function defaultView(): View {
     renderPreview();
   }
 
-  /** Marks each field with what's wrong with it; true when nothing is. */
   function showProblems(activity: DefaultActivity): boolean {
     const problems = defaultActivityProblems(activity);
     for (const name of TEXT_FIELDS) {
@@ -270,6 +267,9 @@ export function defaultView(): View {
     title: t("Default Activity"),
     element,
     update() {},
-    destroy: stop,
+    destroy() {
+      stop();
+      stopPresence(preview);
+    },
   };
 }

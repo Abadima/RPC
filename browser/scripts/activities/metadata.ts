@@ -28,7 +28,6 @@ export interface Draft {
   discordClientId?: string;
   settings?: ActivitySetting[];
   data?: PageDataKind[];
-  /** The sites it reads pages on, when it reads pages. */
   origins?: string[];
 }
 
@@ -50,7 +49,6 @@ export const LIMITS = {
 export const SETTING_ID = /^[A-Za-z0-9_-]{1,64}$/;
 export const CLIENT_ID = /^\d{17,20}$/;
 
-/** An Activity's version, as both sources' metadata.json write it. */
 export const VERSION = /^\d+\.\d+\.\d+$/;
 
 /** A metadata.json `version` if it's one, so a PreMiD Activity with an odd one still builds, only without it. */
@@ -122,7 +120,6 @@ export function patternOrigin(pattern: string): string {
 /** A host's origin pattern: `www.youtube.com` is `*://www.youtube.com/*`. */
 export const hostOrigin = (host: string): string => `*://${host}/*`;
 
-/** The manifest for a draft: optional fields only where there's something in them. */
 export function manifestFrom(draft: Draft): ActivityManifest {
   const info: ActivityInfo = {
     id: draft.id,

@@ -44,7 +44,6 @@ import {
 } from "./e2e/lib.mjs";
 
 const log = logger("desktop-link");
-/** What Desktop calls this OS in a browser's name ("Chromium on Linux"). */
 const os = windows ? "Windows" : "Linux";
 /**
  * The browser's name as Desktop shows it, from the user agent (client-name.ts):
@@ -78,7 +77,6 @@ async function openPopup(browser) {
   return page;
 }
 
-/** Closes a popup and opens a fresh one, which asks the background to check again. */
 async function reopen(browser, page) {
   await page.close();
   return openPopup(browser);
@@ -92,7 +90,6 @@ const HELLO = JSON.stringify({
 });
 const PORTFOLIO_PAGE = "https://abadima.dev/pages/projects";
 
-/** Opens a portfolio page (a native Activity that reads only the address and title, so it needs no page data), served here (no network). */
 async function openPortfolioPage(browser) {
   const page = await browser.context.newPage();
   await page.route("https://abadima.dev/**", (route) =>

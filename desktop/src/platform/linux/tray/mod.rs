@@ -1,17 +1,8 @@
-//! Linux desktop integration over the session bus: a StatusNotifierItem
-//! (KDE Plasma, and GNOME with the AppIndicator extension) whose menu shows
-//! Desktop's status, connected browsers, diagnostics, recent
-//! events, and settings; and desktop notifications, which work with or
-//! without a tray host (plain GNOME included). The tray is optional: without
-//! a watcher the item just isn't shown, and everything is still reachable
-//! through notifications, the CLI, and Parousia's dashboard.
-//!
-//! Runs on the main thread, blocked reading the session bus: no timers, no
-//! polling. Hub changes arrive from other threads and are pushed out as
-//! `LayoutUpdated`/`NewToolTip` signals.
-//!
-//! Anything on the session bus runs as this user (out of scope); sandboxed
-//! Flatpak apps only reach the names their manifest grants.
+//! The Linux tray: a StatusNotifierItem (KDE Plasma; GNOME with AppIndicator) for
+//! Desktop's status, browsers, diagnostics, events, and settings, and desktop
+//! notifications, which work without a tray host. Runs on the main thread, blocked
+//! on the session bus (no timers or polling); Hub changes are pushed out as
+//! signals. Sandboxed Flatpak apps reach only the names their manifest grants.
 
 mod dbus;
 mod render;
@@ -53,6 +44,7 @@ struct Tray {
     pixmaps: Value,
     /// The menu as last sent, to answer `AboutToShow` honestly.
     shown: Mutex<Option<menu::Item>>,
+    tooltip: Mutex<String>,
 }
 
 pub fn run(hub: Arc<Hub>) -> Exit {
@@ -67,6 +59,7 @@ pub fn run(hub: Arc<Hub>) -> Exit {
         revision: AtomicU32::new(1),
         pixmaps: pixmaps(),
         shown: Mutex::new(None),
+        tooltip: Mutex::new(String::new()),
     });
 
     // Hello has to be first; the rest can be pipelined behind it.
@@ -132,8 +125,16 @@ fn no_markup(text: &str) -> String {
     text.replace('<', "‹").replace('>', "›")
 }
 
-/// `NameOwnerChanged(watcher, old, new)` with a new owner, from the bus: a
-/// tray host (re)started and needs to hear about us.
+fn replace_if_changed(kept: &Mutex<String>, next: String) -> bool {
+    let mut kept = kept.lock().unwrap_or_else(|p| p.into_inner());
+    if *kept == next {
+        return false;
+    }
+    *kept = next;
+    true
+}
+
+/// A tray host (re)started and needs to hear about us.
 fn is_watcher_restart(message: &Message) -> bool {
     message.sender.as_deref() == Some(BUS)
         && message.member.as_deref() == Some("NameOwnerChanged")
@@ -207,7 +208,6 @@ impl Tray {
         self.refresh();
     }
 
-    /// Tells hosts the menu and tooltip changed; they re-fetch what they show.
     fn refresh(&self) {
         let revision = self.revision.fetch_add(1, Ordering::Relaxed) + 1;
         let _ = self.bus.send(&Message::signal(
@@ -216,15 +216,20 @@ impl Tray {
             "LayoutUpdated",
             vec![Value::U32(revision), Value::I32(menu::ROOT)],
         ));
-        let _ = self.bus.send(&Message::signal(
-            ITEM_PATH,
-            ITEM_INTERFACE,
-            "NewToolTip",
-            vec![],
-        ));
+        if replace_if_changed(&self.tooltip, self.status_line()) {
+            let _ = self.bus.send(&Message::signal(
+                ITEM_PATH,
+                ITEM_INTERFACE,
+                "NewToolTip",
+                vec![],
+            ));
+        }
     }
 
-    /// Fire-and-forget desktop notification.
+    fn status_line(&self) -> String {
+        no_markup(&menu::status_line(&self.hub.status()))
+    }
+
     fn notify(&self, summary: &str, body: &str) {
         let body = no_markup(body);
         let hints = vec![("urgency", Value::Byte(1))];
@@ -326,7 +331,8 @@ impl Tray {
 
     fn item_properties(&self) -> Vec<(&'static str, Value)> {
         let no_pixmaps = Value::Array("(iiay)".into(), vec![]);
-        let status = no_markup(&menu::status_line(&self.hub.status()));
+        let status = self.status_line();
+        replace_if_changed(&self.tooltip, status.clone());
         vec![
             ("Category", Value::str("ApplicationStatus")),
             ("Id", Value::str("parousia-desktop")),
@@ -575,6 +581,24 @@ mod tests {
         assert_eq!(argb.len(), 32 * 32 * 4);
         let rgba = ICONS[0].1;
         assert_eq!(&argb[..4], &[rgba[3], rgba[0], rgba[1], rgba[2]]);
+    }
+
+    #[test]
+    fn only_a_changed_tooltip_is_signalled() {
+        let kept = Mutex::new(String::new());
+        assert!(replace_if_changed(
+            &kept,
+            "Sharing YouTube from Firefox".into()
+        ));
+        assert!(!replace_if_changed(
+            &kept,
+            "Sharing YouTube from Firefox".into()
+        ));
+        assert!(replace_if_changed(
+            &kept,
+            "Running, 1 browser connected".into()
+        ));
+        assert_eq!(*kept.lock().unwrap(), "Running, 1 browser connected");
     }
 
     #[test]

@@ -24,7 +24,6 @@ const info = (
   ...(reads && { origins: [`*://${id}.example/*`] }),
 });
 
-// Native ones are on until turned off; ones that read pages are off until turned on.
 const jena = info("jena", "Jena Hub", "parousia");
 const chess = info("chess", "Chess", "parousia");
 const radio2 = info("premid:Radio 2", "Radio 2", "premid");
@@ -134,7 +133,6 @@ describe("filtering", () => {
     const variants = ["video", "premid:Video"];
     const ours: ActivityInfo = { ...info("video", "Video", "parousia"), variants };
     const theirs: ActivityInfo = { ...info("premid:Video", "Video", "premid"), variants };
-    // Listed once, as whichever is chosen (see `listed`): here PreMiD's, turned on.
     const chosen = { video: { use: theirs.id }, [theirs.id]: { on: true } };
     expect(filterActivities([theirs], chosen, filters([], ["parousia"]))).toEqual([]);
     expect(filterActivities([theirs], chosen, filters(["enabled"], ["premid"]))).toEqual([theirs]);

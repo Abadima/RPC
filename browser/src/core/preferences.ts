@@ -1,5 +1,5 @@
 import type { Activity, PageDataKind } from "./activity";
-import { LANGUAGES, t, type LanguagePreference } from "./i18n";
+import { PACKAGED, t, type LanguagePreference } from "./i18n";
 
 /**
  * The extension's own settings, kept in `chrome.storage.local` so the
@@ -8,7 +8,6 @@ import { LANGUAGES, t, type LanguagePreference } from "./i18n";
  */
 export type IncognitoBehavior = "pause" | "share";
 export type PlatformId = "discord" | "fluxer" | "stoat";
-/** Which kinds of page data Activities may read, for every Activity at once. */
 export type PageDataPreferences = Readonly<Record<PageDataKind, boolean>>;
 
 export interface Preferences {
@@ -23,11 +22,8 @@ export interface Preferences {
   /** How long presence stays after the browser loses focus; 0 clears it at once. Sound playing in the tab keeps it either way. */
   idleTimeoutMinutes: number;
   incognito: IncognitoBehavior;
-  /** Which platforms should show presence, for Parousia Desktop's adapters. */
   platforms: Record<PlatformId, boolean>;
-  /** Also show Discord presence through Discord-RPC-Extension's app, when it's running. */
   discordRpcExtension: boolean;
-  /** Show what the MAL-Sync extension recognizes on a page as the Activity, by asking it about the tab being shared. */
   malSync: boolean;
   /**
    * What Activities may read from pages they've been granted: switched off,
@@ -51,12 +47,11 @@ export const DEFAULT_PREFERENCES: Preferences = {
   pageData: { media: true, thumbnails: true, creatorIcons: true },
 };
 
-const STORAGE_KEY = "preferences";
+export const PREFERENCES_KEY = "preferences";
 
 type Json = Record<string, unknown>;
 const isObject = (value: unknown): value is Json => typeof value === "object" && value !== null;
 
-/** Anything stored that isn't a valid value falls back to its default, field by field. */
 export function parsePreferences(value: unknown): Preferences {
   const stored = isObject(value) ? value : {};
   const platforms = isObject(stored.platforms) ? stored.platforms : {};
@@ -64,7 +59,10 @@ export function parsePreferences(value: unknown): Preferences {
   const flag = (candidate: unknown, fallback: boolean): boolean =>
     typeof candidate === "boolean" ? candidate : fallback;
   return {
-    language: LANGUAGES.find((language) => language === stored.language) ?? "auto",
+    // Only the languages this package carries dictionaries for (see
+    // `PACKAGED`; Firefox takes no Amharic or Swahili); anything else falls
+    // to auto.
+    language: PACKAGED.find((language) => language === stored.language) ?? "auto",
     shareMediaDetails: flag(stored.shareMediaDetails, DEFAULT_PREFERENCES.shareMediaDetails),
     showMediaPresence: flag(stored.showMediaPresence, DEFAULT_PREFERENCES.showMediaPresence),
     idleTimeoutMinutes:
@@ -91,7 +89,6 @@ export function parsePreferences(value: unknown): Preferences {
   };
 }
 
-/** The next idle timeout step up or down, stopping at either end. */
 export function stepIdleTimeout(current: number, direction: 1 | -1): number {
   const index = IDLE_TIMEOUT_STEPS.indexOf(current);
   const next = Math.min(Math.max(index + direction, 0), IDLE_TIMEOUT_STEPS.length - 1);
@@ -135,12 +132,10 @@ export function applyPreferences(
   return images ? { ...shared, assets: images } : shared;
 }
 
-/** The platforms turned on in Settings > Platforms, for Desktop. */
 export function enabledPlatforms(preferences: Preferences): PlatformId[] {
   return PLATFORM_IDS.filter((id) => preferences.platforms[id]);
 }
 
-/** The slice of `chrome.storage.local` this needs; tests pass a fake. */
 export interface PreferenceArea {
   get(key: string): Promise<Json>;
   set(items: Json): Promise<void>;
@@ -149,7 +144,7 @@ export interface PreferenceArea {
 export async function loadPreferences(
   area: PreferenceArea = chrome.storage.local,
 ): Promise<Preferences> {
-  return parsePreferences((await area.get(STORAGE_KEY))[STORAGE_KEY]);
+  return parsePreferences((await area.get(PREFERENCES_KEY))[PREFERENCES_KEY]);
 }
 
 export async function savePreferences(
@@ -157,14 +152,13 @@ export async function savePreferences(
   area: PreferenceArea = chrome.storage.local,
 ): Promise<Preferences> {
   const next = parsePreferences({ ...(await loadPreferences(area)), ...patch });
-  await area.set({ [STORAGE_KEY]: next });
+  await area.set({ [PREFERENCES_KEY]: next });
   return next;
 }
 
-/** Calls `listener` with the new values whenever any view or the background saves them. */
 export function watchPreferences(listener: (preferences: Preferences) => void): void {
   chrome.storage.onChanged.addListener((changes, area) => {
-    const change = changes[STORAGE_KEY];
+    const change = changes[PREFERENCES_KEY];
     if (area === "local" && change) listener(parsePreferences(change.newValue));
   });
 }

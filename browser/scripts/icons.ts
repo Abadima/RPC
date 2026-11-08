@@ -2,7 +2,6 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 
-/** What `src/shared/icons.ts` reads of a Font Awesome icon: its size and path data. */
 export interface IconShape {
   icon: [width: number, height: number, ligatures: [], unicode: "", path: string | string[]];
 }
@@ -37,7 +36,6 @@ export function iconModule(specifier: string): string {
   return `export const ${name} = ${JSON.stringify(shape)};`;
 }
 
-/** Resolves every single-icon import to `iconModule`'s version of it. */
 export const iconsPlugin: Bun.BunPlugin = {
   name: "font-awesome-icons",
   setup(build) {

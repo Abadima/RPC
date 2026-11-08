@@ -11,13 +11,11 @@ export type StatusFilter = "enabled" | "disabled";
  */
 export interface ActivityFilters {
   status: ReadonlySet<StatusFilter>;
-  /** The implementation the card is showing: Parousia's own, or PreMiD's. */
   source: ReadonlySet<ActivitySource>;
 }
 
 export const NO_FILTERS: ActivityFilters = { status: new Set(), source: new Set() };
 
-/** Filters chosen, for the button's count. */
 export function filterCount(filters: ActivityFilters): number {
   return filters.status.size + filters.source.size;
 }
@@ -67,7 +65,6 @@ export function sortActivities(
 const STATUS_FILTERS: readonly StatusFilter[] = ["enabled", "disabled"];
 const SOURCE_FILTERS: readonly ActivitySource[] = ["parousia", "premid"];
 
-/** Filters as they're kept in the page's address: `enabled,premid`. */
 export function serializeFilters(filters: ActivityFilters): string {
   return [
     ...STATUS_FILTERS.filter((value) => filters.status.has(value)),
@@ -75,7 +72,6 @@ export function serializeFilters(filters: ActivityFilters): string {
   ].join(",");
 }
 
-/** The inverse of `serializeFilters`; anything it doesn't recognize is ignored. */
 export function parseFilters(value: string | null): ActivityFilters {
   const words = new Set((value ?? "").split(","));
   return {
