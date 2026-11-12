@@ -155,7 +155,7 @@ Activities come from two repositories, each pinned to the revision its build was
 
 ## Media Presence
 
-Settings > Privacy has "Show media presence" (`showMediaPresence` in the preferences), off by default. With it on, music or video that was playing in a tab that was shared stays shared while the tab being shared has no Activity of its own: a site without one, one whose Activity has nothing to show, or a browser page.
+Settings > Privacy has "Show media presence" (`showMediaPresence` in the preferences), on by default. With it on, music or video that was playing in a tab that was shared stays shared while the tab being shared has no Activity of its own: a site without one, one whose Activity has nothing to show, or a browser page.
 
 - **The order** is the tab's own Activity, then kept music or video, then the Default Activity (`PresenceRuntime`, its `media` hook).
 - **What counts** is a tab whose Activity is on, presents as listening or watching or has an end time (`isMediaActivity`), and has sound playing, which the browser reports as `tab.audible`. A page can't claim it. A muted video or a video with no sound doesn't count. A paused tab stays remembered and counts again when it plays.

@@ -33,7 +33,7 @@ This release carries the browser extension and userscript **1.2.0** and Parousia
 
 - **Activity Versions:** Every Activity's page in the dashboard shows its version.
 - **Site Activity Beside the Default Activity:** While the Default Activity is shared, the popup still shows the tab's own Activity when its site has one, so you can turn it on there or see why it can't run.
-- **Show Media Presence:** A new switch in `Settings > Privacy`, off by default. With it on, music or video you were playing stays on your profile when you move to a site without an Activity, until the sound stops, its tab closes, or its Activity is turned off. An Activity on the current tab comes first; with several players, the one you looked at last is shown; private windows follow their own setting.
+- **Show Media Presence:** A new switch in `Settings > Privacy`, on by default. With it on, music or video you were playing stays on your profile when you move to a site without an Activity, until the sound stops, its tab closes, or its Activity is turned off. An Activity on the current tab comes first; with several players, the one you looked at last is shown; private windows follow their own setting.
 - **Plainer Wording:** Shorter, more direct text across the popup, dashboard, settings, every translation, and Desktop's messages, with consistent terms: "Activity" for a site's integration, "presence" for what Discord shows.
 
 ### 🛡️ Stability & Privacy

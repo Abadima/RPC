@@ -16,7 +16,7 @@ export interface Preferences {
   shareMediaDetails: boolean;
   /**
    * Keep showing music or video that's playing in another tab while the tab
-   * shared has no Activity of its own (see media-presence.ts). Off by default.
+   * shared has no Activity of its own (see media-presence.ts). On by default.
    */
   showMediaPresence: boolean;
   /** How long presence stays after the browser loses focus; 0 clears it at once. Sound playing in the tab keeps it either way. */
@@ -38,7 +38,7 @@ export const IDLE_TIMEOUT_STEPS: readonly number[] = [0, 1, 2, 5, 10, 15, 30, 60
 export const DEFAULT_PREFERENCES: Preferences = {
   language: "auto",
   shareMediaDetails: true,
-  showMediaPresence: false,
+  showMediaPresence: true,
   idleTimeoutMinutes: 1,
   incognito: "pause",
   platforms: { discord: true, fluxer: true, stoat: true },
