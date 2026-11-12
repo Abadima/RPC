@@ -40,8 +40,8 @@
     "@fortawesome/free-solid-svg-icons": "^7.3.1",
     "@types/bun": "^1.4.4",
     "@types/chrome": "^0.3.7",
-    "oxfmt": "^0.77.0",
-    "oxlint": "^1.92.0",
+    "oxfmt": "^0.78.0",
+    "oxlint": "^1.93.0",
     "playwright-core": "^1.65.0",
     "web-ext": "^10.8.0"
   },
