@@ -36,7 +36,7 @@
   },
   "devDependencies": {
     "@fortawesome/free-solid-svg-icons": "^7.3.1",
-    "@types/bun": "^1.4.4",
+    "@types/bun": "^1.4.5",
     "@types/chrome": "^0.3.7",
     "oxfmt": "^0.76.0",
     "oxlint": "^1.91.0",
